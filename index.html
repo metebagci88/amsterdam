@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Amsterdam · Lokal Yaşam Rehberi (11–31 Temmuz)</title>
+<style>
+:root{
+  --bg:#f6f4ef; --bg2:#efece4; --card:#ffffff; --ink:#23211c; --ink2:#5f5a50;
+  --line:#e6e1d6; --accent:#9a6a4e; --accent2:#7d8c6a; --gold:#b8944f;
+  --fav:#c25a52; --blue:#5b7a96; --teal:#5a9a93; --green:#7d9a5a; --purple:#8a6fa3;
+  --shadow:0 2px 10px rgba(40,35,25,.06), 0 8px 30px rgba(40,35,25,.05);
+  --r:16px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased;padding-bottom:84px}
+h1,h2,h3{font-family:"Georgia","Times New Roman",serif;font-weight:600;letter-spacing:.2px;margin:0}
+a{color:inherit}
+.wrap{max-width:1100px;margin:0 auto;padding:0 16px}
+header.app{position:sticky;top:0;z-index:1200;background:rgba(246,244,239,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.hbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;max-width:1100px;margin:0 auto}
+.brand{display:flex;flex-direction:column}
+.brand .t{font-family:Georgia,serif;font-size:18px;font-weight:600}
+.brand .s{font-size:11px;color:var(--ink2);letter-spacing:1.5px;text-transform:uppercase}
+.loc-btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:var(--shadow)}
+.loc-btn:active{transform:scale(.97)}
+.loc-btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:1200;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 4px env(safe-area-inset-bottom)}
+nav.tabs button{flex:1;border:0;background:none;color:var(--ink2);font-size:10.5px;padding:6px 2px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:600}
+nav.tabs button .ic{font-size:18px;line-height:1}
+nav.tabs button.active{color:var(--accent)}
+.view{display:none;animation:fade .25s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.section-title{font-size:22px;margin:22px 0 4px}
+.section-sub{color:var(--ink2);font-size:13.5px;margin:0 0 16px}
+
+.hero{background:linear-gradient(135deg,#2f3a2c,#54493a);color:#f4efe6;border-radius:var(--r);padding:22px;margin:16px 0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero h2{font-size:21px;color:#fff}
+.hero p{margin:8px 0 0;font-size:13.5px;color:#e3dccd;max-width:640px}
+.hero .pill{display:inline-block;margin-top:14px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);padding:6px 12px;border-radius:999px;font-size:12px}
+.grid-cta{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0}
+@media(min-width:680px){.grid-cta{grid-template-columns:repeat(3,1fr)}}
+.cta{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;text-align:left;box-shadow:var(--shadow);transition:.15s}
+.cta:hover{transform:translateY(-2px);border-color:var(--accent)}
+.cta .e{font-size:20px}
+.cta .l{font-weight:700;font-size:13.5px;margin-top:6px}
+.cta .d{font-size:11.5px;color:var(--ink2);margin-top:2px}
+
+.scenarios{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:680px){.scenarios{grid-template-columns:repeat(2,1fr)}}
+.scn{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+.scn h3{font-size:16px}
+.scn .meta{font-size:11.5px;color:var(--ink2);margin:4px 0 10px;text-transform:uppercase;letter-spacing:.5px}
+.route{display:flex;flex-direction:column;gap:7px}
+.stop{display:flex;gap:9px;align-items:flex-start;font-size:13px}
+.stop .n{flex:0 0 22px;height:22px;border-radius:50%;background:var(--bg2);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.stop .x{flex:1}
+.stop .x b{font-weight:600}
+.stop .x .sub{color:var(--ink2);font-size:11.5px}
+.route-btn{margin-top:12px;display:inline-block;font-size:12px;font-weight:700;color:var(--accent);background:none;cursor:pointer;border:1px solid var(--accent);border-radius:999px;padding:6px 12px;font-family:inherit}
+
+.toolbar{position:sticky;top:61px;z-index:900;background:var(--bg);padding:12px 0 8px;border-bottom:1px solid var(--line)}
+.search{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 14px;font-size:14px;background:var(--card);box-shadow:var(--shadow)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+select.sel,button.sel{border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:12.5px;background:var(--card);color:var(--ink);cursor:pointer;font-family:inherit}
+.chips{display:flex;gap:7px;overflow-x:auto;padding:10px 0 4px;-webkit-overflow-scrolling:touch}
+.chips::-webkit-scrollbar{height:0}
+.chip{white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:999px;padding:7px 13px;font-size:12.5px;cursor:pointer;font-weight:600;flex:0 0 auto}
+.chip.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip.fav.active{background:var(--fav);border-color:var(--fav)}
+.count{font-size:12px;color:var(--ink2);margin:10px 0}
+
+.cards{display:grid;grid-template-columns:1fr;gap:13px;margin-bottom:24px}
+@media(min-width:620px){.cards{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:920px){.cards{grid-template-columns:repeat(3,1fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative}
+.card .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.card h3{font-size:16.5px;line-height:1.25;padding-right:6px}
+.card .area{font-size:11.5px;color:var(--ink2);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.tagline{font-size:13px;color:var(--ink2);margin:9px 0 10px}
+.badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.badge{font-size:10.5px;padding:3px 8px;border-radius:999px;background:var(--bg2);color:var(--ink2);font-weight:600}
+.badge.src-user{background:#e7eef4;color:#3f6383}
+.badge.src-deck{background:#e3f0ee;color:#3c7670}
+.badge.src-extra{background:#eaf1e1;color:#5a7a36}
+.badge.src-audio{background:#efe7f4;color:#6f5390}
+.badge.work{background:#fff2db;color:#9a6a1e}
+.badge.warn{background:#fbe7d8;color:#9a5a1e}
+.note{font-size:12px;background:var(--bg);border:1px dashed var(--line);border-radius:10px;padding:9px 11px;color:var(--ink2);margin-bottom:11px}
+.note b{color:var(--ink)}
+.dist{font-size:11.5px;color:var(--accent);font-weight:700}
+.actions{margin-top:auto;display:flex;gap:7px;flex-wrap:wrap}
+.btn{flex:1;min-width:96px;text-align:center;border:1px solid var(--line);border-radius:10px;padding:9px 8px;font-size:12px;font-weight:700;color:var(--ink);background:var(--card);cursor:pointer;font-family:inherit}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.ghost{background:var(--bg2)}
+.heart{position:absolute;top:14px;right:14px;font-size:18px;cursor:pointer;background:none;border:0;line-height:1;opacity:.85}
+.resv{font-size:11.5px;font-weight:700}
+.resv.req{color:#b4523f}.resv.rec{color:#9a6a1e}.resv.no{color:#5a7a36}
+.linklike{border:0;background:none;color:var(--accent);font-size:11.5px;font-weight:600;cursor:pointer;padding:0;font-family:inherit}
+
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--ink2);margin:10px 0}
+.legend span{display:flex;align-items:center;gap:5px}
+.dot{width:11px;height:11px;border-radius:50%;display:inline-block;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+#mapWrap{position:relative;margin-top:8px}
+#svgmap{width:100%;height:62vh;min-height:380px;border-radius:var(--r);border:1px solid var(--line);box-shadow:var(--shadow);background:#eef1ec;cursor:grab;display:block;touch-action:none}
+.mapctrl{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:6px}
+.mapctrl button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:18px;cursor:pointer;box-shadow:var(--shadow);line-height:1}
+.mappop{position:absolute;left:12px;right:12px;bottom:12px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.18);max-width:440px}
+.mappop h4{font-family:Georgia,serif;font-size:17px;margin:0 30px 4px 0}
+.mappop .psub{font-size:12px;color:var(--ink2);margin-bottom:4px}
+.mappop .pbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.popclose{position:absolute;top:10px;right:12px;border:0;background:none;font-size:16px;cursor:pointer;color:var(--ink2)}
+#pickBtn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+.cal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:11px;margin:14px 0 26px}
+.day{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px;box-shadow:var(--shadow);position:relative}
+.day .dn{font-size:11px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px}
+.day .dd{font-family:Georgia,serif;font-size:20px;margin:1px 0 6px}
+.day.weekend{background:linear-gradient(135deg,#34402f,#4f4636);color:#f1ece2}
+.day.weekend .dn,.day.weekend .plan{color:#ddd4c5}
+.day.today{outline:2px solid var(--gold)}
+.day .tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--bg2);color:var(--accent);margin-bottom:6px}
+.day.weekend .tag{background:rgba(255,255,255,.16);color:#fff}
+.day .plan{font-size:12px;color:var(--ink2);min-height:34px}
+.day textarea{width:100%;border:1px solid var(--line);border-radius:8px;font-size:12px;padding:6px;margin-top:7px;font-family:inherit;resize:vertical;min-height:38px;background:var(--bg)}
+
+.trip{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
+.trip h3{font-size:19px}
+table.cmp{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--card);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow)}
+table.cmp th,table.cmp td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:center}
+table.cmp th{background:var(--bg2);font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink2)}
+table.cmp td:first-child,table.cmp th:first-child{text-align:left;font-weight:700}
+.cmp-wrap{overflow-x:auto;margin:12px 0}
+.reco{background:linear-gradient(135deg,#3a4a33,#5a4f3c);color:#f2ede3;border-radius:var(--r);padding:18px;box-shadow:var(--shadow);margin:16px 0}
+.reco h3{color:#fff}.reco p{font-size:13.5px;color:#e3dccd;margin:8px 0 0}
+
+.de-form{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow)}
+.de-q{margin-bottom:15px}
+.de-q .ql{font-size:12.5px;font-weight:700;margin-bottom:7px}
+.opts{display:flex;gap:7px;flex-wrap:wrap}
+.opt{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:7px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
+.opt.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
+.de-go{width:100%;margin-top:6px;background:var(--ink);color:#fff;border:0;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer}
+.de-out{margin-top:16px;display:grid;gap:11px}
+.de-res{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.de-res .role{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);font-weight:800}
+.de-res h4{margin:3px 0 2px;font-family:Georgia,serif;font-size:16px}
+
+.notebox{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow);margin-bottom:14px}
+.notebox h3{font-size:16px;margin-bottom:8px}
+.notebox ul{margin:8px 0 0;padding-left:18px;font-size:13px;color:var(--ink2)}
+.notebox li{margin-bottom:6px}
+.audio-warn{background:#fbf1e2;border:1px solid #ecd9b8}
+footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="hbar">
+    <div class="brand"><span class="t">Amsterdam</span><span class="s">Lokal Yaşam · 11–31 Tem</span></div>
+    <button class="loc-btn" id="locBtn">📍 Konumumu kullan</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- PANO -->
+  <section class="view active" id="v-pano">
+    <div class="hero">
+      <h2>Bugün ne yapmak istiyorsun?</h2>
+      <p>Rembrandtpark’taki dairen merkez. Klasik turist değil, lokal yaşam modundasın: iyi kahve, güzel öğle yemeği, bisikletle keşif, akşam şarabı. Aşağıdan hızlı seç ya da “Karar” sekmesinden sana özel öneri al.</p>
+      <span class="pill" id="heroLoc">📍 Referans konum: Rembrandtpark</span>
+    </div>
+    <div class="grid-cta" id="ctaGrid"></div>
+    <h2 class="section-title">Günlük senaryo rotaları</h2>
+    <p class="section-sub">Her biri 3–6 duraklı. “Haritada rota” ile Google Maps’te sırayla açılır.</p>
+    <div class="scenarios" id="scnGrid"></div>
+  </section>
+
+  <!-- HARITA -->
+  <section class="view" id="v-map">
+    <h2 class="section-title">Harita</h2>
+    <p class="section-sub">Noktaya dokun → mekan kartı + Google Maps linki. Sürükle & yakınlaştır. Renk = kaynak · kalp = favori · ★ = sen.</p>
+    <div class="row">
+      <select class="sel" id="mapCity">
+        <option value="Amsterdam">Amsterdam</option>
+        <option value="Antwerp">Antwerp (hafta sonu)</option>
+        <option value="Brussels">Brüksel (hafta sonu)</option>
+        <option value="Bruges">Brugge (günübirlik)</option>
+      </select>
+      <select class="sel" id="mapCat"><option value="">Tüm kategoriler</option></select>
+      <select class="sel" id="mapSrc">
+        <option value="">Tüm kaynaklar</option>
+        <option value="user">Benim listem</option>
+        <option value="deck">Önceki araştırmam</option>
+        <option value="extra">Ek araştırma</option>
+        <option value="audio">Ses kaydı</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <select class="sel refsel" id="refMap" title="Neredesin?"></select>
+      <button class="sel" id="pickBtn">📌 Konumu haritadan seç</button>
+      <button class="sel" id="openGoogle">🧭 Google Haritalar’da aç</button>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--fav)"></i>Favori</span>
+      <span><i class="dot" style="background:var(--blue)"></i>Benim listem</span>
+      <span><i class="dot" style="background:var(--teal)"></i>Önceki araştırmam</span>
+      <span><i class="dot" style="background:var(--green)"></i>Ek araştırma</span>
+      <span><i class="dot" style="background:var(--gold)"></i>Sen (★)</span>
+    </div>
+    <div id="mapWrap">
+      <svg id="svgmap" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700"></svg>
+      <div class="mapctrl"><button data-z="in" title="Yakınlaş">＋</button><button data-z="out" title="Uzaklaş">－</button><button data-z="reset" title="Sıfırla">⤢</button></div>
+      <div id="mappop" class="mappop hide"></div>
+    </div>
+    <p class="section-sub" style="margin-top:10px">Bu harita tamamen dosyanın içinde çalışır — internet, Google API anahtarı veya kurulum gerekmez. Konumun mahalle merkezine yaklaşıksa kartta “~konum” yazar; sokak detaylı gerçek harita için “🧭 Google Haritalar’da aç” veya bir mekanın “Google Maps” butonunu kullan.</p>
+  </section>
+
+  <!-- MEKANLAR -->
+  <section class="view" id="v-list">
+    <h2 class="section-title">Mekan envanteri</h2>
+    <div class="toolbar">
+      <input class="search" id="q" placeholder="Ara: isim, mahalle, mutfak…" />
+      <div class="row">
+        <select class="sel" id="fCity"><option value="">Tüm şehirler</option><option>Amsterdam</option><option>Antwerp</option><option>Brussels</option></select>
+        <select class="sel" id="fArea"><option value="">Tüm bölgeler</option></select>
+        <select class="sel" id="fSrc">
+          <option value="">Tüm kaynaklar</option>
+          <option value="user">Benim listem</option>
+          <option value="deck">Önceki araştırmam</option>
+          <option value="extra">Ek araştırma</option>
+          <option value="audio">Ses kaydı önerileri</option>
+        </select>
+        <select class="sel" id="fSort">
+          <option value="rec">Sırala: önerilen</option>
+          <option value="dist">Sırala: bana yakınlık</option>
+          <option value="az">Sırala: A→Z</option>
+        </select>
+      </div>
+      <div class="row">
+        <select class="sel refsel" id="refList" title="Neredesin?"></select>
+        <span style="font-size:11px;color:var(--ink2);align-self:center">← “bana yakınlık” bu referansa göre</span>
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="count" id="count"></div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <!-- PLAN -->
+  <section class="view" id="v-cal">
+    <h2 class="section-title">20 günlük akış · 11–31 Temmuz</h2>
+    <p class="section-sub">Esnek bir öneri. Her güne kendi notunu yazabilirsin (tarayıcında saklanır). Koyu günler hafta sonu kaçamağı için ayrıldı.</p>
+    <div class="cal" id="cal"></div>
+  </section>
+
+  <!-- HAFTA SONU -->
+  <section class="view" id="v-trip">
+    <h2 class="section-title">Hafta sonu kaçamakları</h2>
+    <p class="section-sub">İki hafta sonun var: 18–19 ve 25–26 Temmuz. Cumartesi sabah git, pazar akşam dön.</p>
+    <div id="tripReco"></div>
+    <h3 class="section-title" style="font-size:18px">Şehir karşılaştırması</h3>
+    <div class="cmp-wrap"><table class="cmp" id="cmp"></table></div>
+    <p class="section-sub">Skorlar 1–5. “Yorucu” düşükse daha rahat demektir. Tren süreleri Amsterdam Centraal’dan yaklaşık.</p>
+    <h3 class="section-title" style="font-size:18px">Antwerp · 1 gece 2 gün</h3>
+    <div id="antwerpPlan"></div>
+    <h3 class="section-title" style="font-size:18px">Brüksel · 1 gece 2 gün</h3>
+    <div id="brusselsPlan"></div>
+    <h3 class="section-title" style="font-size:18px">Brugge · 1 günlük (günübirlik)</h3>
+    <div id="brugesPlan"></div>
+  </section>
+
+  <!-- KARAR -->
+  <section class="view" id="v-de">
+    <h2 class="section-title">Karar motoru</h2>
+    <p class="section-sub">Birkaç soru seç, bulunduğun referansa göre sana 5 öneri çıkarayım. (Tamamen dosya içinde çalışır — API/internet gerekmez.)</p>
+    <div class="de-form" id="deForm"></div>
+    <div class="de-out" id="deOut"></div>
+  </section>
+
+  <!-- NOTLAR -->
+  <section class="view" id="v-notes">
+    <h2 class="section-title">Veri notları & kontrol listesi</h2>
+
+    <div class="notebox audio-warn">
+      <h3>🎙️ Ses kayıtları — durum</h3>
+      <p style="font-size:13px;color:var(--ink2);margin:0">İki WhatsApp ses kaydı (<b>2026-06-19 11.35.05</b> ve <b>2026-06-20 13.41.03</b>) yüklendi. Bu çalışma ortamı, konuşma-metin (whisper vb.) modellerinin indirildiği tüm sunuculara (HuggingFace, GitHub release CDN, Azure) erişimi engellediği için ses <b>otomatik olarak transkribe edilemedi</b>. Uydurma yapmamak adına bu kayıtlardan mekan eklenmedi.</p>
+      <ul>
+        <li>Çözüm 1: Kayıtların kısa bir metin özetini bana yapıştır; mekanları envantere “Ses kaydı” rozetiyle eklerim.</li>
+        <li>Çözüm 2: Bu dosyayı model erişimi olan bir ortamda çalıştırırsam transkripsiyonu ben yaparım.</li>
+        <li>“Ses kaydı önerileri” filtresi ve harita rengi hazır; metin gelince anında dolar.</li>
+      </ul>
+    </div>
+
+    <div class="notebox">
+      <h3>Kaynaklar</h3>
+      <ul>
+        <li><b>Benim listem</b> — senin elle verdiğin mekanlar + notların (mavi rozet). Favorilerin ❤️ ile işaretli.</li>
+        <li><b>Önceki araştırmam</b> — yüklediğin Amsterdam.pptx içindeki kafe/restoran seçkisi (teal rozet).</li>
+        <li><b>Ek araştırma</b> — Rembrandtpark çevresi & bisiklet mesafesi için eklenen lokal öneriler ve çalışma kafeleri (yeşil rozet).</li>
+        <li><b>Ses kaydı</b> — yukarıdaki nota bakın (mor rozet).</li>
+      </ul>
+    </div>
+
+    <div class="notebox">
+      <h3>⚠️ Gitmeden önce kontrol et</h3>
+      <ul id="checkList"></ul>
+    </div>
+
+    <div class="notebox">
+      <h3>🗺️ Harita & konum nasıl çalışıyor</h3>
+      <p style="font-size:13px;color:var(--ink2);margin:0">Harita tamamen bu dosyanın içinde, kendi çizimimle çalışır — Google Maps API anahtarı, harici kütüphane veya internet gerekmez. Mekanlar gerçek koordinatlarına göre yerleştirilir; noktaya dokununca kart açılır.</p>
+      <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 0"><b>Konum:</b> Tarayıcılar yerel dosyada (file://) GPS’i çoğunlukla engeller. Bu yüzden konumu iki şekilde verebilirsin: haritada <b>“📌 Konumu haritadan seç”</b> ile dokun, ya da <b>“Neredesin?”</b> menüsünden bulunduğun mahalleyi seç. “Bana yakınlık” sıralaması ve karar motoru bu referansa göre çalışır. GPS denemek istersen dosyayı Firefox’ta ya da https üzerinden aç.</p>
+      <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 0">Tüm butonların ve linklerin sorunsuz açılması için dosyayı gerçek bir tarayıcıda (Chrome/Safari/Firefox) aç; uygulama içi önizlemede dış bağlantılar engellenebilir.</p>
+    </div>
+  </section>
+
+</main>
+
+<nav class="tabs" id="nav">
+  <button data-v="pano" class="active"><span class="ic">🏠</span>Pano</button>
+  <button data-v="map"><span class="ic">🗺️</span>Harita</button>
+  <button data-v="list"><span class="ic">📋</span>Mekanlar</button>
+  <button data-v="cal"><span class="ic">🗓️</span>Plan</button>
+  <button data-v="trip"><span class="ic">🚆</span>Hafta sonu</button>
+  <button data-v="de"><span class="ic">🎯</span>Karar</button>
+  <button data-v="notes"><span class="ic">📝</span>Notlar</button>
+</nav>
+
+<script>
+/* ===== referans noktaları ===== */
+const HOME={lat:52.3680,lng:4.8470,name:"Rembrandtpark"};
+let userLoc=null;
+
+const AREA_CENTERS={
+  "De Baarsjes":[52.3690,4.8530],"Oud-West":[52.3650,4.8700],"Jordaan":[52.3740,4.8830],
+  "De Pijp":[52.3545,4.8920],"Centrum":[52.3720,4.8950],"Noord":[52.4010,4.8990],
+  "Oost":[52.3580,4.9200],"Plantage":[52.3660,4.9120],"Westerpark":[52.3865,4.8760],
+  "Oud-Zuid":[52.3565,4.8730],"Zuid":[52.3500,4.8730]
+};
+function areaKey(area){
+  const a=(area||"").toLowerCase();
+  if(a.includes("baarsjes"))return"De Baarsjes";
+  if(a.includes("oud-west")||a.includes("hallen")||a.includes("costabuurt"))return"Oud-West";
+  if(a.includes("jordaan"))return"Jordaan";
+  if(a.includes("pijp"))return"De Pijp";
+  if(a.includes("noord")||a.includes("ndsm")||a.includes("ceuvel"))return"Noord";
+  if(a.includes("oost"))return"Oost";
+  if(a.includes("plantage"))return"Plantage";
+  if(a.includes("westerpark")||a.includes("westergas"))return"Westerpark";
+  if(a.includes("zuid")||a.includes("vondel"))return"Oud-Zuid";
+  if(a.includes("centrum")||a.includes("straatjes")||a.includes("grachten")||a.includes("dam"))return"Centrum";
+  return"Centrum";
+}
+
+/* ===== VENUE DATA (src: user|deck|extra|audio) ===== */
+const V=[
+{id:"binnenvisser",name:"Café Binnenvisser",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe","wine bar","restoran"],best:["kahve","öğlen","akşam","şarap"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36680,lng:4.87170,conf:"high",
+ web:"https://binnenvisser.nl/",ig:"https://www.instagram.com/cafebinnenvisser/",
+ desc:"Natürel şarap odaklı, sebze ağırlıklı mevsimsel mutfağı olan modern bir 'brown cafe'.",note:"<b>Senin notun:</b> Walk-in. Rezervasyon almıyor."},
+{id:"barpif",name:"Bar Pif",city:"Amsterdam",area:"Jordaan",cats:["wine bar","restoran"],best:["öğlen","şarap","akşam"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.37790,lng:4.88330,conf:"high",
+ web:"https://barpif.nl/en/",ig:"https://www.instagram.com/barpifamsterdam/",
+ desc:"Rebel Wines ekibinden natürel şarap barı + küçük tabaklar.",note:"<b>Senin notun:</b> Rezervasyonla. Öğlen de olabilir. ❤️ Öncelikli favori."},
+{id:"oficina",name:"Oficina",city:"Amsterdam",area:"De Baarsjes",cats:["kafe","wine bar","restoran"],best:["öğlen","kahve","şarap","tatlı"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.37190,lng:4.85620,conf:"medium",
+ web:"https://oficinaoficina.com/",ig:"https://www.instagram.com/oficina.amsterdam/",
+ desc:"Gündüz kantini & yemek-tasarım stüdyosu: kahvaltı, öğle, çay, pasta, şarap. Rembrandtpark’a çok yakın.",note:"<b>Senin notun:</b> Rezervasyon almıyor. Şarap, tatlı, öğlen için uygun."},
+{id:"shiraz",name:"Shiraz (Jardin des Vins)",city:"Amsterdam",area:"Centrum",cats:["wine bar"],best:["şarap","akşam"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36280,lng:4.88290,conf:"medium",
+ web:"https://shirazamsterdam.nl/en/",ig:"",
+ desc:"Kanal kenarı samimi şarap barı, geniş kadeh listesi.",note:"<b>Senin notun:</b> Wine bar. Şarapla gelen peynir/kanepe çok iyiymiş. Rezervasyon almıyor. ❤️ Favori. <i>(Araştırmada bazı kaynaklar rezervasyonu öneriyor — kontrol et.)</i>"},
+{id:"4850",name:"4850",city:"Amsterdam",area:"Oost (Oud-Oost)",cats:["kafe","wine bar"],best:["kahve","şarap","akşam","çalışma"],src:"user",fav:false,resv:"rec",walkIn:true,work:true,lat:52.35740,lng:4.91560,conf:"high",
+ web:"https://www.4850.nl/",ig:"https://www.instagram.com/4850nl/",
+ desc:"Gündüz specialty kahve barı, akşam şarap + yemek.",note:"<b>Senin notun:</b> Kahve, drink."},
+{id:"csnoord",name:"CS Noord (Cornerstore)",city:"Amsterdam",area:"Noord",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"req",walkIn:false,work:false,lat:52.40150,lng:4.90130,conf:"medium",
+ web:"https://csnoord.com/",ig:"https://www.instagram.com/cornerstore.ams/",
+ desc:"Amsterdam-Noord’da yaratıcı akşam yemeği restoranı & bar.",note:"<b>Senin notun:</b> Akşam yemeği. Rezervasyonla."},
+{id:"carmen",name:"Carmen Amsterdam",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["mağaza","kafe"],best:["mağaza","kahve"],src:"user",fav:false,resv:"unknown",walkIn:true,work:false,lat:52.36560,lng:4.89180,conf:"high",
+ web:"https://www.carmenamsterdam.com/",ig:"https://www.instagram.com/carmen.amsterdam/",
+ desc:"Kanal evinde concept store + kafe + misafirhane.",note:"<b>Senin notun:</b> Mağaza + cafe."},
+{id:"chun",name:"Chun",city:"Amsterdam",area:"Centrum (9 Straatjes)",cats:["take-away","kafe"],best:["öğlen","take-away","kahve"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36900,lng:4.88440,conf:"high",
+ web:"https://www.chun-amsterdam.com/",ig:"https://www.instagram.com/chun_ams/",
+ desc:"Kore usulü tost/sandviç + matcha, al-götür.",note:"<b>Senin notun:</b> Sandviç, al-götür, öğlen. ❤️ Favori."},
+{id:"pllek",name:"Pllek",city:"Amsterdam",area:"Noord (NDSM)",cats:["restoran","bar","gece","park"],best:["akşam","gece","öğlen","park"],src:"user",fav:true,resv:"rec",walkIn:true,work:false,lat:52.40130,lng:4.89360,conf:"high",
+ web:"https://www.pllek.nl/",ig:"https://www.instagram.com/pllek_amsterdam/",
+ desc:"IJ kıyısında konteyner restoran + plaj + gün batımı + gece.",note:"<b>Senin notun:</b> Yemek + gece. ❤️ Favori."},
+{id:"cheznina",name:"Chez Nina",city:"Amsterdam",area:"Westerpark (Staatsliedenbuurt)",cats:["restoran","italyan"],best:["akşam","öğlen"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.38400,lng:4.87280,conf:"medium",
+ web:"https://www.noof-amsterdam.nl/",ig:"https://www.instagram.com/noof.amsterdam/",
+ desc:"İtalyan/Akdeniz brasserie.",note:"<b>Senin notun:</b> İtalyan. Rezervasyonla. <i>(Araştırma: Kasım 2025’te ‘Noof’ adıyla yenilenmiş, vejetaryen Akdeniz konseptine geçmiş olabilir — kontrol et.)</i>"},
+{id:"oeuf",name:"Oeuf Amsterdam",city:"Amsterdam",area:"De Pijp",cats:["kahvaltı","brunch","kafe"],best:["kahvaltı","brunch","kahve"],src:"user",fav:true,resv:"unknown",walkIn:true,work:false,lat:52.35540,lng:4.89010,conf:"high",
+ web:"https://www.oeufamsterdam.nl/",ig:"https://www.instagram.com/oeufamsterdam/",
+ desc:"Yumurta ağırlıklı kahvaltı & brunch.",note:"<b>Senin notun:</b> Kahvaltıcı. ❤️ Favori."},
+{id:"plantage",name:"Café-Restaurant De Plantage",city:"Amsterdam",area:"Plantage",cats:["restoran","brunch","kafe"],best:["kahvaltı","öğlen","akşam","brunch"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.36670,lng:4.91460,conf:"medium",
+ web:"https://www.caferestaurantdeplantage.nl/",ig:"https://www.instagram.com/caferestaurantdeplantage/",
+ desc:"Artisplein’da cam serada Akdeniz esintili brasserie.",note:"<b>Senin notun:</b> Sabah, öğle, akşam uygun. Rezervasyon lazım."},
+{id:"escobar",name:"Escobar",city:"Amsterdam",area:"De Pijp",cats:["restoran","taco","bar","gece"],best:["akşam","gece","taco"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.35550,lng:4.89760,conf:"low",
+ web:"https://escobar.nu/",ig:"https://www.instagram.com/escobar.nu/",
+ desc:"Taco & farklı mutfaklar; geç saatte eğlence moduna geçer.",note:"<b>Senin notun:</b> Taco + farklı mutfaklar. 22:00 sonrası masalar kalkıp eğlence modu. Rezervasyon lazım. ❤️ Favori. <i>(⚠️ Bazı kaynaklar kapandığını yazıyor — gitmeden mutlaka kontrol et.)</i>"},
+{id:"coba",name:"Coba Taqueria",city:"Amsterdam",area:"Noord (Oud-Noord)",cats:["restoran","taco"],best:["öğlen","akşam","taco"],src:"user",fav:true,resv:"rec",walkIn:true,work:false,lat:52.39600,lng:4.92330,conf:"high",
+ web:"https://www.coba-taqueria.com/",ig:"https://www.instagram.com/coba.amsterdam/",
+ desc:"Otantik Meksika taqueria.",note:"<b>Senin notun:</b> Tacocu. ❤️ Favori."},
+{id:"annanina",name:"Anna + Nina",city:"Amsterdam",area:"De Pijp",cats:["mağaza"],best:["mağaza"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.35530,lng:4.89160,conf:"high",
+ web:"https://www.anna-nina.nl/",ig:"https://www.instagram.com/annaninanl/",
+ desc:"Concept/tasarım mağazası: takı, ev eşyası, vintage.",note:"<b>Senin notun:</b> Mağaza."},
+{id:"brutdemer",name:"Brut de Mer",city:"Amsterdam",area:"De Pijp",cats:["restoran","deniz mahsulleri","wine bar"],best:["akşam","şarap","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.35470,lng:4.89200,conf:"high",
+ web:"",ig:"https://www.instagram.com/brut_de_mer/",
+ desc:"İstiridye & deniz mahsulleri barı, şampanya/şarap.",note:"<b>Senin notun:</b> Deniz mahsulleri."},
+{id:"flos",name:"Flo's Appetizing",city:"Amsterdam",area:"Oud-West",cats:["take-away","bagel","brunch"],best:["öğlen","take-away","parkta yemek","brunch"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36430,lng:4.86680,conf:"high",
+ web:"https://www.flosdeli.nl/",ig:"https://www.instagram.com/flos_appetizing_ams/",
+ desc:"Elde sarılan bagel & NYC tarzı deli.",note:"<b>Senin notun:</b> Bagelci. Parkta yemek için sandviç alınabilir."},
+{id:"deklos",name:"Café de Klos",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36320,lng:4.88660,conf:"high",
+ web:"https://cafedeklos.nl/",ig:"https://www.instagram.com/cafedeklos/",
+ desc:"1971’den beri klasik spare-ribs & ızgara; sadece walk-in.",note:"<b>Senin notun:</b> Kaburgacı. Rezervasyon almıyor."},
+{id:"barracuda",name:"Restaurant Barracuda",city:"Amsterdam",area:"Noord (Oud-Noord)",cats:["restoran","deniz mahsulleri"],best:["akşam","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.38900,lng:4.92160,conf:"medium",
+ web:"https://www.barracuda.amsterdam/",ig:"https://www.instagram.com/restaurantbarracuda/",
+ desc:"Açık mutfaklı, depo atmosferli rahat balık/deniz mahsulleri restoranı.",note:"<b>Araştırma ile eklendi</b> (senin verdiğin isimden). Adres/IG kontrol edilmeli."},
+{id:"bouillon",name:"Bouillon d'Amsterdam",city:"Amsterdam",area:"Centrum",cats:["restoran"],best:["akşam","öğlen"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.37340,lng:4.89150,conf:"high",
+ web:"https://www.bouillondamsterdam.nl/",ig:"https://www.instagram.com/bouillondamsterdam/",
+ desc:"Paris usulü ‘bouillon’ — uygun fiyatlı klasik Fransız konfor mutfağı.",note:"<b>Araştırma ile eklendi</b> (senin verdiğin isimden)."},
+
+{id:"saintjean",name:"Saint-Jean",city:"Amsterdam",area:"Jordaan",cats:["kafe","kahvaltı","take-away"],best:["kahve","kahvaltı","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+ web:"https://www.saintjean.nl/",ig:"https://www.instagram.com/saintjean.nl/",
+ desc:"Bitki bazlı fırın & deli, specialty kahve, hamur işleri.",note:"Önceki araştırmandan (Amsterdam.pptx)."},
+{id:"bocca",name:"Bocca Coffee",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+ web:"https://bocca.nl/en",ig:"https://www.instagram.com/boccacoffee/",
+ desc:"Hollanda specialty kahvenin öncüsü; amiral kafe.",note:"Önceki araştırmandan."},
+{id:"cafecito",name:"Cafecito",city:"Amsterdam",area:"Oud-Zuid",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
+ web:"https://cafecito.nl/",ig:"https://www.instagram.com/cafecito_nl/",
+ desc:"Specialty kahve & matcha kavurucusu/espresso barı.",note:"Önceki araştırmandan."},
+{id:"scandi",name:"Scandinavian Embassy",city:"Amsterdam",area:"De Pijp",cats:["kafe","kahvaltı"],best:["kahve","öğlen","kahvaltı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+ web:"http://scandinavianembassy.nl/",ig:"https://www.instagram.com/scandinavianembassy/",
+ desc:"İskandinav tarzı samimi kafe, Nordic kavurucu kahveleri.",note:"Önceki araştırmandan. Küçük mekan, çalışma için ideal değil."},
+{id:"winkel43",name:"Winkel 43",city:"Amsterdam",area:"Jordaan",cats:["kafe"],best:["kahve","öğlen","tatlı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+ web:"https://www.winkel43.nl/en/",ig:"https://www.instagram.com/winkel43_applepie/",
+ desc:"Noordermarkt’ta meşhur Hollanda elmalı turtası.",note:"Önceki araştırmandan: ‘sadece apple pie için’."},
+{id:"ceppis",name:"Ceppi's Trattoria",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran","italyan"],best:["akşam"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
+ web:"https://www.ceppis.com/",ig:"https://www.instagram.com/trattoriaceppis/",
+ desc:"Kanal kenarı sıcak İtalyan trattoria/pizzeria.",note:"Önceki araştırmandan: ‘italyan & şarküteri’."},
+{id:"fiko",name:"Fiko",city:"Amsterdam",area:"Oud-West (Vondelpark)",cats:["restoran","italyan"],best:["akşam","öğlen"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
+ web:"https://www.fikoamsterdam.com/",ig:"https://www.instagram.com/fikoamsterdam/",
+ desc:"Vondelpark yakını İtalyan; glutensiz seçenekler.",note:"Önceki araştırmandan."},
+{id:"alba",name:"Alba Restaurant & Wijnbar",city:"Amsterdam",area:"Oost",cats:["restoran","wine bar"],best:["akşam","şarap"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
+ web:"https://www.alba-amsterdam.nl/",ig:"https://www.instagram.com/alba.amsterdam/",
+ desc:"Wibautstraat’ta modern Avrupa mutfağı + natürel şarap barı.",note:"Önceki araştırmandan."},
+{id:"lottis",name:"Lotti's (The Hoxton)",city:"Amsterdam",area:"Centrum (9 Straatjes)",cats:["kafe","restoran","brunch"],best:["kahve","öğlen","akşam","brunch","çalışma"],src:"deck",fav:false,resv:"rec",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+ web:"https://thehoxton.com/amsterdam/herengracht/lottis-restaurant/",ig:"https://www.instagram.com/lottisamsterdam/",
+ desc:"Hoxton otelinde şık tüm-gün kafe/bar/grill.",note:"Önceki araştırmandan: ‘Hoxton otelinin altında’."},
+{id:"dignita",name:"Dignita Hoftuin",city:"Amsterdam",area:"Plantage",cats:["brunch","kahvaltı","kafe"],best:["brunch","kahvaltı","öğlen"],src:"deck",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+ web:"https://eatwelldogood.nl/en/dignita-hoftuin/",ig:"https://www.instagram.com/dignita_restaurants/",
+ desc:"Sessiz bahçede cam-sera brunch restoranı; sosyal girişim.",note:"Önceki araştırmandan."},
+{id:"bakers",name:"Bakers & Roasters",city:"Amsterdam",area:"De Pijp",cats:["brunch","kahvaltı"],best:["brunch","kahvaltı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+ web:"https://bakersandroasters.com/",ig:"https://www.instagram.com/bakersandroasters/",
+ desc:"Brezilya/Yeni Zelanda esintili popüler brunch; hafta sonu sıra olur.",note:"Önceki araştırmandan."},
+{id:"coffeedistrict",name:"The Coffee District",city:"Amsterdam",area:"Oud-Zuid (Vondelpark)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
+ web:"https://coffeedistrict.nl/",ig:"https://www.instagram.com/thecoffeedistrict/",
+ desc:"Zuid’da mahalle specialty kahve barı.",note:"Önceki araştırmandan: ‘Hendrik Jacobszstraat’."},
+{id:"uncommon",name:"Uncommon",city:"Amsterdam",area:"Oud-West (Vondelpark)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+ web:"https://uncommonams.com/",ig:"https://www.instagram.com/uncommon.ams/",
+ desc:"Vondelpark yakını kavurucu-kafe, yaratıcı imza içecekler.",note:"Önceki araştırmandan."},
+{id:"tij",name:"Brouwerij 't IJ",city:"Amsterdam",area:"Oost (De Gooyer)",cats:["bar","market"],best:["akşam","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+ web:"https://www.brouwerijhetij.nl/",ig:"https://www.instagram.com/brouwerijhetij/",
+ desc:"Yel değirmeni yanında ikonik organik bira fabrikası & tadım odası.",note:"Önceki araştırmandan (Bira Evleri)."},
+
+{id:"monks",name:"Monks Coffee Roasters",city:"Amsterdam",area:"Oud-West",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:52.3712151,lng:4.8702463,conf:"high",
+ web:"https://monkscoffee.nl/",ig:"https://www.instagram.com/monkscoffee/",
+ desc:"Sevilen kavurucu-kafe; harika kahve, fırın ürünleri, priz & wifi.",note:"Ek araştırma. <b>Çalışma:</b> en güvenli tercihlerden; sabah daha sakin."},
+{id:"whitelabel",name:"White Label Coffee",city:"Amsterdam",area:"De Baarsjes",cats:["kafe"],best:["kahve","çalışma"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+ web:"https://www.whitelabelcoffee.nl/",ig:"https://www.instagram.com/whitelabelcoffee/",
+ desc:"De Baarsjes’te sakin specialty kavurucu-kafe.",note:"Ek araştırma. <b>Çalışma:</b> birkaç saatlik laptop için ideal, sakin."},
+{id:"coffeeroom",name:"Coffee Room",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+ web:"http://www.coffeeroom.nl/",ig:"https://www.instagram.com/coffeeroomamsterdam/",
+ desc:"Geniş mahalle kahve barı; öğrenci & uzaktan çalışan dostu.",note:"Ek araştırma. <b>Çalışma:</b> laptopla uzun oturmaya uygun."},
+{id:"kanarie",name:"De Kanarie Club",city:"Amsterdam",area:"Oud-West (De Hallen)",cats:["kafe","restoran","bar"],best:["çalışma","öğlen","kahve","akşam"],src:"extra",fav:false,resv:"rec",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+ web:"https://kanarieclub.nl/",ig:"https://www.instagram.com/kanarieclub/",
+ desc:"Eski tramvay deposunda büyük tüm-gün grand cafe; hızlı wifi, bol priz.",note:"Ek araştırma. <b>Çalışma:</b> en çok önerilen laptop kafelerinden; gündüz sosyal-kalabalık."},
+{id:"espressofabriek",name:"Espressofabriek Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["kafe","park"],best:["kahve","çalışma","park"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
+ web:"https://espressofabriek.nl/",ig:"https://www.instagram.com/espressofabriek/",
+ desc:"Westergas’ta kendi kavurucusu; güneşli teras, park kenarı.",note:"Ek araştırma. <b>Çalışma + yürüyüş</b> kombinasyonu için harika."},
+{id:"coffeevirus",name:"The Coffee Virus (A Lab)",city:"Amsterdam",area:"Noord (A Lab)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
+ web:"https://thecoffeevirus.nl/",ig:"https://www.instagram.com/thecoffeevirus/",
+ desc:"Yaratıcı hub binasında lunchroom-espresso barı.",note:"Ek araştırma. <b>Çalışma:</b> Noord günü ile birleştir."},
+{id:"glouglou",name:"GlouGlou",city:"Amsterdam",area:"De Pijp",cats:["wine bar","bar"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+ web:"https://glouglou.nl/",ig:"https://www.instagram.com/glouglou_amsterdam/",
+ desc:"Amsterdam’ın ilk natürel şarap barı; katkısız şaraplar, küçük atıştırmalıklar.",note:"Ek araştırma."},
+{id:"barcentraal",name:"Bar Centraal",city:"Amsterdam",area:"Oud-West (Ten Katemarkt)",cats:["wine bar","bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+ web:"https://barcentraal.nl/",ig:"https://www.instagram.com/barcentraal/",
+ desc:"Mum ışığında düşük-müdahale şarap barı, harika küçük tabaklar (GlouGlou’nun kardeşi).",note:"Ek araştırma. Rembrandtpark’a yakın."},
+{id:"fabus",name:"Fabus Wijnbar",city:"Amsterdam",area:"Oud-West",cats:["wine bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"low",
+ web:"https://www.fabuswijnbar.nl/",ig:"https://www.instagram.com/fabus.amsterdam/",
+ desc:"Kadın liderliğinde, az bilinen bölgelerden natürel şaraplar + Levanten mutfak.",note:"Ek araştırma. Adres kontrol edilmeli."},
+{id:"lusconi",name:"Bar Lusconi",city:"Amsterdam",area:"De Baarsjes (Mercatorplein)",cats:["restoran","italyan","bar"],best:["akşam","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"medium",
+ web:"https://barlusconi.nl/",ig:"https://www.instagram.com/barlusconi/",
+ desc:"Rahat İtalyan bar-restoran; odun fırını pizza, antipasti, kokteyl; meydan terası.",note:"Ek araştırma. Rembrandtpark’a yakın."},
+{id:"september",name:"Restaurant September",city:"Amsterdam",area:"Oud-Zuid",cats:["restoran","brunch","kafe"],best:["akşam","öğlen","brunch"],src:"extra",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"low",
+ web:"https://restaurantseptember.nl/",ig:"https://www.instagram.com/restaurant_september/",
+ desc:"Mevsimsel, yerel ürün odaklı çağdaş tüm-gün restoran.",note:"Ek araştırma. Adres kontrol edilmeli."},
+{id:"hartering",name:"Gebr. Hartering",city:"Amsterdam",area:"Centrum/Oost",cats:["restoran","wine bar"],best:["akşam","şarap"],src:"extra",fav:false,resv:"req",walkIn:false,work:false,lat:null,lng:null,conf:"low",
+ web:"https://gebroedershartering.nl/",ig:"https://www.instagram.com/gebr.hartering/",
+ desc:"Kanal kenarı samimi bistro; her gün değişen tadım menüsü. Gerçek bir yerel favori.",note:"Ek araştırma. Rezervasyon şart; adres kontrol edilmeli."},
+{id:"ceuvel",name:"Café de Ceuvel",city:"Amsterdam",area:"Noord (De Ceuvel)",cats:["kafe","restoran","park"],best:["öğlen","kahve","park","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"low",
+ web:"https://deceuvel.nl/en/",ig:"https://www.instagram.com/cafedeceuvel/",
+ desc:"Eski tersanede sürdürülebilir kafe, su kenarı terası; rahat yerel kalabalık.",note:"Ek araştırma."},
+{id:"troost",name:"Brouwerij Troost Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["bar","park"],best:["akşam","park","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"low",
+ web:"https://brouwerijtroost.nl/",ig:"https://www.instagram.com/brouwerijtroost/",
+ desc:"Westergas’ta yerel craft bira fabrikası & taproom; park kenarı geniş teras.",note:"Ek araştırma."},
+{id:"rembrandtpark",name:"Rembrandtpark",city:"Amsterdam",area:"De Baarsjes/West",cats:["park"],best:["park","parkta yemek"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3680,lng:4.8470,conf:"high",
+ web:"https://www.iamsterdam.com/en/see-and-do/things-to-do/parks-and-gardens",ig:"",
+ desc:"Dairenin hemen yanındaki büyük yeşil park; piknik, koşu, hızlı kaçış.",note:"Ek araştırma. <b>Parkta yemek:</b> Flo’s veya Chun’dan sandviç al, buraya gel."},
+{id:"westerpark",name:"Westerpark",city:"Amsterdam",area:"Westerpark",cats:["park"],best:["park","parkta yemek","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3865,lng:4.8760,conf:"high",
+ web:"https://westergas.nl/",ig:"",
+ desc:"Westergas kültür parkına bitişik canlı park; piknik çayırları + kafeler/bira fabrikaları.",note:"Ek araştırma."}
+];
+
+/* ===== ANTWERP & BRUSSELS ===== */
+const TRIPS={
+Antwerp:[
+ {name:"Osaka",area:"Zurenborg",cat:"yemek",resv:"rec",desc:"Izakaya tarzı bar-restoran, mevsimsel paylaşımlık tabaklar, geniş natürel şarap.",lat:51.2056,lng:4.4286,ig:"https://instagram.com/osakaantwerp",web:"https://www.osaka-camino-tapout.com/"},
+ {name:"MEA",area:"Zurenborg",cat:"yemek",resv:"rec",desc:"Çağdaş Doğu Akdeniz restoranı & kokteyl barı (Via Antwerp otelinde).",lat:51.2114,lng:4.4288,ig:"https://instagram.com/mea.antwerp",web:"https://meaantwerp.com/"},
+ {name:"Glou Glou",area:"Borgerhout",cat:"yemek",resv:"rec",desc:"Rahat natürel şarap barı, paylaşımlık tabaklar.",lat:51.2122,lng:4.4378,ig:"https://instagram.com/glouglouborgerhout",web:"https://glouglou-borgerhout.be/"},
+ {name:"Le Pristine",area:"Tarihi Merkez",cat:"yemek",resv:"req",desc:"Sergio Herman’ın Michelin yıldızlı restoranı; İtalyan + Flaman.",lat:51.2152,lng:4.4046,ig:"https://instagram.com/le_pristine_antwerp",web:"https://www.lepristine.com/"},
+ {name:"Hertog Jan at Botanic",area:"Tarihi Merkez",cat:"yemek",resv:"req",desc:"Çift Michelin yıldızlı fine-dining (Botanic Sanctuary içinde).",lat:51.2126,lng:4.4078,ig:"https://instagram.com/hertog_jan_at_botanic",web:"https://hertog-jan.com/en/"},
+ {name:"Hotel FRANQ",area:"Tarihi Merkez",cat:"otel",resv:"req",desc:"Eski bankadan dönüşen tasarım butik otel; Michelin yıldızlı restoran.",lat:51.2207,lng:4.4070,ig:"https://instagram.com/hotelfranq",web:"https://www.hotelfranq.com/"},
+ {name:"VIA Antwerp",area:"Zurenborg",cat:"otel",resv:"req",desc:"Zurenborg girişinde lifestyle butik otel; MEA restoranı burada.",lat:51.2114,lng:4.4288,ig:"https://instagram.com/viaantwerp",web:"https://www.viaantwerp.com/"},
+ {name:"Hotel De Witte Lelie",area:"Tarihi Merkez",cat:"otel",resv:"req",desc:"16. yy evlerinde lüks butik otel, avlu & Bronze Bar.",lat:51.2227,lng:4.4053,ig:"https://instagram.com/hoteldewittelelie",web:"https://www.dewittelelie.be/"},
+ {name:"Millésime",area:"Zuid",cat:"içki",resv:"rec",desc:"Şarap & şampanya odaklı samimi bar (ithalatçı işletmesi).",lat:51.2068,lng:4.3960,ig:"https://instagram.com/millesime.antwerp",web:"https://www.millesime-antwerp.be/"},
+ {name:"Dogma Cocktails",area:"Tarihi Merkez",cat:"içki",resv:"no",desc:"Speakeasy havasında kokteyl barı; klasikler & imzalar.",lat:51.2214,lng:4.4046,ig:"https://instagram.com/dogmacocktails",web:"https://dogmacocktails.be/"},
+ {name:"Café Bobby",area:"Zurenborg",cat:"içki",resv:"no",desc:"Sıcak mahalle ‘brown café’; bira, şarap, kokteyl, yemek.",lat:51.2055,lng:4.4222,ig:"https://instagram.com/cafe.bobby",web:""},
+ {name:"Café Zeezicht",area:"Zurenborg",cat:"içki",resv:"no",desc:"Dageraadplaats’ta klasik kafe; Belçika birası, ev yemeği, kalabalık teras.",lat:51.2090,lng:4.4287,ig:"https://instagram.com/cafezeezicht",web:"https://www.cafezeezicht.be/"},
+ {name:"Billie's Bier Kafétaria",area:"Tarihi Merkez",cat:"içki",resv:"rec",desc:"~180 çeşit Belçika/dünya birası olan craft bira barı.",lat:51.2169,lng:4.4006,ig:"https://instagram.com/billiesbierkafetaria",web:"https://www.billiesbier.be/"},
+ {name:"Bakkerij FUNK",area:"Zuid",cat:"kahve",resv:"no",desc:"Bitki bazlı fırın; ekşi maya ekmek, pasta, specialty kahve, natürel şarap.",lat:51.2049,lng:4.3940,ig:"https://instagram.com/bakkerijfunk",web:"https://bakkerijfunk.com/"},
+ {name:"POLLY",area:"Zurenborg/Haringrode",cat:"kahve",resv:"no",desc:"Minimalist specialty kahve barı; ev yapımı tatlılar, affogato.",lat:51.2073,lng:4.4310,ig:"https://instagram.com/polly.antwerp",web:""},
+ {name:"Café Betty",area:"Berchem",cat:"kahve",resv:"no",desc:"Andy Roasters’ın mahalle kahvecisi; natürel şarap, ekşi maya pasta.",lat:51.1985,lng:4.4290,ig:"https://instagram.com/cafe.betty",web:""},
+ {name:"TINSEL",area:"Tarihi Merkez",cat:"kahve",resv:"no",desc:"Sint-Paulusplaats’ta mevsimsel kahvaltı & öğle kafesi, meydan terası.",lat:51.2247,lng:4.4030,ig:"https://instagram.com/tinsel_antwerp",web:"https://www.tinsel.be/"},
+ {name:"Caffènation",area:"Tarihi Merkez",cat:"kahve",resv:"no",desc:"Antwerp specialty kahvenin öncü kavurucusu; merkez şubesi.",lat:51.2120,lng:4.4115,ig:"https://instagram.com/caffenation_coffee",web:"https://caffenation.be/"},
+ {name:"PAKT (Dakboerderij)",area:"Brederode/Groen Kwartier",cat:"aktivite",resv:"no",desc:"Sürdürülebilir depo alanı; çatı çiftliği, yeme noktaları, yeşil avlu.",lat:51.2024,lng:4.4220,ig:"https://instagram.com/paktantwerpen",web:"https://www.pakt-antwerpen.be/"},
+ {name:"Antwaarpe Goeiemorgen",area:"Zuid (Kloosterstraat)",cat:"mağaza",resv:"no",desc:"İkinci el/kringloop dükkanı; antika sokağı Kloosterstraat’ta. Açık günleri sınırlı — kontrol et.",lat:51.2138,lng:4.3962,ig:"",web:"https://antwaarpegoeiemorgen.be/"},
+ {name:"MoMu — Moda Müzesi",area:"Tarihi Merkez",cat:"müze",resv:"rec",desc:"Antwerp moda müzesi; dünyanın en büyük çağdaş Belçika moda koleksiyonu.",lat:51.2167,lng:4.3996,ig:"https://instagram.com/momuantwerp",web:"https://www.momu.be/"},
+ {name:"Rubenshuis",area:"Tarihi Merkez",cat:"müze",resv:"rec",desc:"Rubens’in evi & atölyesi. ⚠️ Ana ev restorasyonda olabilir; sergi/bahçe açık mı kontrol et.",lat:51.2178,lng:4.4116,ig:"https://instagram.com/rubenshuisantwerpen",web:"https://rubenshuis.be/"}
+],
+Brussels:[
+ {name:"Belga & Co (Brugmann)",area:"Saint-Gilles",cat:"kahve",resv:"no",desc:"Sevilen yerel kavurucunun amiral kafesi; harika espresso & pasta. Pazar açık.",lat:50.8254,lng:4.3506,ig:"https://instagram.com/belgacoffee",web:"https://www.belgacoffee.com"},
+ {name:"Pardon",area:"Saint-Gilles",cat:"kahve",resv:"no",desc:"Yaratıcı tatlı/tuzlu waffle’larıyla ünlü specialty kahveci. Pazar açık (Çar–Per kapalı).",lat:50.8294,lng:4.3438,ig:"https://instagram.com/pardonbrussels",web:""},
+ {name:"Titulus",area:"Ixelles",cat:"içki",resv:"rec",desc:"Natürel şarap barı + dükkan + mutfak; 400+ etiket, mevsimsel tabaklar. Pazar kapalı.",lat:50.8359,lng:4.3719,ig:"https://instagram.com/tituluspictus",web:"https://titulus.be"},
+ {name:"Le Stoefer",area:"Ixelles (Châtelain)",cat:"içki",resv:"rec",desc:"Châtelain’de craft kokteyl barı; gizli mezcaleria speakeasy. Pazar kapalı.",lat:50.8275,lng:4.3614,ig:"https://instagram.com/lestoefer",web:"https://lestoefer.be"},
+ {name:"Woodpecker 47",area:"Sainte-Catherine",cat:"yemek",resv:"no",desc:"Popüler tüm-gün brunch; tuzlu waffle, poşe yumurta. Pazar açık.",lat:50.8487,lng:4.3490,ig:"https://instagram.com/woodpecker.family",web:"https://woodpecker.family/en/woodpecker-47/"},
+ {name:"Le Café des Spores",area:"Saint-Gilles",cat:"yemek",resv:"req",desc:"Mantar odaklı mevsimsel restoran, değişen tadım menüsü. Pazar kapalı.",lat:50.8264,lng:4.3438,ig:"https://instagram.com/cafedesspores",web:"https://www.cafedesspores.be"},
+ {name:"Mixage Concept Store",area:"Dansaert",cat:"mağaza",resv:"no",desc:"Dönüşümlü ‘made-in-Belgium’ tasarımcıları öne çıkaran concept store. Pazar dahil her gün.",lat:50.8497,lng:4.3460,ig:"https://instagram.com/mixage_creator_concept_store",web:"https://www.mixage.be"},
+ {name:"La Fabrika",area:"Dansaert",cat:"mağaza",resv:"no",desc:"Yerel & İskandinav markalarla iç tasarım showroom’u. Pazar kapalı.",lat:50.8488,lng:4.3447,ig:"https://instagram.com/lafabrika.be",web:"https://www.lafabrika.be"}
+],
+Bruges:[
+ {name:"Markt & Belfort (Çan Kulesi)",area:"Merkez (Markt)",cat:"aktivite",resv:"no",desc:"Şehrin film seti gibi ana meydanı; 83 m çan kulesine çıkış ~14€, tepeden panorama.",lat:51.2085,lng:3.2247,ig:"",web:""},
+ {name:"Burg & Kutsal Kan Bazilikası",area:"Merkez (Burg)",cat:"müze",resv:"no",desc:"İsa’nın kanı olduğu söylenen kutsal emaneti barındıran bazilika; hemen yanında görkemli Burg meydanı.",lat:51.2086,lng:3.2277,ig:"",web:""},
+ {name:"Kanal Turu (Rozenhoedkaai)",area:"Merkez",cat:"aktivite",resv:"no",desc:"Kuzeyin Venedik’ini sudan keşfet; ~30 dk tekne turu, iskeleler Rozenhoedkaai çevresinde.",lat:51.2069,lng:3.2273,ig:"",web:""},
+ {name:"Church of Our Lady (O.L.V.-kerk)",area:"Merkez",cat:"müze",resv:"rec",desc:"Michelangelo’nun Madonna ve Çocuk heykeline ev sahipliği yapan yüksek kuleli kilise.",lat:51.2043,lng:3.2244,ig:"",web:""},
+ {name:"Sint-Janshospitaal (Memling)",area:"Merkez",cat:"müze",resv:"rec",desc:"Ortaçağ hastanesi, bugün Memling müzesi; kanal turu güzergâhında.",lat:51.2039,lng:3.2237,ig:"",web:""},
+ {name:"Begijnhof",area:"Güney",cat:"aktivite",resv:"no",desc:"Bembeyaz evleriyle sessiz, huzurlu avlu; girişi ücretsiz, fotoğraf yasak, sessiz olun.",lat:51.2010,lng:3.2240,ig:"",web:""},
+ {name:"Minnewater (Aşk Gölü) & park",area:"Güney",cat:"aktivite",resv:"no",desc:"Kuğulu göl ve park; açık havada dinlenmek için ideal (blogdaki park önerisinin karşılığı).",lat:51.1998,lng:3.2262,ig:"",web:""},
+ {name:"Kruisvest yel değirmenleri",area:"Doğu (Kruisvest)",cat:"aktivite",resv:"no",desc:"Sint-Janshuismolen & Koeleweimolen tarihi yel değirmenleri; sur boyu yürüyüş.",lat:51.2112,lng:3.2333,ig:"",web:""},
+ {name:"De Halve Maan Brewery",area:"Merkez (Walplein)",cat:"içki",resv:"rec",desc:"Ünlü Brugse Zot birasının fabrikası; tur + tadım, çatı manzarası.",lat:51.2020,lng:3.2247,ig:"",web:"https://www.halvemaan.be/"},
+ {name:"Bourgogne des Flandres",area:"Merkez",cat:"içki",resv:"rec",desc:"Kanal kenarı bira fabrikası & müzesi; tur ve tadım.",lat:51.2062,lng:3.2270,ig:"",web:"https://bourgognedesflandres.be/"},
+ {name:"De Garre",area:"Merkez (gizli sokak)",cat:"içki",resv:"no",desc:"Gizli aralıkta efsane bira barı; kendi %11’lik Garre birası (kişi başı max 3).",lat:51.2081,lng:3.2262,ig:"",web:""},
+ {name:"Le Trappiste",area:"Merkez",cat:"içki",resv:"no",desc:"800 yıllık mahzende geniş Belçika birası seçkisi; Markt’a ~300 m.",lat:51.2093,lng:3.2255,ig:"",web:""},
+ {name:"’t Brugs Beertje",area:"Merkez",cat:"içki",resv:"no",desc:"Merkezde klasik bira tadım barı; yanında peynir/turşu atıştırmalık.",lat:51.2065,lng:3.2210,ig:"",web:""},
+ {name:"de Vlaamsche Pot",area:"Merkez",cat:"yemek",resv:"rec",desc:"Geleneksel Flaman mutfağı, tatlı ambiyans; özel bir akşam için (biraz pahalı).",lat:51.2098,lng:3.2202,ig:"",web:""},
+ {name:"’t Zwart Huis",area:"Merkez",cat:"yemek",resv:"rec",desc:"Akşam yemeği; kışın şömine başı, iyi bira. Rezervasyon önerili.",lat:51.2109,lng:3.2237,ig:"",web:""},
+ {name:"2be Bar",area:"Merkez (Wollestraat)",cat:"içki",resv:"no",desc:"Kanal manzaralı, turistik bar/restoran; içki + yemek.",lat:51.2076,lng:3.2278,ig:"",web:""},
+ {name:"Ellis Gourmet Burger",area:"Merkez",cat:"yemek",resv:"no",desc:"Şehirdeki en iyi burgerlerden; hızlı ve doyurucu öğle.",lat:51.2088,lng:3.2245,ig:"",web:""},
+ {name:"Sanseveria Bagelsalon",area:"Merkez",cat:"kahve",resv:"no",desc:"Kahvaltı, bagel ve Belçika çikolatalı waffle; güne başlamak için.",lat:51.2100,lng:3.2270,ig:"",web:""}
+]
+};
+
+const CITIES=[
+ {city:"Antwerp",trainMin:75,foodDrink:5,localVibe:5,worthOvernight:5,tiring:2,take:"Öne çıkan tercih: hızlı direkt tren, dünya çapında yeme-içme/kahve/natürel şarap, yürünebilir mahalleler (Zurenborg, Zuid). Rahat lokal hafta sonu için birebir."},
+ {city:"Brüksel",trainMin:110,foodDrink:5,localVibe:4,worthOvernight:4,tiring:3,take:"2 saatin altında direkt tren. Turist merkezini atla; Saint-Gilles/Ixelles’e yerleş — kahve, şarap barı, brunch çok güçlü."},
+ {city:"Ghent",trainMin:140,foodDrink:5,localVibe:5,worthOvernight:4,tiring:3,take:"Aktarma gerekir ama ödülü büyük: kanallarla dolu, canlı öğrenci şehri, kafe cenneti. Geceleme güzel."},
+ {city:"Bruges",trainMin:165,foodDrink:4,localVibe:3,worthOvernight:4,tiring:4,take:"En uzun & yorucu yol, gündüz çok turistik; ama günübirlikçiler gidince romantik, sakin bir geceleme."},
+ {city:"Rotterdam",trainMin:40,foodDrink:4,localVibe:4,worthOvernight:3,tiring:1,take:"Hızlı direkt sıçrama; cesur mimari, Markthal, iyi food hall’lar. Geceleme yerine eğlenceli günübirlik."},
+ {city:"Utrecht",trainMin:30,foodDrink:4,localVibe:5,worthOvernight:3,tiring:1,take:"En kolay kaçış: kanal-rıhtım kafeleri, telaşsız yerel hava. Düşük efor, rahat gün ya da kısa geceleme."},
+ {city:"The Hague",trainMin:50,foodDrink:4,localVibe:4,worthOvernight:3,tiring:2,take:"Direkt & kolay; ağırbaşlı sokaklar + Scheveningen plajı. Hoş ama Utrecht kadar kafe-yoğun değil."},
+ {city:"Haarlem",trainMin:15,foodDrink:4,localVibe:5,worthOvernight:2,tiring:1,take:"15 dakikada ‘kaçamak’; şirin, sakin kasaba, güzel kafeler. Geceleme yerine rahat yarım gün."}
+];
+
+/* ===== HELPERS ===== */
+function coordsOf(v){if(v.lat!=null&&v.lng!=null)return{lat:v.lat,lng:v.lng,approx:false};
+ const c=AREA_CENTERS[areaKey(v.area)];return{lat:c[0],lng:c[1],approx:true};}
+function haversine(a,b,c,d){const R=6371,t=x=>x*Math.PI/180;const dLa=t(c-a),dLo=t(d-b);
+ const h=Math.sin(dLa/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function refPoint(){return userLoc||HOME;}
+function distKm(v){const c=coordsOf(v);const r=refPoint();return haversine(r.lat,r.lng,c.lat,c.lng);}
+function distKmFromHome(v){const c=coordsOf(v);return haversine(HOME.lat,HOME.lng,c.lat,c.lng);}
+function bikeMin(km){return Math.max(1,Math.round(km/0.25));}
+function gmaps(v){const q=encodeURIComponent(v.name+" "+(v.area||"")+" "+(v.city||"Amsterdam"));
+ return"https://www.google.com/maps/search/?api=1&query="+q;}
+function gmapsRoute(list){const pts=list.map(v=>encodeURIComponent(v.name+" "+(v.city||"Amsterdam"))).join("/");
+ return"https://www.google.com/maps/dir/"+pts;}
+const RESV={req:{t:"Rezervasyon gerekli",c:"req"},rec:{t:"Rezervasyon önerilir",c:"rec"},no:{t:"Walk-in / rezervasyon yok",c:"no"},unknown:{t:"Rezervasyon: kontrol et",c:"rec"}};
+const SRCLBL={user:"Benim listem",deck:"Önceki araştırmam",extra:"Ek araştırma",audio:"Ses kaydı"};
+function byId(id){return V.find(v=>v.id===id);}
+function winopen(u){if(!u)return;try{const w=window.open(u,"_blank","noopener");if(!w)location.href=u;}catch(e){location.href=u;}}
+
+/* ===== FAVORITES ===== */
+let favSet=new Set();
+try{const s=JSON.parse(localStorage.getItem("ams_fav")||"null");if(s)favSet=new Set(s);}catch(e){}
+V.forEach(v=>{if(v.fav)favSet.add(v.id);});
+function isFav(id){return favSet.has(id);}
+function toggleFav(id){if(favSet.has(id))favSet.delete(id);else favSet.add(id);
+ try{localStorage.setItem("ams_fav",JSON.stringify([...favSet]));}catch(e){}
+ renderCards();if(MAP.svg)renderMap();}
+
+/* ===== NAV ===== */
+document.querySelectorAll("#nav button").forEach(b=>{
+ b.onclick=()=>{
+   document.querySelectorAll("#nav button").forEach(x=>x.classList.remove("active"));
+   b.classList.add("active");
+   const v=b.dataset.v;
+   document.querySelectorAll(".view").forEach(s=>s.classList.remove("active"));
+   document.getElementById("v-"+v).classList.add("active");
+   window.scrollTo({top:0,behavior:"smooth"});
+   if(v==="map")setTimeout(initMap,50);
+ };
+});
+function go(v){document.querySelector('#nav button[data-v="'+v+'"]').click();}
+
+/* ===== DASHBOARD CTA ===== */
+const CTAS=[
+ {e:"📍",l:"Yakınımdakiler",d:"Konuma göre sırala",act:()=>{go("list");document.getElementById("fSort").value="dist";applyFilters();}},
+ {e:"❤️",l:"Favorilerim",d:"Öncelikli yerler",act:()=>{go("list");setOnlyChip("fav");}},
+ {e:"💻",l:"Çalışmaya uygun",d:"Laptop kafeleri",act:()=>{go("list");setOnlyChip("work");}},
+ {e:"🍷",l:"Wine bar",d:"Akşam şarabı",act:()=>{go("list");setOnlyChip("şarap");}},
+ {e:"🥪",l:"Hızlı öğle",d:"Sandviç / take-away",act:()=>{go("list");setOnlyChip("bagel");}},
+ {e:"🌳",l:"Parkta yemek",d:"Al & parka geç",act:()=>{go("list");setOnlyChip("parkta yemek");}},
+ {e:"🍽️",l:"Akşam yemeği",d:"Restoran önerileri",act:()=>{go("list");setOnlyChip("akşam");}},
+ {e:"✅",l:"Rezervasyonsuz",d:"Spontane gün",act:()=>{go("list");setOnlyChip("walkin");}},
+ {e:"☔",l:"Yağmurlu gün",d:"İçeride keyif",act:()=>openScenario("rain")},
+ {e:"☀️",l:"Güneşli gün",d:"Teras & park",act:()=>openScenario("sun")},
+ {e:"🎯",l:"Bana özel öner",d:"Karar motoru",act:()=>go("de")},
+ {e:"🚆",l:"Hafta sonu",d:"Antwerp / Brüksel",act:()=>go("trip")}
+];
+const cg=document.getElementById("ctaGrid");
+CTAS.forEach(c=>{const d=document.createElement("button");d.className="cta";
+ d.innerHTML='<div class="e">'+c.e+'</div><div class="l">'+c.l+'</div><div class="d">'+c.d+'</div>';
+ d.onclick=c.act;cg.appendChild(d);});
+
+/* ===== SCENARIOS ===== */
+const SCN=[
+ {id:"rembrandt",t:"Rembrandtpark çevresinde kal",m:"Düşük efor · yürüme",stops:["oficina","lusconi","barcentraal","rembrandtpark"]},
+ {id:"oudwest-jordaan",t:"Bisikletle Oud-West + Jordaan",m:"Bisiklet · tam gün",stops:["monks","flos","barpif","winkel43","saintjean"]},
+ {id:"noord",t:"Noord’a geç: öğleden sonra + akşam",m:"Feribot · bisiklet",stops:["coffeevirus","ceuvel","coba","pllek"]},
+ {id:"depijp",t:"De Pijp: brunch + akşam drink",m:"Bisiklet · tam gün",stops:["bakers","annanina","brutdemer","glouglou"]},
+ {id:"park",t:"Parkta sandviç + kahve günü",m:"Düşük efor · güneşli",stops:["flos","monks","rembrandtpark","westerpark"]},
+ {id:"dinner-bar",t:"Akşam yemeği + sonrasında bar",m:"Akşam",stops:["bouillon","deklos","shiraz","barcentraal"]},
+ {id:"work-lunch",t:"Laptopla çalışma + iyi öğle",m:"Hafta içi · çalışma",stops:["kanarie","monks","chun","4850"]},
+ {id:"rain",t:"Yağmurlu gün planı",m:"İçeride · konforlu",stops:["lottis","bocca","tij","deklos"]},
+ {id:"sun",t:"Güneşli gün planı",m:"Teras & park",stops:["espressofabriek","westerpark","pllek","troost"]},
+ {id:"solo",t:"Yalnız çıkmalık plan",m:"Sakin · rahat",stops:["whitelabel","oficina","shiraz"]},
+ {id:"couple",t:"Çift olarak gidilecek plan",m:"Romantik · akşam",stops:["dignita","hartering","brutdemer","barpif"]},
+ {id:"friends",t:"Arkadaşlarla akşam planı",m:"Sosyal · canlı",stops:["coba","escobar","pllek","glouglou"]},
+ {id:"spontane",t:"Rezervasyonsuz spontane gün",m:"Walk-in",stops:["binnenvisser","flos","glouglou","deklos"]},
+ {id:"garanti",t:"Rezervasyonlu garanti akşam",m:"Önceden ayarla",stops:["barpif","csnoord","alba","bouillon"]},
+ {id:"fav-rota",t:"Favori mekanlardan kısa rota",m:"En sevdiklerin",stops:["chun","barpif","pllek","oeuf"]},
+ {id:"lokal",t:"Az turistik lokal Amsterdam günü",m:"Gerçek mahalle hissi",stops:["whitelabel","oficina","ceuvel","barcentraal"]}
+];
+function stopHtml(v,i){if(!v)return"";
+ return '<div class="stop"><div class="n">'+(i+1)+'</div><div class="x">'+
+  '<b>'+v.name+'</b> '+(isFav(v.id)?"❤️":"")+'<div class="sub">'+v.area+' · '+v.cats.slice(0,2).join(", ")+'</div>'+
+  '<button class="linklike" onclick="winopen(\''+gmaps(v)+'\')">Maps’te aç →</button></div></div>';}
+function renderScenarios(){
+ const g=document.getElementById("scnGrid");g.innerHTML="";
+ SCN.forEach(s=>{
+   const vs=s.stops.map(byId).filter(Boolean);
+   const el=document.createElement("div");el.className="scn";
+   el.innerHTML='<h3>'+s.t+'</h3><div class="meta">'+s.m+' · '+vs.length+' durak</div>'+
+     '<div class="route">'+vs.map((v,i)=>stopHtml(v,i)).join("")+'</div>'+
+     '<button class="route-btn" onclick="winopen(\''+gmapsRoute(vs)+'\')">🗺️ Haritada rota</button>';
+   g.appendChild(el);
+ });
+}
+function openScenario(id){go("pano");const el=document.getElementById("scnGrid");
+ const idx=SCN.findIndex(s=>s.id===id);
+ if(idx>=0){const node=el.children[idx];node.scrollIntoView({behavior:"smooth",block:"center"});
+   node.style.outline="2px solid var(--gold)";setTimeout(()=>node.style.outline="",1800);}}
+
+/* ===== LIST / FILTERS ===== */
+const CHIP_DEFS=[
+ {k:"fav",l:"❤️ Favori",cls:"fav"},{k:"work",l:"💻 Çalışma"},{k:"walkin",l:"✅ Rezervasyonsuz"},
+ {k:"resv",l:"📅 Rezervasyonlu"},{k:"near",l:"📍 Yakınımda"},
+ {k:"kahve",l:"☕ Kahve"},{k:"öğlen",l:"🥪 Öğlen"},{k:"akşam",l:"🍽️ Akşam"},
+ {k:"brunch",l:"🥞 Brunch"},{k:"şarap",l:"🍷 Wine bar"},{k:"gece",l:"🌙 Gece"},
+ {k:"parkta yemek",l:"🌳 Parkta yemek"},{k:"mağaza",l:"🛍️ Mağaza"},
+ {k:"deniz mahsulleri",l:"🦪 Deniz"},{k:"italyan",l:"🍝 İtalyan"},{k:"taco",l:"🌮 Taco"},
+ {k:"bagel",l:"🥯 Bagel/Sandviç"},{k:"noord",l:"⛴️ Noord"}
+];
+let activeChips=new Set();
+function setOnlyChip(k){activeChips=new Set([k]);applyFilters();syncChips();}
+function syncChips(){document.querySelectorAll("#chips .chip").forEach(c=>c.classList.toggle("active",activeChips.has(c.dataset.k)));}
+function buildChips(){
+ const wrap=document.getElementById("chips");wrap.innerHTML="";
+ CHIP_DEFS.forEach(cd=>{const b=document.createElement("button");
+   b.className="chip"+(cd.cls?(" "+cd.cls):"");b.dataset.k=cd.k;b.textContent=cd.l;
+   b.onclick=()=>{activeChips.has(cd.k)?activeChips.delete(cd.k):activeChips.add(cd.k);b.classList.toggle("active");applyFilters();};
+   wrap.appendChild(b);});
+}
+function matchChip(v,k){
+ switch(k){
+   case"fav":return isFav(v.id);
+   case"work":return v.work;
+   case"walkin":return v.resv==="no"||v.walkIn===true;
+   case"resv":return v.resv==="req"||v.resv==="rec";
+   case"near":return v.city==="Amsterdam"&&distKmFromHome(v)<=2.6;
+   case"şarap":return v.cats.includes("wine bar");
+   case"gece":return v.cats.includes("gece")||v.best.includes("gece");
+   case"parkta yemek":return v.best.includes("parkta yemek")||v.cats.includes("park");
+   case"mağaza":return v.cats.includes("mağaza");
+   case"deniz mahsulleri":return v.cats.includes("deniz mahsulleri");
+   case"italyan":return v.cats.includes("italyan");
+   case"taco":return v.cats.includes("taco");
+   case"bagel":return v.cats.includes("bagel")||v.cats.includes("take-away");
+   case"noord":return(v.area||"").toLowerCase().includes("noord");
+   default:return v.best.includes(k)||v.cats.includes(k);
+ }
+}
+function populateSelectors(){
+ const areas=[...new Set(V.filter(v=>v.city==="Amsterdam").map(v=>v.area))].sort();
+ const fa=document.getElementById("fArea");
+ areas.forEach(a=>{const o=document.createElement("option");o.value=a;o.textContent=a;fa.appendChild(o);});
+ const cats=[...new Set(V.flatMap(v=>v.cats))].sort();
+ const mc=document.getElementById("mapCat");
+ cats.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;mc.appendChild(o);});
+}
+["q","fCity","fArea","fSrc","fSort"].forEach(id=>document.getElementById(id).addEventListener("input",applyFilters));
+function currentList(){
+ const q=document.getElementById("q").value.trim().toLowerCase();
+ const city=document.getElementById("fCity").value;
+ const area=document.getElementById("fArea").value;
+ const src=document.getElementById("fSrc").value;
+ let list=V.filter(v=>{
+   if(city&&v.city!==city)return false;
+   if(area&&v.area!==area)return false;
+   if(src&&v.src!==src)return false;
+   if(q){const blob=(v.name+" "+v.area+" "+v.cats.join(" ")+" "+v.best.join(" ")+" "+v.desc).toLowerCase();if(!blob.includes(q))return false;}
+   for(const k of activeChips){if(!matchChip(v,k))return false;}
+   return true;
+ });
+ const sort=document.getElementById("fSort").value;
+ if(sort==="az")list.sort((a,b)=>a.name.localeCompare(b.name,"tr"));
+ else if(sort==="dist")list.sort((a,b)=>distKm(a)-distKm(b));
+ else list.sort((a,b)=>{const s=x=>(isFav(x.id)?-4:0)+(x.src==="user"?-2:0)+(x.conf==="high"?-1:0);return s(a)-s(b);});
+ return list;
+}
+function cardHtml(v){
+ const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
+ const badges=[];
+ badges.push('<span class="badge src-'+v.src+'">'+SRCLBL[v.src]+'</span>');
+ if(v.work)badges.push('<span class="badge work">💻 Çalışma</span>');
+ if(v.conf==="low")badges.push('<span class="badge warn">kontrol et</span>');
+ v.best.slice(0,3).forEach(b=>badges.push('<span class="badge">'+b+'</span>'));
+ return '<div class="card">'+
+   '<button class="heart" onclick="toggleFav(\''+v.id+'\')">'+(isFav(v.id)?"❤️":"🤍")+'</button>'+
+   '<div class="top"><div><h3>'+v.name+'</h3>'+
+   '<div class="area">📍 '+v.area+(c.approx?' · <span title="Mahalle merkezine yaklaşık">~konum</span>':'')+
+   ' · <span class="dist">'+(km<100?("≈"+km.toFixed(1)+" km · 🚲"+bikeMin(km)+" dk"):"")+'</span></div></div></div>'+
+   '<div class="tagline">'+v.desc+'</div>'+
+   '<div class="badges">'+badges.join("")+'</div>'+
+   '<div class="resv '+r.c+'">'+r.t+'</div>'+
+   '<div class="note" style="margin-top:9px">'+v.note+'</div>'+
+   '<div class="actions">'+
+     '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google Maps</button>'+
+     (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
+     (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 Instagram</button>':"")+
+   '</div></div>';
+}
+function renderCards(){
+ const list=currentList();
+ document.getElementById("cards").innerHTML=list.map(cardHtml).join("")||
+   '<div class="note" style="grid-column:1/-1">Bu filtrelerle sonuç yok. Bir filtreyi kaldır.</div>';
+ document.getElementById("count").textContent=list.length+" mekan"+
+   (document.getElementById("fSort").value==="dist"?(" · "+(userLoc?"konumuna":"Rembrandtpark’a")+" göre sıralı"):"");
+ syncChips();
+}
+function applyFilters(){renderCards();}
+
+/* ===== SELF-CONTAINED SVG MAP ===== */
+const SVGNS="http://www.w3.org/2000/svg";
+const CITY_BOUNDS={
+ Amsterdam:{latMin:52.345,latMax:52.418,lngMin:4.835,lngMax:4.955},
+ Antwerp:{latMin:51.188,latMax:51.236,lngMin:4.385,lngMax:4.452},
+ Brussels:{latMin:50.812,latMax:50.862,lngMin:4.330,lngMax:4.392},
+ Bruges:{latMin:51.195,latMax:51.218,lngMin:3.205,lngMax:3.245}
+};
+const MAP={city:"Amsterdam",k:1,tx:0,ty:0,W:1000,H:700,scale:1,pad:46,bounds:null,latMid:52.38,svg:null,g:null,pickMode:false,ready:false};
+function hexColor(v){if(isFav(v.id))return"#c25a52";
+ return v.src==="user"?"#5b7a96":v.src==="deck"?"#5a9a93":v.src==="extra"?"#7d9a5a":"#8a6fa3";}
+const D2R=Math.PI/180;
+function setupProjection(city){
+ const b=CITY_BOUNDS[city];const pad=46;const W=1000;
+ const latMid=(b.latMin+b.latMax)/2;
+ const geoW=(b.lngMax-b.lngMin)*Math.cos(latMid*D2R);
+ const geoH=(b.latMax-b.latMin);
+ const scale=(W-2*pad)/geoW;
+ const H=Math.round(2*pad+geoH*scale);
+ MAP.bounds=b;MAP.scale=scale;MAP.W=W;MAP.H=H;MAP.pad=pad;MAP.latMid=latMid;
+ return{W,H};
+}
+function projX(lng){return MAP.pad+(lng-MAP.bounds.lngMin)*Math.cos(MAP.latMid*D2R)*MAP.scale;}
+function projY(lat){return MAP.pad+(MAP.bounds.latMax-lat)*MAP.scale;}
+function invLng(x){return MAP.bounds.lngMin+(x-MAP.pad)/(Math.cos(MAP.latMid*D2R)*MAP.scale);}
+function invLat(y){return MAP.bounds.latMax-(y-MAP.pad)/MAP.scale;}
+function svgEl(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function svgText(x,y,s,fill,size){const t=svgEl("text",{x:x,y:y,fill:fill||"#9a958a","font-size":(size||11),"text-anchor":"middle","font-family":"Inter,Arial,sans-serif"});t.textContent=s;return t;}
+function inBounds(l){const b=MAP.bounds;return l&&l.lat>=b.latMin&&l.lat<=b.latMax&&l.lng>=b.lngMin&&l.lng<=b.lngMax;}
+
+function initMap(){
+ if(!MAP.ready){
+   MAP.svg=document.getElementById("svgmap");
+   document.querySelectorAll(".mapctrl button").forEach(b=>b.onclick=()=>{
+     const z=b.dataset.z;if(z==="in")zoomMap(1.3);else if(z==="out")zoomMap(1/1.3);else resetMap(false);});
+   let dragging=false,sx=0,sy=0,otx=0,oty=0,moved=false;
+   const start=(x,y)=>{dragging=true;sx=x;sy=y;otx=MAP.tx;oty=MAP.ty;moved=false;MAP.svg.style.cursor="grabbing";};
+   const move=(x,y)=>{if(!dragging)return;MAP.tx=otx+(x-sx);MAP.ty=oty+(y-sy);if(Math.abs(x-sx)+Math.abs(y-sy)>5)moved=true;applyTransform();};
+   const end=()=>{dragging=false;MAP.svg.style.cursor=MAP.pickMode?"crosshair":"grab";};
+   MAP.svg.addEventListener("mousedown",e=>start(e.clientX,e.clientY));
+   window.addEventListener("mousemove",e=>move(e.clientX,e.clientY));
+   window.addEventListener("mouseup",end);
+   MAP.svg.addEventListener("touchstart",e=>{if(e.touches.length===1)start(e.touches[0].clientX,e.touches[0].clientY);},{passive:true});
+   MAP.svg.addEventListener("touchmove",e=>{if(e.touches.length===1)move(e.touches[0].clientX,e.touches[0].clientY);},{passive:true});
+   MAP.svg.addEventListener("touchend",end);
+   MAP.svg.addEventListener("wheel",e=>{e.preventDefault();zoomMap(e.deltaY<0?1.15:1/1.15);},{passive:false});
+   MAP.svg.addEventListener("click",e=>{
+     if(moved)return;
+     const t=e.target.closest("[data-vid]");if(t){showPop(t.getAttribute("data-vid"));return;}
+     const t2=e.target.closest("[data-trip]");if(t2){showTripPop(t2.getAttribute("data-trip"));return;}
+     if(MAP.pickMode){const loc=clientToGeo(e.clientX,e.clientY);
+       setRef(loc.lat,loc.lng,"Haritada seçtiğin yer");MAP.pickMode=false;
+       document.getElementById("pickBtn").classList.remove("on");MAP.svg.style.cursor="grab";return;}
+     document.getElementById("mappop").classList.add("hide");
+   });
+   document.getElementById("mapCity").addEventListener("change",e=>{MAP.city=e.target.value;document.getElementById("mappop").classList.add("hide");resetMap(true);});
+   document.getElementById("mapCat").addEventListener("change",renderMap);
+   document.getElementById("mapSrc").addEventListener("change",renderMap);
+   const pb=document.getElementById("pickBtn");
+   pb.onclick=()=>{MAP.pickMode=!MAP.pickMode;pb.classList.toggle("on",MAP.pickMode);MAP.svg.style.cursor=MAP.pickMode?"crosshair":"grab";};
+   document.getElementById("openGoogle").onclick=()=>{
+     if(MAP.city==="Amsterdam"){const r=refPoint();winopen("https://www.google.com/maps/@"+r.lat+","+r.lng+",14z");}
+     else winopen("https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(MAP.city));};
+   MAP.ready=true;
+ }
+ resetMap(true);
+}
+function applyTransform(){if(MAP.g)MAP.g.setAttribute("transform","translate("+MAP.tx+","+MAP.ty+") scale("+MAP.k+")");}
+function zoomMap(f){MAP.k=Math.min(7,Math.max(.6,MAP.k*f));applyTransform();}
+function resetMap(reproject){
+ if(reproject){const d=setupProjection(MAP.city);MAP.svg.setAttribute("viewBox","0 0 "+d.W+" "+d.H);}
+ MAP.k=1;MAP.tx=0;MAP.ty=0;renderMap();applyTransform();
+}
+function clientToGeo(cx,cy){const pt=MAP.svg.createSVGPoint();pt.x=cx;pt.y=cy;
+ const loc=pt.matrixTransform(MAP.g.getScreenCTM().inverse());return{lat:invLat(loc.y),lng:invLng(loc.x)};}
+function renderMap(){
+ if(!MAP.svg)return;
+ MAP.svg.innerHTML="";
+ const g=svgEl("g",{});MAP.g=g;MAP.svg.appendChild(g);
+ g.appendChild(svgEl("rect",{x:0,y:0,width:MAP.W,height:MAP.H,fill:"#eef1ec"}));
+ for(let i=1;i<10;i++){
+   g.appendChild(svgEl("line",{x1:i*MAP.W/10,y1:0,x2:i*MAP.W/10,y2:MAP.H,stroke:"#e3e7de","stroke-width":1}));
+   g.appendChild(svgEl("line",{x1:0,y1:i*MAP.H/10,x2:MAP.W,y2:i*MAP.H/10,stroke:"#e3e7de","stroke-width":1}));}
+ const cat=document.getElementById("mapCat").value;
+ const src=document.getElementById("mapSrc").value;
+ if(MAP.city==="Amsterdam"){
+   const yw=Math.max(0,projY(52.392));
+   g.appendChild(svgEl("rect",{x:0,y:0,width:MAP.W,height:yw,fill:"#d8e6ef",opacity:.7}));
+   g.appendChild(svgText(MAP.W-70,20,"IJ · Noord","#7a93a8",13));
+   g.appendChild(svgEl("circle",{cx:projX(HOME.lng),cy:projY(HOME.lat),r:18,fill:"#cfe0c0",opacity:.85}));
+   for(const a in AREA_CENTERS){const c=AREA_CENTERS[a];g.appendChild(svgText(projX(c[1]),projY(c[0])-13,a,"#aaa49a",10.5));}
+   V.filter(v=>v.city==="Amsterdam").forEach(v=>{
+     if(cat&&!v.cats.includes(cat))return;if(src&&v.src!==src)return;
+     const c=coordsOf(v);const x=projX(c.lng),y=projY(c.lat);const fav=isFav(v.id);
+     const m=svgEl("circle",{cx:x,cy:y,r:fav?7.5:5.5,fill:hexColor(v),stroke:"#fff","stroke-width":2,"data-vid":v.id,style:"cursor:pointer"});
+     const ti=svgEl("title",{});ti.textContent=(fav?"❤ ":"")+v.name+" · "+v.area;m.appendChild(ti);
+     g.appendChild(m);
+   });
+ }else{
+   const arr=TRIPS[MAP.city]||[];
+   arr.forEach((v,i)=>{const x=projX(v.lng),y=projY(v.lat);
+     const m=svgEl("circle",{cx:x,cy:y,r:6.5,fill:"#9a6a4e",stroke:"#fff","stroke-width":2,"data-trip":MAP.city+"|"+i,style:"cursor:pointer"});
+     const ti=svgEl("title",{});ti.textContent=v.name+" · "+v.area;m.appendChild(ti);g.appendChild(m);});
+ }
+ if(userLoc&&inBounds(userLoc)){const x=projX(userLoc.lng),y=projY(userLoc.lat);
+   g.appendChild(svgEl("circle",{cx:x,cy:y,r:18,fill:"#b8944f",opacity:.18}));
+   g.appendChild(svgEl("circle",{cx:x,cy:y,r:8,fill:"#b8944f",stroke:"#fff","stroke-width":3}));
+   g.appendChild(svgText(x,y-15,"★ buradasın","#8a6b25",12));}
+ applyTransform();
+}
+function showPop(id){const v=byId(id);if(!v)return;const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
+ const p=document.getElementById("mappop");
+ p.innerHTML='<button class="popclose" onclick="closePop()">✕</button>'+
+  '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
+  '<div class="psub">📍 '+v.area+(c.approx?" · ~konum":"")+' · ≈'+km.toFixed(1)+' km · 🚲 '+bikeMin(km)+' dk</div>'+
+  '<div class="psub">'+v.cats.join(", ")+' · <b>'+r.t+'</b></div>'+
+  '<div class="pbtns">'+
+   '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google Maps</button>'+
+   (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
+   (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 IG</button>':"")+
+  '</div>';
+ p.classList.remove("hide");
+}
+function showTripPop(key){const parts=key.split("|");const v=(TRIPS[parts[0]]||[])[+parts[1]];if(!v)return;
+ const q=encodeURIComponent(v.name+" "+parts[0]);const p=document.getElementById("mappop");
+ p.innerHTML='<button class="popclose" onclick="closePop()">✕</button>'+
+  '<h4>'+v.name+'</h4><div class="psub">📍 '+v.area+' · '+v.cat+'</div>'+
+  '<div class="psub">'+v.desc+'</div>'+
+  '<div class="pbtns"><button class="btn primary" onclick="winopen(\'https://www.google.com/maps/search/?api=1&query='+q+'\')">📍 Google Maps</button>'+
+  (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
+  (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 IG</button>':"")+'</div>';
+ p.classList.remove("hide");
+}
+function closePop(){document.getElementById("mappop").classList.add("hide");}
+
+/* ===== KONUM / REFERANS ===== */
+function setRef(lat,lng,label){
+ userLoc={lat:lat,lng:lng};
+ const btn=document.getElementById("locBtn");btn.textContent="📍 "+(label||"Konum aktif");btn.classList.add("on");
+ document.getElementById("heroLoc").textContent="📍 Referans: "+(label||"senin konumun");
+ if(MAP.svg)renderMap();renderCards();
+}
+function clearRef(){userLoc=null;
+ const btn=document.getElementById("locBtn");btn.textContent="📍 Konumumu kullan";btn.classList.remove("on");
+ document.getElementById("heroLoc").textContent="📍 Referans konum: Rembrandtpark";
+ if(MAP.svg)renderMap();renderCards();}
+function getLoc(){
+ const btn=document.getElementById("locBtn");
+ if(!navigator.geolocation){flashLoc("📍 GPS yok — bölge seç");return;}
+ btn.textContent="📍 Konum alınıyor…";
+ navigator.geolocation.getCurrentPosition(p=>{
+   setRef(p.coords.latitude,p.coords.longitude,"GPS konumun");syncRefSel("gps");
+   if(MAP.svg){MAP.city="Amsterdam";document.getElementById("mapCity").value="Amsterdam";resetMap(true);}
+ },err=>{flashLoc("📍 GPS açılamadı — aşağıdan bölge seç");},{enableHighAccuracy:true,timeout:9000});
+}
+function flashLoc(msg){const btn=document.getElementById("locBtn");btn.textContent=msg;
+ setTimeout(()=>{btn.textContent=userLoc?"📍 Konum aktif":"📍 Konumumu kullan";},3000);}
+function syncRefSel(val){document.querySelectorAll(".refsel").forEach(s=>{s.value=val;});}
+function populateRefSels(){
+ const opts='<option value="home">📍 Rembrandtpark (varsayılan)</option>'+
+   Object.keys(AREA_CENTERS).map(a=>'<option value="'+a+'">📍 '+a+'</option>').join("")+
+   '<option value="gps">📍 GPS dene (https/Firefox)</option>';
+ document.querySelectorAll(".refsel").forEach(s=>{
+   s.innerHTML=opts;
+   s.addEventListener("change",()=>{
+     const val=s.value;syncRefSel(val);
+     if(val==="home")clearRef();
+     else if(val==="gps")getLoc();
+     else{const c=AREA_CENTERS[val];setRef(c[0],c[1],val);}
+   });
+ });
+}
+document.getElementById("locBtn").onclick=getLoc;
+
+/* ===== CALENDAR ===== */
+const PLANS={
+ 11:{tag:"Yerleşme",txt:"Daireye yerleş, Rembrandtpark turu, akşam Oficina/Bar Lusconi."},
+ 12:{tag:"Lokal",txt:"De Baarsjes & Oud-West yürüyüşü, Monks’ta kahve, akşam Bar Centraal."},
+ 13:{tag:"Çalışma",txt:"Kanarie Club’da çalış, Chun’dan öğle, akşam Café Binnenvisser."},
+ 14:{tag:"Çalışma",txt:"White Label’da kahve+çalış, Flo’s sandviç parkta, akşam Bar Pif (rez)."},
+ 15:{tag:"Keşif",txt:"Bisikletle Jordaan: Winkel 43, Saint-Jean, akşam Café de Klos."},
+ 16:{tag:"Çalışma",txt:"Coffee Room sabah, öğle Oficina, akşam Shiraz şarap."},
+ 17:{tag:"Lokal",txt:"De Pijp günü: Bakers&Roasters brunch, Anna+Nina, GlouGlou."},
+ 18:{tag:"🚆 Hafta sonu",txt:"Antwerp! Cumartesi sabah trenle git (≈1s15)."},
+ 19:{tag:"🚆 Hafta sonu",txt:"Antwerp pazar brunch (Tinsel/Funk), akşam Amsterdam’a dön."},
+ 20:{tag:"Çalışma",txt:"Toparlanma + 4850’de kahve/çalış, akşam Bouillon."},
+ 21:{tag:"Çalışma",txt:"Uncommon/Coffee District çalış, akşam Alba şarap barı."},
+ 22:{tag:"Noord",txt:"Feribotla Noord: Coffee Virus, Coba taco, gün batımı Pllek."},
+ 23:{tag:"Çalışma",txt:"Monks sabah, öğle Lotti’s, akşam Brut de Mer deniz mahsulleri."},
+ 24:{tag:"Lokal",txt:"Westerpark/Westergas: Espressofabriek, Troost, piknik."},
+ 25:{tag:"🚆 Hafta sonu",txt:"Brüksel! (ya da Ghent). Saint-Gilles/Ixelles’e yerleş."},
+ 26:{tag:"🚆 Hafta sonu",txt:"Brüksel pazar: Belga&Co, Woodpecker brunch, akşam dön."},
+ 27:{tag:"Favori",txt:"Favori turu: Chun, Bar Pif, akşam Pllek."},
+ 28:{tag:"Çalışma",txt:"Son çalışma günleri: Kanarie, öğle Bar Lusconi."},
+ 29:{tag:"Eksikler",txt:"Kaçırdıklarını tamamla; Escobar/Coba (rez & açık mı kontrol)."},
+ 30:{tag:"Rahat",txt:"Sakin gün: Café de Ceuvel, Brouwerij ’t IJ."},
+ 31:{tag:"Veda",txt:"Son kahve Monks, öğle Oficina, veda akşamı Bar Pif/Shiraz."}
+};
+const WEEKEND=new Set([18,19,25,26]);
+const DOW=["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
+let calNotes={};try{calNotes=JSON.parse(localStorage.getItem("ams_cal")||"{}");}catch(e){}
+function renderCal(){
+ const cal=document.getElementById("cal");cal.innerHTML="";
+ const today=new Date();
+ for(let d=11;d<=31;d++){
+   const date=new Date(2026,6,d);const dn=DOW[date.getDay()];
+   const wk=WEEKEND.has(d);const p=PLANS[d]||{tag:"",txt:""};
+   const isToday=today.getFullYear()===2026&&today.getMonth()===6&&today.getDate()===d;
+   const el=document.createElement("div");el.className="day"+(wk?" weekend":"")+(isToday?" today":"");
+   el.innerHTML='<div class="dn">'+dn+'</div><div class="dd">'+d+' Tem</div>'+
+     '<span class="tag">'+p.tag+'</span><div class="plan">'+p.txt+'</div>'+
+     '<textarea placeholder="Kendi notun…" data-d="'+d+'">'+(calNotes[d]||"")+'</textarea>';
+   cal.appendChild(el);
+ }
+ cal.querySelectorAll("textarea").forEach(t=>{
+   t.addEventListener("input",()=>{calNotes[t.dataset.d]=t.value;
+     try{localStorage.setItem("ams_cal",JSON.stringify(calNotes));}catch(e){}});
+ });
+}
+
+/* ===== WEEKEND ===== */
+function renderTrips(){
+ document.getElementById("tripReco").innerHTML='<div class="reco">'+
+   '<h3>Önerim</h3>'+
+   '<p><b>1. hafta sonu (18–19 Tem): Antwerp.</b> En güçlü aday — hızlı direkt tren (≈1s15), olağanüstü yeme-içme/kahve/natürel şarap ve birebir senin sevdiğin yürünebilir mahalleler (Zurenborg, Zuid). 1 gece için ideal, yormaz.</p>'+
+   '<p style="margin-top:8px"><b>2. hafta sonu (25–26 Tem): Brüksel.</b> Saint-Gilles & Ixelles’te lokal kal; turist merkezini atla. Alternatif: <b>Ghent</b> (daha şirin, biraz daha yorucu ulaşım) ya da çok rahat istersen <b>Utrecht/Haarlem</b> günübirlik.</p>'+
+   '<p style="margin-top:8px;font-size:12.5px;color:#cfc7b8">Bruges’ü <b>günübirlik</b> olarak ekledim (aşağıda). Brüksel hafta sonuna cumartesi veya pazar günübirlik Brugge sığdırabilirsin — ikisi de Belçika’da ve aralarında ~1 saat. İki yorucu gecelemeyi üst üste koymamak için Brugge’u konaklama olarak önermedim.</p></div>';
+ const cmp=document.getElementById("cmp");
+ cmp.innerHTML='<tr><th>Şehir</th><th>Tren</th><th>Yeme-içme</th><th>Lokal</th><th>Geceleme</th><th>Yorucu</th></tr>'+
+   CITIES.map(c=>'<tr><td>'+c.city+'</td><td>≈'+c.trainMin+' dk</td>'+
+     '<td>'+"●".repeat(c.foodDrink)+'</td><td>'+"●".repeat(c.localVibe)+'</td>'+
+     '<td>'+"●".repeat(c.worthOvernight)+'</td><td>'+"●".repeat(c.tiring)+'</td></tr>'+
+     '<tr><td colspan="6" style="text-align:left;color:var(--ink2);font-size:11.5px;padding-top:0">'+c.take+'</td></tr>').join("");
+ renderTripPlan("Antwerp","antwerpPlan",[
+   ["Cmt sabah","Geliş + kahve","Caffènation / TINSEL — meydan terası, ilk kahve"],
+   ["Cmt öğle","Öğle yemeği","Glou Glou (Borgerhout) ya da PAKT çatı çiftliğinde rahat öğle"],
+   ["Cmt öğleden sonra","Mahalle + mağaza","Zuid: Kloosterstraat antikaları, MoMu moda müzesi, Bakkerij FUNK molası"],
+   ["Cmt akşam","Akşam yemeği","Osaka veya MEA (rez) — paylaşımlık + natürel şarap"],
+   ["Cmt gece","İçki","Dogma Cocktails ya da Billie’s craft bira"],
+   ["Paz sabah","Brunch/kahve","POLLY veya Café Betty (Berchem) — sakin pazar"],
+   ["Paz öğle","Son rota","Zurenborg güzel evleri + Dageraadplaats’ta Café Zeezicht, sonra tren"]
+ ],[
+   "<b>Rota 1 — Yeme-içme:</b> Caffènation → Glou Glou → Millésime şarap → Osaka/MEA → Dogma.",
+   "<b>Rota 2 — Tasarım/müze:</b> TINSEL → MoMu → Kloosterstraat & Antwaarpe Goeiemorgen → PAKT → FUNK.",
+   "<b>Rota 3 — Rahat (yormaz):</b> Café Betty → Zurenborg yürüyüşü → Café Zeezicht terası → POLLY."
+ ]);
+ renderTripPlan("Brussels","brusselsPlan",[
+   ["Cmt sabah","Geliş + kahve","Belga & Co (Saint-Gilles) — espresso + pasta"],
+   ["Cmt öğle","Öğle/brunch","Woodpecker 47 (Sainte-Catherine) tuzlu waffle"],
+   ["Cmt öğleden sonra","Mahalle + mağaza","Dansaert: Mixage & La Fabrika tasarım, Sainte-Catherine yürüyüşü"],
+   ["Cmt akşam","Akşam yemeği","Le Café des Spores (mantar, rez) — Saint-Gilles"],
+   ["Cmt gece","İçki","Le Stoefer kokteyl / Titulus natürel şarap"],
+   ["Paz sabah","Brunch/kahve","Pardon (waffle) — pazar açık"],
+   ["Paz öğle","Son rota","Ixelles/Châtelain yürüyüşü, sonra tren (≈1s50)"]
+ ],[
+   "<b>Not:</b> Pazar günü Titulus, Le Stoefer, La Fabrika, Spores kapalı olabilir — pazarı Belga&Co, Pardon, Woodpecker, Mixage’a göre kur.",
+   "<b>Lokal mahalleler:</b> Saint-Gilles, Ixelles (Châtelain), Dansaert.",
+   "<b>Alternatif:</b> Çok rahat istersen Brüksel yerine Utrecht (≈30 dk) ya da Haarlem (≈15 dk)."
+ ]);
+ renderTripPlan("Bruges","brugesPlan",[
+   ["Sabah","Kahvaltı","Sanseveria Bagelsalon — bagel + Belçika çikolatalı waffle ile başla"],
+   ["Sabah","Meydan & manzara","Markt + Belfort çan kulesine çık (~14€), tepeden panorama"],
+   ["Öğleye doğru","Tarih & kanal","Burg meydanı & Kutsal Kan Bazilikası, sonra Rozenhoedkaai’den ~30 dk kanal turu"],
+   ["Öğle","Öğle yemeği","Ellis Gourmet Burger (hızlı) ya da ’t Brugs Beertje (bira + atıştırmalık)"],
+   ["Öğleden sonra","Yürüyüş","Church of Our Lady → Sint-Janshospitaal → Begijnhof → Minnewater (Aşk Gölü)"],
+   ["İkindi","Bira molası","De Halve Maan turu + tadım, ya da gizli De Garre barında Garre birası"],
+   ["Akşam","Akşam yemeği","de Vlaamsche Pot (geleneksel Flaman) veya ’t Zwart Huis (rez önerili), sonra son trenle dön"]
+ ],[
+   "<b>Klasik rota:</b> Markt/Belfort → Burg & Bazilika → Rozenhoedkaai kanal turu → Church of Our Lady → Begijnhof → Minnewater.",
+   "<b>Bira sevenler:</b> De Halve Maan → De Garre (gizli bar) → Le Trappiste → ’t Brugs Beertje.",
+   "<b>Not:</b> Brugge Brüksel’e ~1 saat, Amsterdam’a ~3 saat (genelde Antwerp/Brüksel aktarmalı). Günübirlik için erken çık; şehir merkezi tamamen yürünebilir, gün batımını Rozenhoedkaai’de yakala."
+ ]);
+}
+function renderTripPlan(city,elId,rows,routes){
+ const arr=TRIPS[city]||[];
+ const html='<div class="trip">'+
+   '<div class="route">'+rows.map((r,i)=>'<div class="stop"><div class="n">'+(i+1)+'</div>'+
+     '<div class="x"><b>'+r[0]+' · '+r[1]+'</b><div class="sub">'+r[2]+'</div></div></div>').join("")+'</div>'+
+   '<div style="margin-top:14px">'+routes.map(r=>'<div class="note">'+r+'</div>').join("")+'</div>'+
+   '<h3 style="font-size:15px;margin:14px 0 8px">'+city+' mekan listesi</h3>'+
+   '<div class="badges">'+arr.map(v=>{const q=encodeURIComponent(v.name+" "+city);
+     return '<span class="badge" style="cursor:pointer" title="'+v.desc.replace(/"/g,"")+'" onclick="winopen(\'https://www.google.com/maps/search/?api=1&query='+q+'\')">'+v.name+' · '+v.cat+'</span>';
+   }).join("")+'</div></div>';
+ document.getElementById(elId).innerHTML=html;
+}
+
+/* ===== DECISION ENGINE (tamamen yerel) ===== */
+const DE_Q=[
+ {id:"time",l:"Zaman",opts:["Sabah","Öğlen","Öğleden sonra","Akşam","Gece"]},
+ {id:"mode",l:"Mod",opts:["Çalışmak","Yemek","Kahve","İçki","Yürüyüş","Alışveriş","Park","Spontane"]},
+ {id:"resv",l:"Rezervasyon",opts:["Var","Yok","Fark etmez"]},
+ {id:"energy",l:"Enerji",opts:["Düşük","Orta","Yüksek"]},
+ {id:"weather",l:"Hava",opts:["Güneşli","Yağmurlu","Fark etmez"]}
+];
+let deSel={time:"Öğleden sonra",mode:"Kahve",resv:"Fark etmez",energy:"Orta",weather:"Fark etmez"};
+function buildDE(){
+ const f=document.getElementById("deForm");f.innerHTML="";
+ DE_Q.forEach(q=>{
+   const d=document.createElement("div");d.className="de-q";d.innerHTML='<div class="ql">'+q.l+'</div>';
+   const o=document.createElement("div");o.className="opts";
+   q.opts.forEach(opt=>{const b=document.createElement("button");
+     b.className="opt"+(deSel[q.id]===opt?" sel":"");b.textContent=opt;
+     b.onclick=()=>{deSel[q.id]=opt;o.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");};
+     o.appendChild(b);});
+   d.appendChild(o);f.appendChild(d);
+ });
+ const go=document.createElement("button");go.className="de-go";go.textContent="🎯 Öner";go.onclick=runDE;f.appendChild(go);
+}
+function deScore(v){
+ let s=0;const m=deSel.mode,t=deSel.time;
+ const modeMap={"Çalışmak":"work","Yemek":"akşam","Kahve":"kahve","İçki":"şarap","Yürüyüş":"park","Alışveriş":"mağaza","Park":"park","Spontane":null};
+ if(m==="Çalışmak"){if(v.work)s+=5;else s-=3;}
+ else if(m==="Spontane"){if(v.resv==="no")s+=3;}
+ else{const key=modeMap[m];if(key&&(v.best.includes(key)||v.cats.includes(key)))s+=5;
+   if(m==="İçki"&&v.cats.includes("wine bar"))s+=2;
+   if(m==="Yemek"&&v.cats.includes("restoran"))s+=2;
+   if(m==="Alışveriş"&&v.cats.includes("mağaza"))s+=3;}
+ const tmap={"Sabah":["kahvaltı","kahve","brunch"],"Öğlen":["öğlen","take-away","kahve"],
+   "Öğleden sonra":["kahve","öğlen","çalışma","mağaza"],"Akşam":["akşam","şarap"],"Gece":["gece","akşam"]};
+ (tmap[t]||[]).forEach(k=>{if(v.best.includes(k)||v.cats.includes(k))s+=1.5;});
+ if(t==="Gece"&&!(v.cats.includes("gece")||v.best.includes("gece")||v.cats.includes("bar")))s-=2;
+ if(deSel.resv==="Yok"&&v.resv==="req")s-=4;
+ if(deSel.resv==="Yok"&&v.resv==="no")s+=2;
+ if(deSel.resv==="Var"&&(v.resv==="req"||v.resv==="rec"))s+=1.5;
+ const km=distKm(v);
+ if(deSel.energy==="Düşük")s-=km*0.7;else if(deSel.energy==="Orta")s-=km*0.25;else s-=km*0.05;
+ const terras=v.cats.includes("park")||v.best.includes("park")||v.id==="pllek"||v.id==="troost"||v.id==="espressofabriek";
+ if(deSel.weather==="Güneşli"&&terras)s+=2.5;
+ if(deSel.weather==="Yağmurlu"&&terras)s-=2.5;
+ if(isFav(v.id))s+=0.6;if(v.src==="user")s+=0.4;if(v.conf==="low")s-=0.6;
+ s+=Math.random()*0.3;return s;
+}
+function runDE(){
+ const cands=V.filter(v=>v.city==="Amsterdam").map(v=>({v,s:deScore(v)})).sort((a,b)=>b.s-a.s);
+ const best=cands[0].v;
+ const near=[...cands].sort((a,b)=>distKm(a.v)-distKm(b.v)).find(x=>x.v.id!==best.id).v;
+ const fav=cands.find(x=>isFav(x.v.id)&&x.v.id!==best.id);
+ const walk=cands.find(x=>x.v.resv==="no"&&x.v.id!==best.id);
+ const lokal=cands.find(x=>(x.v.src==="extra"||x.v.src==="deck")&&x.v.id!==best.id);
+ const out=[["En iyi seçenek",best],["Yakın alternatif",near],["Favori alternatif",fav?fav.v:null],
+   ["Rezervasyonsuz alternatif",walk?walk.v:null],["Daha lokal alternatif",lokal?lokal.v:null]];
+ document.getElementById("deOut").innerHTML=out.filter(o=>o[1]).map(o=>{
+   const v=o[1];const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
+   return '<div class="de-res"><div class="role">'+o[0]+'</div>'+
+     '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
+     '<div class="area">📍 '+v.area+' · ≈'+km.toFixed(1)+' km · 🚲'+bikeMin(km)+' dk · <span class="'+r.c+'">'+r.t+'</span></div>'+
+     '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
+     '<button class="btn primary" style="max-width:220px" onclick="winopen(\''+gmaps(v)+'\')">📍 Google Maps’te aç</button></div>';
+ }).join("");
+ document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
+}
+
+/* ===== CHECK LIST ===== */
+const CHECKS=[
+ "Rezervasyon: Bar Pif, CS Noord, Chez Nina/Noof, De Plantage, Escobar, Alba, Gebr. Hartering, Le Pristine, Hertog Jan, Le Café des Spores için önceden ayır.",
+ "Açılış saatleri: Küçük yerler (Saint-Jean, Winkel 43) erken kapanabilir; gitmeden saat bak.",
+ "Pazar günü: Brüksel’de Titulus, Le Stoefer, La Fabrika, Spores pazar kapalı olabilir — planı Belga&Co/Pardon/Woodpecker’a göre kur.",
+ "Brugge (günübirlik): 't Zwart Huis & de Vlaamsche Pot için akşam rezervasyonu; De Halve Maan turu için gün içinde bilet/saat kontrol et.",
+ "Escobar: Bazı kaynaklar kapandığını yazıyor — gitmeden mutlaka doğrula.",
+ "Chez Nina → ‘Noof’ olarak yenilenmiş olabilir (konsept değişmiş); kontrol et.",
+ "Rubenshuis (Antwerp): ana ev restorasyonda olabilir; sergi/bahçe açık mı bak.",
+ "Tatil/özel gün: 21 Temmuz Belçika ulusal günü civarı bazı yerler farklı çalışabilir.",
+ "Tren saatleri: Antwerp/Brüksel/Brugge için NS International / SNCB saatlerini önceden kontrol et; hafta sonu seyrekleşebilir. Brugge Amsterdam’a ~3 saat (aktarmalı).",
+ "Müzeler: MoMu, Brugge Belfort/Memling ve Amsterdam müzelerinde geçici sergi & bilet saati olabilir, online al.",
+ "Ses kayıtları: Bu ortamda transkribe edilemedi — kayıtlardaki öneriler henüz eklenmedi (yukarıdaki nota bak).",
+ "Koordinatlar: ‘~konum’ etiketli pinler mahalle merkezine yaklaşıktır; navigasyon için ‘Google Maps’te aç’ı kullan."
+];
+document.getElementById("checkList").innerHTML=CHECKS.map(c=>'<li>'+c+'</li>').join("");
+
+/* ===== INIT ===== */
+populateSelectors();populateRefSels();buildChips();renderScenarios();renderCards();renderCal();renderTrips();buildDE();
+</script>
+</body>
+</html>
