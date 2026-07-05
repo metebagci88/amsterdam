@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Amsterdam · Lokal Yaşam Rehberi (11–31 Temmuz)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
 :root{
   --bg:#f6f4ef; --bg2:#efece4; --card:#ffffff; --ink:#23211c; --ink2:#5f5a50;
@@ -216,11 +217,9 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
       <span><i class="dot" style="background:var(--gold)"></i>Sen (★)</span>
     </div>
     <div id="mapWrap">
-      <svg id="svgmap" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700"></svg>
-      <div class="mapctrl"><button data-z="in" title="Yakınlaş">＋</button><button data-z="out" title="Uzaklaş">－</button><button data-z="reset" title="Sıfırla">⤢</button></div>
-      <div id="mappop" class="mappop hide"></div>
+      <div id="lmap" style="height:62vh;min-height:380px;border-radius:16px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(40,35,25,.06)"></div>
     </div>
-    <p class="section-sub" style="margin-top:10px">Bu harita tamamen dosyanın içinde çalışır — internet, Google API anahtarı veya kurulum gerekmez. Konumun mahalle merkezine yaklaşıksa kartta “~konum” yazar; sokak detaylı gerçek harita için “🧭 Google Haritalar’da aç” veya bir mekanın “Google Maps” butonunu kullan.</p>
+    <p class="section-sub" style="margin-top:10px">Gerçek sokak haritası (OpenStreetMap). Bir pine dokun → mekan kartı + Google Maps linki açılır. Renk = kaynak, kalp = favori, altın nokta = konumun. Filtreler pinleri anında günceller; şehir menüsünden Antwerp / Brüksel / Brugge haritasına da geçebilirsin.</p>
   </section>
 
   <!-- MEKANLAR -->
@@ -334,6 +333,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
   <button data-v="notes"><span class="ic">📝</span>Notlar</button>
 </nav>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 /* ===== referans noktaları ===== */
 const HOME={lat:52.3680,lng:4.8470,name:"Rembrandtpark"};
@@ -610,7 +610,7 @@ V.forEach(v=>{if(v.fav)favSet.add(v.id);});
 function isFav(id){return favSet.has(id);}
 function toggleFav(id){if(favSet.has(id))favSet.delete(id);else favSet.add(id);
  try{localStorage.setItem("ams_fav",JSON.stringify([...favSet]));}catch(e){}
- renderCards();if(MAP.svg)renderMap();}
+ renderCards();if(MAP.map)drawMarkers();}
 
 /* ===== NAV ===== */
 document.querySelectorAll("#nav button").forEach(b=>{
@@ -785,158 +785,87 @@ function renderCards(){
 function applyFilters(){renderCards();}
 
 /* ===== SELF-CONTAINED SVG MAP ===== */
-const SVGNS="http://www.w3.org/2000/svg";
-const CITY_BOUNDS={
- Amsterdam:{latMin:52.345,latMax:52.418,lngMin:4.835,lngMax:4.955},
- Antwerp:{latMin:51.188,latMax:51.236,lngMin:4.385,lngMax:4.452},
- Brussels:{latMin:50.812,latMax:50.862,lngMin:4.330,lngMax:4.392},
- Bruges:{latMin:51.195,latMax:51.218,lngMin:3.205,lngMax:3.245}
-};
-const MAP={city:"Amsterdam",k:1,tx:0,ty:0,W:1000,H:700,scale:1,pad:46,bounds:null,latMid:52.38,svg:null,g:null,pickMode:false,ready:false};
-function hexColor(v){if(isFav(v.id))return"#c25a52";
- return v.src==="user"?"#5b7a96":v.src==="deck"?"#5a9a93":v.src==="extra"?"#7d9a5a":"#8a6fa3";}
-const D2R=Math.PI/180;
-function setupProjection(city){
- const b=CITY_BOUNDS[city];const pad=46;const W=1000;
- const latMid=(b.latMin+b.latMax)/2;
- const geoW=(b.lngMax-b.lngMin)*Math.cos(latMid*D2R);
- const geoH=(b.latMax-b.latMin);
- const scale=(W-2*pad)/geoW;
- const H=Math.round(2*pad+geoH*scale);
- MAP.bounds=b;MAP.scale=scale;MAP.W=W;MAP.H=H;MAP.pad=pad;MAP.latMid=latMid;
- return{W,H};
-}
-function projX(lng){return MAP.pad+(lng-MAP.bounds.lngMin)*Math.cos(MAP.latMid*D2R)*MAP.scale;}
-function projY(lat){return MAP.pad+(MAP.bounds.latMax-lat)*MAP.scale;}
-function invLng(x){return MAP.bounds.lngMin+(x-MAP.pad)/(Math.cos(MAP.latMid*D2R)*MAP.scale);}
-function invLat(y){return MAP.bounds.latMax-(y-MAP.pad)/MAP.scale;}
-function svgEl(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
-function svgText(x,y,s,fill,size){const t=svgEl("text",{x:x,y:y,fill:fill||"#9a958a","font-size":(size||11),"text-anchor":"middle","font-family":"Inter,Arial,sans-serif"});t.textContent=s;return t;}
-function inBounds(l){const b=MAP.bounds;return l&&l.lat>=b.latMin&&l.lat<=b.latMax&&l.lng>=b.lngMin&&l.lng<=b.lngMax;}
-
+/* ===== LEAFLET / OpenStreetMap MAP ===== */
+const CITY_VIEW={Amsterdam:[52.370,4.895,12],Antwerp:[51.215,4.410,13],Brussels:[50.845,4.360,13],Bruges:[51.208,3.224,14]};
+const MAP={city:"Amsterdam",map:null,layer:null,userMarker:null,ready:false,pickMode:false};
+function hexColor(v){if(isFav(v.id))return"#c25a52";return v.src==="user"?"#5b7a96":v.src==="deck"?"#5a9a93":v.src==="extra"?"#7d9a5a":"#8a6fa3";}
 function initMap(){
+ if(typeof L==="undefined"){setTimeout(initMap,250);return;}
  if(!MAP.ready){
-   MAP.svg=document.getElementById("svgmap");
-   document.querySelectorAll(".mapctrl button").forEach(b=>b.onclick=()=>{
-     const z=b.dataset.z;if(z==="in")zoomMap(1.3);else if(z==="out")zoomMap(1/1.3);else resetMap(false);});
-   let dragging=false,sx=0,sy=0,otx=0,oty=0,moved=false;
-   const start=(x,y)=>{dragging=true;sx=x;sy=y;otx=MAP.tx;oty=MAP.ty;moved=false;MAP.svg.style.cursor="grabbing";};
-   const move=(x,y)=>{if(!dragging)return;MAP.tx=otx+(x-sx);MAP.ty=oty+(y-sy);if(Math.abs(x-sx)+Math.abs(y-sy)>5)moved=true;applyTransform();};
-   const end=()=>{dragging=false;MAP.svg.style.cursor=MAP.pickMode?"crosshair":"grab";};
-   MAP.svg.addEventListener("mousedown",e=>start(e.clientX,e.clientY));
-   window.addEventListener("mousemove",e=>move(e.clientX,e.clientY));
-   window.addEventListener("mouseup",end);
-   MAP.svg.addEventListener("touchstart",e=>{if(e.touches.length===1)start(e.touches[0].clientX,e.touches[0].clientY);},{passive:true});
-   MAP.svg.addEventListener("touchmove",e=>{if(e.touches.length===1)move(e.touches[0].clientX,e.touches[0].clientY);},{passive:true});
-   MAP.svg.addEventListener("touchend",end);
-   MAP.svg.addEventListener("wheel",e=>{e.preventDefault();zoomMap(e.deltaY<0?1.15:1/1.15);},{passive:false});
-   MAP.svg.addEventListener("click",e=>{
-     if(moved)return;
-     const t=e.target.closest("[data-vid]");if(t){showPop(t.getAttribute("data-vid"));return;}
-     const t2=e.target.closest("[data-trip]");if(t2){showTripPop(t2.getAttribute("data-trip"));return;}
-     if(MAP.pickMode){const loc=clientToGeo(e.clientX,e.clientY);
-       setRef(loc.lat,loc.lng,"Haritada seçtiğin yer");MAP.pickMode=false;
-       document.getElementById("pickBtn").classList.remove("on");MAP.svg.style.cursor="grab";return;}
-     document.getElementById("mappop").classList.add("hide");
-   });
-   document.getElementById("mapCity").addEventListener("change",e=>{MAP.city=e.target.value;document.getElementById("mappop").classList.add("hide");resetMap(true);});
-   document.getElementById("mapCat").addEventListener("change",renderMap);
-   document.getElementById("mapSrc").addEventListener("change",renderMap);
+   MAP.map=L.map("lmap",{zoomControl:true,scrollWheelZoom:true});
+   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(MAP.map);
+   MAP.layer=L.layerGroup().addTo(MAP.map);
+   const v=CITY_VIEW.Amsterdam;MAP.map.setView([v[0],v[1]],v[2]);
+   document.getElementById("mapCity").addEventListener("change",e=>{MAP.city=e.target.value;const c=CITY_VIEW[MAP.city]||CITY_VIEW.Amsterdam;MAP.map.setView([c[0],c[1]],c[2]);drawMarkers();});
+   document.getElementById("mapCat").addEventListener("change",drawMarkers);
+   document.getElementById("mapSrc").addEventListener("change",drawMarkers);
    const pb=document.getElementById("pickBtn");
-   pb.onclick=()=>{MAP.pickMode=!MAP.pickMode;pb.classList.toggle("on",MAP.pickMode);MAP.svg.style.cursor=MAP.pickMode?"crosshair":"grab";};
-   document.getElementById("openGoogle").onclick=()=>{
-     if(MAP.city==="Amsterdam"){const r=refPoint();winopen("https://www.google.com/maps/@"+r.lat+","+r.lng+",14z");}
-     else winopen("https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(MAP.city));};
+   pb.onclick=()=>{MAP.pickMode=!MAP.pickMode;pb.classList.toggle("on",MAP.pickMode);MAP.map.getContainer().style.cursor=MAP.pickMode?"crosshair":"";};
+   MAP.map.on("click",e=>{if(MAP.pickMode){setRef(e.latlng.lat,e.latlng.lng,"Haritada seçtiğin yer");MAP.pickMode=false;document.getElementById("pickBtn").classList.remove("on");MAP.map.getContainer().style.cursor="";}});
+   document.getElementById("openGoogle").onclick=()=>{if(MAP.city==="Amsterdam"){const r=refPoint();winopen("https://www.google.com/maps/@"+r.lat+","+r.lng+",14z");}else winopen("https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(MAP.city));};
    MAP.ready=true;
  }
- resetMap(true);
+ drawMarkers();
+ setTimeout(()=>{if(MAP.map)MAP.map.invalidateSize();},220);
 }
-function applyTransform(){if(MAP.g)MAP.g.setAttribute("transform","translate("+MAP.tx+","+MAP.ty+") scale("+MAP.k+")");}
-function zoomMap(f){MAP.k=Math.min(7,Math.max(.6,MAP.k*f));applyTransform();}
-function resetMap(reproject){
- if(reproject){const d=setupProjection(MAP.city);MAP.svg.setAttribute("viewBox","0 0 "+d.W+" "+d.H);}
- MAP.k=1;MAP.tx=0;MAP.ty=0;renderMap();applyTransform();
-}
-function clientToGeo(cx,cy){const pt=MAP.svg.createSVGPoint();pt.x=cx;pt.y=cy;
- const loc=pt.matrixTransform(MAP.g.getScreenCTM().inverse());return{lat:invLat(loc.y),lng:invLng(loc.x)};}
-function renderMap(){
- if(!MAP.svg)return;
- MAP.svg.innerHTML="";
- const g=svgEl("g",{});MAP.g=g;MAP.svg.appendChild(g);
- g.appendChild(svgEl("rect",{x:0,y:0,width:MAP.W,height:MAP.H,fill:"#eef1ec"}));
- for(let i=1;i<10;i++){
-   g.appendChild(svgEl("line",{x1:i*MAP.W/10,y1:0,x2:i*MAP.W/10,y2:MAP.H,stroke:"#e3e7de","stroke-width":1}));
-   g.appendChild(svgEl("line",{x1:0,y1:i*MAP.H/10,x2:MAP.W,y2:i*MAP.H/10,stroke:"#e3e7de","stroke-width":1}));}
- const cat=document.getElementById("mapCat").value;
- const src=document.getElementById("mapSrc").value;
- if(MAP.city==="Amsterdam"){
-   const yw=Math.max(0,projY(52.392));
-   g.appendChild(svgEl("rect",{x:0,y:0,width:MAP.W,height:yw,fill:"#d8e6ef",opacity:.7}));
-   g.appendChild(svgText(MAP.W-70,20,"IJ · Noord","#7a93a8",13));
-   g.appendChild(svgEl("circle",{cx:projX(HOME.lng),cy:projY(HOME.lat),r:18,fill:"#cfe0c0",opacity:.85}));
-   for(const a in AREA_CENTERS){const c=AREA_CENTERS[a];g.appendChild(svgText(projX(c[1]),projY(c[0])-13,a,"#aaa49a",10.5));}
-   V.filter(v=>v.city==="Amsterdam").forEach(v=>{
-     if(cat&&!v.cats.includes(cat))return;if(src&&v.src!==src)return;
-     const c=coordsOf(v);const x=projX(c.lng),y=projY(c.lat);const fav=isFav(v.id);
-     const m=svgEl("circle",{cx:x,cy:y,r:fav?7.5:5.5,fill:hexColor(v),stroke:"#fff","stroke-width":2,"data-vid":v.id,style:"cursor:pointer"});
-     const ti=svgEl("title",{});ti.textContent=(fav?"❤ ":"")+v.name+" · "+v.area;m.appendChild(ti);
-     g.appendChild(m);
-   });
- }else{
-   const arr=TRIPS[MAP.city]||[];
-   arr.forEach((v,i)=>{const x=projX(v.lng),y=projY(v.lat);
-     const m=svgEl("circle",{cx:x,cy:y,r:6.5,fill:"#9a6a4e",stroke:"#fff","stroke-width":2,"data-trip":MAP.city+"|"+i,style:"cursor:pointer"});
-     const ti=svgEl("title",{});ti.textContent=v.name+" · "+v.area;m.appendChild(ti);g.appendChild(m);});
- }
- if(userLoc&&inBounds(userLoc)){const x=projX(userLoc.lng),y=projY(userLoc.lat);
-   g.appendChild(svgEl("circle",{cx:x,cy:y,r:18,fill:"#b8944f",opacity:.18}));
-   g.appendChild(svgEl("circle",{cx:x,cy:y,r:8,fill:"#b8944f",stroke:"#fff","stroke-width":3}));
-   g.appendChild(svgText(x,y-15,"★ buradasın","#8a6b25",12));}
- applyTransform();
-}
-function showPop(id){const v=byId(id);if(!v)return;const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
- const p=document.getElementById("mappop");
- p.innerHTML='<button class="popclose" onclick="closePop()">✕</button>'+
-  '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
-  '<div class="psub">📍 '+v.area+(c.approx?" · ~konum":"")+' · ≈'+km.toFixed(1)+' km · 🚲 '+bikeMin(km)+' dk</div>'+
-  '<div class="psub">'+v.cats.join(", ")+' · <b>'+r.t+'</b></div>'+
-  '<div class="pbtns">'+
+function popupHtml(v){const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
+ return '<div style="min-width:190px"><b style="font-size:14px">'+v.name+(isFav(v.id)?" ❤️":"")+'</b><br>'+
+  '<span style="color:#666;font-size:11.5px">📍 '+v.area+(c.approx?" · ~konum":"")+' · ≈'+km.toFixed(1)+' km · 🚲 '+bikeMin(km)+' dk</span><br>'+
+  '<span style="font-size:11.5px">'+v.cats.join(", ")+' · '+r.t+'</span>'+
+  '<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">'+
    '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google Maps</button>'+
    (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
    (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 IG</button>':"")+
-  '</div>';
- p.classList.remove("hide");
+  '</div></div>';}
+function drawMarkers(){
+ if(!MAP.map)return;MAP.layer.clearLayers();
+ const cat=document.getElementById("mapCat").value;
+ const src=document.getElementById("mapSrc").value;
+ if(MAP.city==="Amsterdam"){
+   V.filter(v=>v.city==="Amsterdam").forEach(v=>{
+     if(cat&&!v.cats.includes(cat))return;
+     if(src&&v.src!==src)return;
+     const c=coordsOf(v);const fav=isFav(v.id);
+     const m=L.circleMarker([c.lat,c.lng],{radius:fav?9:6.5,color:"#fff",weight:2,fillColor:hexColor(v),fillOpacity:.95});
+     m.bindPopup(popupHtml(v));m.addTo(MAP.layer);
+   });
+ }else{
+   (TRIPS[MAP.city]||[]).forEach(v=>{
+     const m=L.circleMarker([v.lat,v.lng],{radius:7,color:"#fff",weight:2,fillColor:"#9a6a4e",fillOpacity:.95});
+     const q=encodeURIComponent(v.name+" "+MAP.city);
+     m.bindPopup('<div style="min-width:180px"><b style="font-size:14px">'+v.name+'</b><br><span style="color:#666;font-size:11.5px">📍 '+v.area+' · '+v.cat+'</span><br><span style="font-size:11.5px">'+v.desc+'</span><div style="margin-top:7px"><button class="btn primary" onclick="winopen(\'https://www.google.com/maps/search/?api=1&query='+q+'\')">📍 Google Maps</button></div></div>');
+     m.addTo(MAP.layer);
+   });
+ }
+ placeUser();
 }
-function showTripPop(key){const parts=key.split("|");const v=(TRIPS[parts[0]]||[])[+parts[1]];if(!v)return;
- const q=encodeURIComponent(v.name+" "+parts[0]);const p=document.getElementById("mappop");
- p.innerHTML='<button class="popclose" onclick="closePop()">✕</button>'+
-  '<h4>'+v.name+'</h4><div class="psub">📍 '+v.area+' · '+v.cat+'</div>'+
-  '<div class="psub">'+v.desc+'</div>'+
-  '<div class="pbtns"><button class="btn primary" onclick="winopen(\'https://www.google.com/maps/search/?api=1&query='+q+'\')">📍 Google Maps</button>'+
-  (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
-  (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 IG</button>':"")+'</div>';
- p.classList.remove("hide");
+function placeUser(){
+ if(!MAP.map)return;
+ if(MAP.userMarker){MAP.map.removeLayer(MAP.userMarker);MAP.userMarker=null;}
+ if(userLoc){
+   MAP.userMarker=L.circleMarker([userLoc.lat,userLoc.lng],{radius:9,color:"#fff",weight:3,fillColor:"#b8944f",fillOpacity:1}).addTo(MAP.map);
+   MAP.userMarker.bindPopup("⭐ Buradasın");
+   MAP.map.setView([userLoc.lat,userLoc.lng],14);
+ }
 }
-function closePop(){document.getElementById("mappop").classList.add("hide");}
 
 /* ===== KONUM / REFERANS ===== */
 function setRef(lat,lng,label){
  userLoc={lat:lat,lng:lng};
  const btn=document.getElementById("locBtn");btn.textContent="📍 "+(label||"Konum aktif");btn.classList.add("on");
  document.getElementById("heroLoc").textContent="📍 Referans: "+(label||"senin konumun");
- if(MAP.svg)renderMap();renderCards();
+ if(MAP.map)placeUser();renderCards();
 }
 function clearRef(){userLoc=null;
  const btn=document.getElementById("locBtn");btn.textContent="📍 Konumumu kullan";btn.classList.remove("on");
  document.getElementById("heroLoc").textContent="📍 Referans konum: Rembrandtpark";
- if(MAP.svg)renderMap();renderCards();}
+ if(MAP.map)placeUser();renderCards();}
 function getLoc(){
  const btn=document.getElementById("locBtn");
  if(!navigator.geolocation){flashLoc("📍 GPS yok — bölge seç");return;}
  btn.textContent="📍 Konum alınıyor…";
  navigator.geolocation.getCurrentPosition(p=>{
    setRef(p.coords.latitude,p.coords.longitude,"GPS konumun");syncRefSel("gps");
-   if(MAP.svg){MAP.city="Amsterdam";document.getElementById("mapCity").value="Amsterdam";resetMap(true);}
  },err=>{flashLoc("📍 GPS açılamadı — aşağıdan bölge seç");},{enableHighAccuracy:true,timeout:9000});
 }
 function flashLoc(msg){const btn=document.getElementById("locBtn");btn.textContent=msg;
