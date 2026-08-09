@@ -304,19 +304,31 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .tm-c{font-size:11.5px;color:var(--accent2);font-weight:600}
 .tm-s{font-size:12.5px;color:var(--ink2);margin-top:4px}
 
-/* REKLAM / SPONSORLU */
-.ad-label{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8a6d2f;background:#f3e6c9;border:1px solid #e6d3a3;border-radius:5px;padding:2px 7px;vertical-align:middle}
+/* IAB REKLAM SLOTLARI */
+.ad-slot{margin:16px 0;text-align:center}
+.ad-tag{font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:#b3a894;margin-bottom:5px}
+.ad-unit{display:inline-block;position:relative;overflow:hidden;background:#efece4;border:1px solid var(--line);border-radius:8px;text-decoration:none;vertical-align:top;box-shadow:var(--shadow);color:var(--ink)}
+.ad-unit>img{display:block;width:100%;height:100%;object-fit:cover}
+.ad-unit>div{width:100%;height:100%}
+.ad-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:8px;text-align:center;font-size:12px}
+.ad-970x250{width:970px;height:250px;max-width:100%}
+.ad-728x90{width:728px;height:90px;max-width:100%}
+.ad-300x600{width:300px;height:600px;max-width:100%}
+.ad-300x250{width:300px;height:250px;max-width:100%}
+.ad-320x100{width:320px;height:100px;max-width:100%}
+.ad-320x50{width:320px;height:50px;max-width:100%}
+.only-desktop{display:none}
+.only-mobile{display:inline-block}
+@media(min-width:1024px){ .only-desktop{display:inline-block} .only-mobile{display:none} }
+/* native sponsorlu */
+.ad-label{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8a6d2f;background:#f3e6c9;border:1px solid #e6d3a3;border-radius:5px;padding:2px 7px}
 .ad-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .ad-sponsor{font-size:11.5px;color:var(--ink2);font-weight:600}
-.ad-banner{display:block;text-decoration:none;color:var(--ink);background:linear-gradient(180deg,#fdf9f0,#f8f1e2);border:1px solid #ecdcb8;border-radius:14px;padding:16px;margin:14px 0;box-shadow:var(--shadow);position:relative}
-.ad-banner:hover{border-color:var(--gold)}
-.ad-title{font-family:Georgia,serif;font-size:16px;font-weight:600}
 .ad-body{font-size:13px;color:var(--ink2);margin-top:4px}
-.ad-cta{display:inline-block;margin-top:10px;font-size:13px;font-weight:700;color:var(--accent)}
-.ad-venue{border:1px solid #ecdcb8 !important;background:linear-gradient(180deg,#fdf9f0,#fbf5e8) !important;position:relative}
+.ad-venue{border:1px solid #ecdcb8 !important;background:linear-gradient(180deg,#fdf9f0,#fbf5e8) !important}
 .ad-decision{border:1px dashed var(--gold);background:linear-gradient(180deg,#fdf9f0,#f8f1e2);border-radius:14px;padding:16px;margin-top:14px}
 .ad-decision h4{font-family:Georgia,serif;font-size:16px;margin:2px 0 4px}
-#adCityBanner:empty,#adMekanlar:empty,#adKarar:empty,#adPlan:empty,#adHome:empty{display:none}
+#adMasthead:empty,#adCityBanner:empty,#adMekanlar:empty,#adKarar:empty,#adPlan:empty{display:none}
 
 </style>
 </head>
@@ -336,6 +348,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 
   <!-- PANO -->
   <section class="view active" id="v-pano">
+    <div id="adMasthead"></div>
     <div class="hero">
       <h2>Bugün ne yapmak istiyorsun?</h2>
       <p>Rembrandtpark’taki dairen merkez. Klasik turist değil, lokal yaşam modundasın: iyi kahve, güzel öğle yemeği, bisikletle keşif, akşam şarabı. Aşağıdan hızlı seç ya da “Karar” sekmesinden sana özel öneri al.</p>
@@ -1648,30 +1661,46 @@ async function loadMemberArchive(email){
 }
 
 
-/* ===== REKLAM & SPONSORLUK (doküman #7) — DB'den yönetilir, organik içeriği bozmaz ===== */
+/* ===== REKLAM & SPONSORLUK — IAB standart slotlar (JPEG/GIF/HTML5, GDN'e bağlanabilir) ===== */
 const ADS=(function(){
   const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"};
   let db=null, cache=[];
   try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
   function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function isActive(a){ const now=Date.now(); if(a.active===false)return false; if(a.starts_at&&new Date(a.starts_at).getTime()>now)return false; if(a.ends_at&&new Date(a.ends_at).getTime()<now)return false; return true; }
-  function forSlot(slot,city){ return cache.filter(a=>a.slot===slot&&isActive(a)&&(!a.scope_city||a.scope_city===city)); }
+  function slotAds(slot,city){ return cache.filter(a=>a.slot===slot&&isActive(a)&&(!a.scope_city||a.scope_city===city)); }
+  function fill(id,html){ const el=document.getElementById(id); if(el) el.innerHTML=html||""; }
+  // ---- IAB display units ----
+  function sizeClass(fmt){ return "ad-"+(fmt||"300x250"); }
+  function visClass(fmt){ if(["970x250","728x90","300x600"].indexOf(fmt)>=0)return "only-desktop"; if(["320x100","320x50"].indexOf(fmt)>=0)return "only-mobile"; return ""; }
+  function creativeInner(a){
+    if(a.creative_type==="html"&&a.html) return a.html;
+    if(a.image_url) return '<img src="'+esc(a.image_url)+'" alt="'+esc(a.sponsor||"reklam")+'" loading="lazy">';
+    return '<div class="ad-fallback"><b>'+esc(a.title||"")+'</b><span>'+esc(a.body||"")+'</span></div>';
+  }
+  function unitHtml(a){
+    const fmt=a.format||((a.width&&a.height)?a.width+"x"+a.height:"300x250");
+    const href=a.cta_url?(' href="'+esc(a.cta_url)+'" target="_blank" rel="noopener nofollow"'):' href="#" onclick="return false"';
+    return '<a class="ad-unit '+sizeClass(fmt)+' '+visClass(fmt)+'"'+href+' data-ad-slot="'+esc(a.slot)+'" data-ad-size="'+esc(fmt)+'">'+creativeInner(a)+'</a>';
+  }
+  function slotUnits(slot,city){ const ads=slotAds(slot,city); if(!ads.length)return ""; return '<div class="ad-slot"><div class="ad-tag">Reklam</div>'+ads.map(unitHtml).join("")+'</div>'; }
+  // ---- native sponsored (mekan/karar) ----
   function label(){ return '<span class="ad-label">Sponsorlu</span>'; }
   function link(a){ return a.cta_url?('href="'+esc(a.cta_url)+'" target="_blank" rel="noopener nofollow"'):'href="#" onclick="return false"'; }
-  function bannerHtml(a){
-    return '<a class="ad-banner" '+link(a)+'><div class="ad-top">'+label()+'<span class="ad-sponsor">'+esc(a.sponsor||"")+'</span></div><div class="ad-title">'+esc(a.title||"")+'</div>'+(a.body?'<div class="ad-body">'+esc(a.body)+'</div>':'')+'<span class="ad-cta">Göz at →</span></a>';
-  }
   function venueCardHtml(a){
     return '<div class="card ad-venue"><div class="ad-top">'+label()+'<span class="ad-sponsor">'+esc(a.sponsor||"")+'</span></div><h3>'+esc(a.title||"")+'</h3><div class="tagline">'+esc(a.body||"")+'</div><div class="actions"><a class="btn primary" '+link(a)+'>🔗 Sponsorlu bağlantı</a>'+((a.lat&&a.lng)?'<button class="btn" onclick="ADS.showPin('+a.lat+','+a.lng+',\''+esc(a.title||"")+'\')">🗺️ Haritada</button>':'')+'</div></div>';
   }
-  function fill(id,html){ const el=document.getElementById(id); if(el) el.innerHTML=html||""; }
+  function decisionHtml(a){
+    return '<div class="ad-decision"><div class="ad-top">'+label()+'<span class="ad-sponsor">'+esc(a.sponsor||"")+'</span></div><h4>'+esc(a.title||"")+'</h4>'+(a.body?'<div class="ad-body">'+esc(a.body)+'</div>':'')+'<a class="btn primary" '+link(a)+'>Sponsorlu öneri →</a></div>';
+  }
   function renderAll(city){
-    const cb=forSlot("city_banner",city)[0]; fill("adCityBanner", cb?bannerHtml(cb):"");
-    const vc=forSlot("venue_card",city)[0]; const vi=forSlot("venues_inline",city)[0];
-    fill("adMekanlar",(vc?venueCardHtml(vc):"")+(vi?bannerHtml(vi):""));
-    const dc=forSlot("decision",city)[0];
-    fill("adKarar", dc?('<div class="ad-decision"><div class="ad-top">'+label()+'<span class="ad-sponsor">'+esc(dc.sponsor||"")+'</span></div><h4>'+esc(dc.title||"")+'</h4>'+(dc.body?'<div class="ad-body">'+esc(dc.body)+'</div>':'')+'<a class="btn primary" '+link(dc)+'>Sponsorlu öneri →</a></div>'):"");
-    const pb=forSlot("plan_banner",city)[0]; fill("adPlan", pb?bannerHtml(pb):"");
+    fill("adMasthead", slotUnits("masthead",city));
+    fill("adCityBanner", slotUnits("leaderboard",city));
+    const vc=slotAds("venue_card",city)[0];
+    fill("adMekanlar", slotUnits("sidebar",city)+slotUnits("inline",city)+(vc?venueCardHtml(vc):""));
+    const dc=slotAds("decision",city)[0];
+    fill("adKarar",(dc?decisionHtml(dc):"")+slotUnits("inline",city));
+    fill("adPlan", slotUnits("leaderboard",city));
   }
   async function load(city){
     if(!db){ return; }
@@ -1681,7 +1710,7 @@ const ADS=(function(){
   }
   function drawMapPins(MAP){
     if(!MAP||!MAP.map||!MAP.layer||typeof L==="undefined")return;
-    forSlot("map_pin",MAP.city).forEach(a=>{ if(a.lat&&a.lng){ try{
+    slotAds("map_pin",MAP.city).forEach(a=>{ if(a.lat&&a.lng){ try{
       const m=L.circleMarker([a.lat,a.lng],{radius:9,color:"#b8944f",fillColor:"#e3c98f",fillOpacity:1,weight:3});
       m.bindPopup('<div style="min-width:170px"><span class="ad-label">Sponsorlu</span><br><b style="font-size:14px">'+esc(a.title||"")+'</b><br><span style="font-size:11.5px;color:#666">'+esc(a.body||"")+'</span><div style="margin-top:7px"><a class="btn primary" '+link(a)+'>Göz at →</a></div></div>');
       m.addTo(MAP.layer);
@@ -1693,6 +1722,7 @@ const ADS=(function(){
 try{ window.ADS=ADS; }catch(e){}
 document.addEventListener("DOMContentLoaded",()=>{ try{ADS.load("Amsterdam");}catch(e){} });
 if(document.readyState!=="loading"){ try{ADS.load("Amsterdam");}catch(e){} }
+
 
 </script>
 </body>
