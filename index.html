@@ -71,6 +71,17 @@ footer{color:var(--ink2);font-size:12px;text-align:center;padding:30px 0 40px}
 .pname{font-weight:700}
 .pmail{font-size:12px;color:var(--ink2)}
 .ptier{display:inline-block;font-size:11px;background:#fbf3e6;border:1px solid #ecdcc0;color:#7a5a2a;border-radius:99px;padding:3px 10px;margin-top:4px}
+
+.ad-label{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#8a6d2f;background:#f3e6c9;border:1px solid #e6d3a3;border-radius:5px;padding:2px 7px}
+.ad-banner{display:block;text-decoration:none;color:var(--ink);background:linear-gradient(180deg,#fdf9f0,#f8f1e2);border:1px solid #ecdcb8;border-radius:16px;padding:20px;margin:22px 0;box-shadow:var(--shadow)}
+.ad-banner:hover{border-color:var(--gold)}
+.ad-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ad-sponsor{font-size:12px;color:var(--ink2);font-weight:600}
+.ad-title{font-family:Georgia,serif;font-size:18px;font-weight:600}
+.ad-body{font-size:13px;color:var(--ink2);margin-top:4px}
+.ad-cta{display:inline-block;margin-top:10px;font-size:13px;font-weight:700;color:var(--accent)}
+#adHome:empty{display:none}
+
 </style>
 </head>
 <body>
@@ -112,6 +123,8 @@ footer{color:var(--ink2);font-size:12px;text-align:center;padding:30px 0 40px}
     <button class="gobtn" id="goBtn" disabled>Keşfet</button>
     <div class="gonote" id="goNote"></div>
   </div>
+
+  <div id="adHome"></div>
 
   <div class="panel">
     <h2>Şu an bu şehirler var</h2>
@@ -292,6 +305,15 @@ $("authX").onclick=closeAuth;
 $("authModal").onclick=e=>{ if(e.target===$("authModal")) closeAuth(); };
 
 renderCountries(); renderDur(); renderTypes(); renderDests(); renderAcct(); updateGo();
+(async function loadHomeAd(){
+  if(!db) return;
+  try{
+    const {data}=await db.from("ads").select("*").eq("slot","home_billboard").eq("active",true);
+    const now=Date.now();
+    const a=(data||[]).find(x=>(!x.starts_at||new Date(x.starts_at).getTime()<=now)&&(!x.ends_at||new Date(x.ends_at).getTime()>=now));
+    if(a){ const box=$("adHome"); if(box){ const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); box.innerHTML='<a class="ad-banner" href="'+esc(a.cta_url||"#")+'" target="_blank" rel="noopener nofollow"><div class="ad-top"><span class="ad-label">Sponsorlu</span><span class="ad-sponsor">'+esc(a.sponsor||"")+'</span></div><div class="ad-title">'+esc(a.title||"")+'</div>'+(a.body?'<div class="ad-body">'+esc(a.body)+'</div>':'')+'<span class="ad-cta">Göz at →</span></a>'; } }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
