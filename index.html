@@ -159,6 +159,16 @@ table.cmp td:first-child,table.cmp th:first-child{text-align:left;font-weight:70
 .audio-warn{background:#fbf1e2;border:1px solid #ecd9b8}
 footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .hide{display:none!important}
+.tip{font-size:11.5px;background:#f1f4ea;color:#5a6b3f;border-radius:8px;padding:6px 9px;margin-bottom:9px;line-height:1.35}
+.day .pl-lbl{font-size:10px;color:var(--ink2);text-transform:uppercase;letter-spacing:.4px;margin:8px 0 3px;font-weight:700}
+.day.weekend .pl-lbl{color:#d8d0c2}
+.day textarea.plan-edit{min-height:64px;font-weight:500}
+.day .photos{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.day .ph{position:relative}
+.day .ph img{width:52px;height:52px;object-fit:cover;border-radius:8px;display:block}
+.day .ph button{position:absolute;top:-6px;right:-6px;background:var(--fav);color:#fff;border:0;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;line-height:1;padding:0}
+.addphoto{display:inline-block;margin-top:7px;font-size:11px;font-weight:700;color:var(--accent);border:1px dashed var(--accent);border-radius:8px;padding:5px 9px;cursor:pointer}
+.day.weekend .addphoto{color:#f1ece2;border-color:#c9c1b0}
 </style>
 </head>
 <body>
@@ -256,7 +266,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
   <!-- PLAN -->
   <section class="view" id="v-cal">
     <h2 class="section-title">20 günlük akış · 11–31 Temmuz</h2>
-    <p class="section-sub">Esnek bir öneri. Her güne kendi notunu yazabilirsin (tarayıcında saklanır). Koyu günler hafta sonu kaçamağı için ayrıldı.</p>
+    <p class="section-sub">Her günün planını düzenle, notunu yaz, fotoğraf ekle — hepsi tarayıcında saklanır. Koyu günler hafta sonu kaçamağı için ayrıldı. (Üyelik gelince veriler hesabına taşınacak.)</p>
     <div class="cal" id="cal"></div>
   </section>
 
@@ -362,156 +372,156 @@ function areaKey(area){
 
 /* ===== VENUE DATA (src: user|deck|extra|audio) ===== */
 const V=[
-{id:"binnenvisser",name:"Café Binnenvisser",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe","wine bar","restoran"],best:["kahve","öğlen","akşam","şarap"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36680,lng:4.87170,conf:"high",
+{id:"binnenvisser",type:"Kafe & şarap barı",tags:["öğlen","akşam","şarap"],tip:"Küçük, popüler brown cafe; akşam natürel şarap + sebze tabakları. Laptopla çalışmaya uygun değil.",name:"Café Binnenvisser",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe","wine bar","restoran"],best:["kahve","öğlen","akşam","şarap"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36680,lng:4.87170,conf:"high",
  web:"https://binnenvisser.nl/",ig:"https://www.instagram.com/cafebinnenvisser/",
  desc:"Natürel şarap odaklı, sebze ağırlıklı mevsimsel mutfağı olan modern bir 'brown cafe'.",note:"<b>Senin notun:</b> Walk-in. Rezervasyon almıyor."},
-{id:"barpif",name:"Bar Pif",city:"Amsterdam",area:"Jordaan",cats:["wine bar","restoran"],best:["öğlen","şarap","akşam"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.37790,lng:4.88330,conf:"high",
+{id:"barpif",type:"Natürel şarap barı",tags:["öğlen","şarap","akşam"],tip:"Rezervasyon şart; natürel şarap + küçük tabaklar. Akşamları dolu olur.",name:"Bar Pif",city:"Amsterdam",area:"Jordaan",cats:["wine bar","restoran"],best:["öğlen","şarap","akşam"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.37790,lng:4.88330,conf:"high",
  web:"https://barpif.nl/en/",ig:"https://www.instagram.com/barpifamsterdam/",
  desc:"Rebel Wines ekibinden natürel şarap barı + küçük tabaklar.",note:"<b>Senin notun:</b> Rezervasyonla. Öğlen de olabilir. ❤️ Öncelikli favori."},
-{id:"oficina",name:"Oficina",city:"Amsterdam",area:"De Baarsjes",cats:["kafe","wine bar","restoran"],best:["öğlen","kahve","şarap","tatlı"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.37190,lng:4.85620,conf:"medium",
+{id:"oficina",type:"Gündüz kafesi",tags:["kahve","öğlen","şarap","tatlı"],tip:"Rembrandtpark'a yakın; gündüz kahve/öğle, akşam şarap. Ortak masalar, kısa oturmalık.",name:"Oficina",city:"Amsterdam",area:"De Baarsjes",cats:["kafe","wine bar","restoran"],best:["öğlen","kahve","şarap","tatlı"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.37190,lng:4.85620,conf:"medium",
  web:"https://oficinaoficina.com/",ig:"https://www.instagram.com/oficina.amsterdam/",
  desc:"Gündüz kantini & yemek-tasarım stüdyosu: kahvaltı, öğle, çay, pasta, şarap. Rembrandtpark’a çok yakın.",note:"<b>Senin notun:</b> Rezervasyon almıyor. Şarap, tatlı, öğlen için uygun."},
-{id:"shiraz",name:"Shiraz (Jardin des Vins)",city:"Amsterdam",area:"Centrum",cats:["wine bar"],best:["şarap","akşam"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36280,lng:4.88290,conf:"medium",
+{id:"shiraz",type:"Şarap barı",tags:["akşam","şarap"],tip:"Kanal kenarı; şarap + peynir/kanepe. Rezervasyon durumunu kontrol et.",name:"Shiraz (Jardin des Vins)",city:"Amsterdam",area:"Centrum",cats:["wine bar"],best:["şarap","akşam"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36280,lng:4.88290,conf:"medium",
  web:"https://shirazamsterdam.nl/en/",ig:"",
  desc:"Kanal kenarı samimi şarap barı, geniş kadeh listesi.",note:"<b>Senin notun:</b> Wine bar. Şarapla gelen peynir/kanepe çok iyiymiş. Rezervasyon almıyor. ❤️ Favori. <i>(Araştırmada bazı kaynaklar rezervasyonu öneriyor — kontrol et.)</i>"},
-{id:"4850",name:"4850",city:"Amsterdam",area:"Oost (Oud-Oost)",cats:["kafe","wine bar"],best:["kahve","şarap","akşam","çalışma"],src:"user",fav:false,resv:"rec",walkIn:true,work:true,lat:52.35740,lng:4.91560,conf:"high",
+{id:"4850",type:"Kahve & şarap",tags:["kahve","çalışma","akşam","şarap"],tip:"Gündüz specialty kahve (laptop uygun), akşam şarap barına döner.",name:"4850",city:"Amsterdam",area:"Oost (Oud-Oost)",cats:["kafe","wine bar"],best:["kahve","şarap","akşam","çalışma"],src:"user",fav:false,resv:"rec",walkIn:true,work:true,lat:52.35740,lng:4.91560,conf:"high",
  web:"https://www.4850.nl/",ig:"https://www.instagram.com/4850nl/",
  desc:"Gündüz specialty kahve barı, akşam şarap + yemek.",note:"<b>Senin notun:</b> Kahve, drink."},
-{id:"csnoord",name:"CS Noord (Cornerstore)",city:"Amsterdam",area:"Noord",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"req",walkIn:false,work:false,lat:52.40150,lng:4.90130,conf:"medium",
+{id:"csnoord",type:"Restoran",tags:["akşam"],tip:"Noord'da yaratıcı akşam yemeği; rezervasyonla. (Cornerstore)",name:"CS Noord (Cornerstore)",city:"Amsterdam",area:"Noord",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"req",walkIn:false,work:false,lat:52.40150,lng:4.90130,conf:"medium",
  web:"https://csnoord.com/",ig:"https://www.instagram.com/cornerstore.ams/",
  desc:"Amsterdam-Noord’da yaratıcı akşam yemeği restoranı & bar.",note:"<b>Senin notun:</b> Akşam yemeği. Rezervasyonla."},
-{id:"carmen",name:"Carmen Amsterdam",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["mağaza","kafe"],best:["mağaza","kahve"],src:"user",fav:false,resv:"unknown",walkIn:true,work:false,lat:52.36560,lng:4.89180,conf:"high",
+{id:"carmen",type:"Concept store + kafe",tags:["kahve","mağaza"],tip:"Kanal evinde mağaza + kafe; alışveriş arası kahve molası.",name:"Carmen Amsterdam",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["mağaza","kafe"],best:["mağaza","kahve"],src:"user",fav:false,resv:"unknown",walkIn:true,work:false,lat:52.36560,lng:4.89180,conf:"high",
  web:"https://www.carmenamsterdam.com/",ig:"https://www.instagram.com/carmen.amsterdam/",
  desc:"Kanal evinde concept store + kafe + misafirhane.",note:"<b>Senin notun:</b> Mağaza + cafe."},
-{id:"chun",name:"Chun",city:"Amsterdam",area:"Centrum (9 Straatjes)",cats:["take-away","kafe"],best:["öğlen","take-away","kahve"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36900,lng:4.88440,conf:"high",
+{id:"chun",type:"Sandviç / al-götür",tags:["öğlen","take-away"],tip:"Küçük al-götür; Kore usulü tost + matcha. Oturma çok sınırlı.",name:"Chun",city:"Amsterdam",area:"Centrum (9 Straatjes)",cats:["take-away","kafe"],best:["öğlen","take-away","kahve"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36900,lng:4.88440,conf:"high",
  web:"https://www.chun-amsterdam.com/",ig:"https://www.instagram.com/chun_ams/",
  desc:"Kore usulü tost/sandviç + matcha, al-götür.",note:"<b>Senin notun:</b> Sandviç, al-götür, öğlen. ❤️ Favori."},
-{id:"pllek",name:"Pllek",city:"Amsterdam",area:"Noord (NDSM)",cats:["restoran","bar","gece","park"],best:["akşam","gece","öğlen","park"],src:"user",fav:true,resv:"rec",walkIn:true,work:false,lat:52.40130,lng:4.89360,conf:"high",
+{id:"pllek",type:"Restoran & bar",tags:["öğlen","akşam","gece","park"],tip:"NDSM'de su kıyısı; gün batımı + geç saat DJ. Feribotla git.",name:"Pllek",city:"Amsterdam",area:"Noord (NDSM)",cats:["restoran","bar","gece","park"],best:["akşam","gece","öğlen","park"],src:"user",fav:true,resv:"rec",walkIn:true,work:false,lat:52.40130,lng:4.89360,conf:"high",
  web:"https://www.pllek.nl/",ig:"https://www.instagram.com/pllek_amsterdam/",
  desc:"IJ kıyısında konteyner restoran + plaj + gün batımı + gece.",note:"<b>Senin notun:</b> Yemek + gece. ❤️ Favori."},
-{id:"cheznina",name:"Chez Nina",city:"Amsterdam",area:"Westerpark (Staatsliedenbuurt)",cats:["restoran","italyan"],best:["akşam","öğlen"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.38400,lng:4.87280,conf:"medium",
+{id:"cheznina",type:"İtalyan restoran",tags:["öğlen","akşam","italyan"],tip:"Rezervasyonla. 'Noof' olarak yenilenmiş olabilir — kontrol et.",name:"Chez Nina",city:"Amsterdam",area:"Westerpark (Staatsliedenbuurt)",cats:["restoran","italyan"],best:["akşam","öğlen"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.38400,lng:4.87280,conf:"medium",
  web:"https://www.noof-amsterdam.nl/",ig:"https://www.instagram.com/noof.amsterdam/",
  desc:"İtalyan/Akdeniz brasserie.",note:"<b>Senin notun:</b> İtalyan. Rezervasyonla. <i>(Araştırma: Kasım 2025’te ‘Noof’ adıyla yenilenmiş, vejetaryen Akdeniz konseptine geçmiş olabilir — kontrol et.)</i>"},
-{id:"oeuf",name:"Oeuf Amsterdam",city:"Amsterdam",area:"De Pijp",cats:["kahvaltı","brunch","kafe"],best:["kahvaltı","brunch","kahve"],src:"user",fav:true,resv:"unknown",walkIn:true,work:false,lat:52.35540,lng:4.89010,conf:"high",
+{id:"oeuf",type:"Kahvaltı & brunch",tags:["kahvaltı","brunch"],tip:"Yumurta ağırlıklı; sabah git, hafta sonu sıra olur.",name:"Oeuf Amsterdam",city:"Amsterdam",area:"De Pijp",cats:["kahvaltı","brunch","kafe"],best:["kahvaltı","brunch","kahve"],src:"user",fav:true,resv:"unknown",walkIn:true,work:false,lat:52.35540,lng:4.89010,conf:"high",
  web:"https://www.oeufamsterdam.nl/",ig:"https://www.instagram.com/oeufamsterdam/",
  desc:"Yumurta ağırlıklı kahvaltı & brunch.",note:"<b>Senin notun:</b> Kahvaltıcı. ❤️ Favori."},
-{id:"plantage",name:"Café-Restaurant De Plantage",city:"Amsterdam",area:"Plantage",cats:["restoran","brunch","kafe"],best:["kahvaltı","öğlen","akşam","brunch"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.36670,lng:4.91460,conf:"medium",
+{id:"plantage",type:"Brasserie",tags:["kahvaltı","öğlen","akşam","brunch"],tip:"Cam serada tüm-gün; rezervasyon iyi olur.",name:"Café-Restaurant De Plantage",city:"Amsterdam",area:"Plantage",cats:["restoran","brunch","kafe"],best:["kahvaltı","öğlen","akşam","brunch"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.36670,lng:4.91460,conf:"medium",
  web:"https://www.caferestaurantdeplantage.nl/",ig:"https://www.instagram.com/caferestaurantdeplantage/",
  desc:"Artisplein’da cam serada Akdeniz esintili brasserie.",note:"<b>Senin notun:</b> Sabah, öğle, akşam uygun. Rezervasyon lazım."},
-{id:"escobar",name:"Escobar",city:"Amsterdam",area:"De Pijp",cats:["restoran","taco","bar","gece"],best:["akşam","gece","taco"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.35550,lng:4.89760,conf:"low",
+{id:"escobar",type:"Taco & gece",tags:["akşam","gece","taco"],tip:"22:00 sonrası eğlence modu. ⚠️ Hâlâ açık mı mutlaka kontrol et.",name:"Escobar",city:"Amsterdam",area:"De Pijp",cats:["restoran","taco","bar","gece"],best:["akşam","gece","taco"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.35550,lng:4.89760,conf:"low",
  web:"https://escobar.nu/",ig:"https://www.instagram.com/escobar.nu/",
  desc:"Taco & farklı mutfaklar; geç saatte eğlence moduna geçer.",note:"<b>Senin notun:</b> Taco + farklı mutfaklar. 22:00 sonrası masalar kalkıp eğlence modu. Rezervasyon lazım. ❤️ Favori. <i>(⚠️ Bazı kaynaklar kapandığını yazıyor — gitmeden mutlaka kontrol et.)</i>"},
-{id:"coba",name:"Coba Taqueria",city:"Amsterdam",area:"Noord (Oud-Noord)",cats:["restoran","taco"],best:["öğlen","akşam","taco"],src:"user",fav:true,resv:"rec",walkIn:true,work:false,lat:52.39600,lng:4.92330,conf:"high",
+{id:"coba",type:"Taqueria",tags:["öğlen","akşam","taco"],tip:"Otantik Meksika; taco + margarita.",name:"Coba Taqueria",city:"Amsterdam",area:"Noord (Oud-Noord)",cats:["restoran","taco"],best:["öğlen","akşam","taco"],src:"user",fav:true,resv:"rec",walkIn:true,work:false,lat:52.39600,lng:4.92330,conf:"high",
  web:"https://www.coba-taqueria.com/",ig:"https://www.instagram.com/coba.amsterdam/",
  desc:"Otantik Meksika taqueria.",note:"<b>Senin notun:</b> Tacocu. ❤️ Favori."},
-{id:"annanina",name:"Anna + Nina",city:"Amsterdam",area:"De Pijp",cats:["mağaza"],best:["mağaza"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.35530,lng:4.89160,conf:"high",
+{id:"annanina",type:"Mağaza",tags:["mağaza"],tip:"Tasarım/takı/vintage concept store; hızlı vitrin turu.",name:"Anna + Nina",city:"Amsterdam",area:"De Pijp",cats:["mağaza"],best:["mağaza"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.35530,lng:4.89160,conf:"high",
  web:"https://www.anna-nina.nl/",ig:"https://www.instagram.com/annaninanl/",
  desc:"Concept/tasarım mağazası: takı, ev eşyası, vintage.",note:"<b>Senin notun:</b> Mağaza."},
-{id:"brutdemer",name:"Brut de Mer",city:"Amsterdam",area:"De Pijp",cats:["restoran","deniz mahsulleri","wine bar"],best:["akşam","şarap","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.35470,lng:4.89200,conf:"high",
+{id:"brutdemer",type:"Deniz mahsulleri barı",tags:["akşam","şarap","deniz mahsulleri"],tip:"İstiridye + şampanya; küçük mekan.",name:"Brut de Mer",city:"Amsterdam",area:"De Pijp",cats:["restoran","deniz mahsulleri","wine bar"],best:["akşam","şarap","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.35470,lng:4.89200,conf:"high",
  web:"",ig:"https://www.instagram.com/brut_de_mer/",
  desc:"İstiridye & deniz mahsulleri barı, şampanya/şarap.",note:"<b>Senin notun:</b> Deniz mahsulleri."},
-{id:"flos",name:"Flo's Appetizing",city:"Amsterdam",area:"Oud-West",cats:["take-away","bagel","brunch"],best:["öğlen","take-away","parkta yemek","brunch"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36430,lng:4.86680,conf:"high",
+{id:"flos",type:"Bagel / deli",tags:["öğlen","take-away","parkta yemek","bagel"],tip:"Parkta yemek için buradan sandviç al; Rembrandtpark'a yakın.",name:"Flo's Appetizing",city:"Amsterdam",area:"Oud-West",cats:["take-away","bagel","brunch"],best:["öğlen","take-away","parkta yemek","brunch"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36430,lng:4.86680,conf:"high",
  web:"https://www.flosdeli.nl/",ig:"https://www.instagram.com/flos_appetizing_ams/",
  desc:"Elde sarılan bagel & NYC tarzı deli.",note:"<b>Senin notun:</b> Bagelci. Parkta yemek için sandviç alınabilir."},
-{id:"deklos",name:"Café de Klos",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36320,lng:4.88660,conf:"high",
+{id:"deklos",type:"Izgara / kaburga",tags:["akşam"],tip:"Sadece walk-in, sıra olur; 1971'den klasik spare-ribs.",name:"Café de Klos",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36320,lng:4.88660,conf:"high",
  web:"https://cafedeklos.nl/",ig:"https://www.instagram.com/cafedeklos/",
  desc:"1971’den beri klasik spare-ribs & ızgara; sadece walk-in.",note:"<b>Senin notun:</b> Kaburgacı. Rezervasyon almıyor."},
-{id:"barracuda",name:"Restaurant Barracuda",city:"Amsterdam",area:"Noord (Oud-Noord)",cats:["restoran","deniz mahsulleri"],best:["akşam","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.38900,lng:4.92160,conf:"medium",
+{id:"barracuda",type:"Deniz mahsulleri restoranı",tags:["akşam","deniz mahsulleri"],tip:"Rezervasyonla; adres/IG'yi kontrol et.",name:"Restaurant Barracuda",city:"Amsterdam",area:"Noord (Oud-Noord)",cats:["restoran","deniz mahsulleri"],best:["akşam","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.38900,lng:4.92160,conf:"medium",
  web:"https://www.barracuda.amsterdam/",ig:"https://www.instagram.com/restaurantbarracuda/",
  desc:"Açık mutfaklı, depo atmosferli rahat balık/deniz mahsulleri restoranı.",note:"<b>Araştırma ile eklendi</b> (senin verdiğin isimden). Adres/IG kontrol edilmeli."},
-{id:"bouillon",name:"Bouillon d'Amsterdam",city:"Amsterdam",area:"Centrum",cats:["restoran"],best:["akşam","öğlen"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.37340,lng:4.89150,conf:"high",
+{id:"bouillon",type:"Fransız bistro",tags:["öğlen","akşam"],tip:"Uygun fiyatlı klasik Fransız 'bouillon'; rezervasyon iyi olur.",name:"Bouillon d'Amsterdam",city:"Amsterdam",area:"Centrum",cats:["restoran"],best:["akşam","öğlen"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.37340,lng:4.89150,conf:"high",
  web:"https://www.bouillondamsterdam.nl/",ig:"https://www.instagram.com/bouillondamsterdam/",
  desc:"Paris usulü ‘bouillon’ — uygun fiyatlı klasik Fransız konfor mutfağı.",note:"<b>Araştırma ile eklendi</b> (senin verdiğin isimden)."},
 
-{id:"saintjean",name:"Saint-Jean",city:"Amsterdam",area:"Jordaan",cats:["kafe","kahvaltı","take-away"],best:["kahve","kahvaltı","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"saintjean",type:"Fırın & kafe",tags:["kahve","kahvaltı","öğlen"],tip:"Bitki bazlı fırın + specialty kahve. Oturma az.",name:"Saint-Jean",city:"Amsterdam",area:"Jordaan",cats:["kafe","kahvaltı","take-away"],best:["kahve","kahvaltı","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.saintjean.nl/",ig:"https://www.instagram.com/saintjean.nl/",
  desc:"Bitki bazlı fırın & deli, specialty kahve, hamur işleri.",note:"Önceki araştırmandan (Amsterdam.pptx)."},
-{id:"bocca",name:"Bocca Coffee",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+{id:"bocca",type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"Hollanda specialty kahvenin öncüsü; laptop uygun, küçük olabilir.",name:"Bocca Coffee",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://bocca.nl/en",ig:"https://www.instagram.com/boccacoffee/",
  desc:"Hollanda specialty kahvenin öncüsü; amiral kafe.",note:"Önceki araştırmandan."},
-{id:"cafecito",name:"Cafecito",city:"Amsterdam",area:"Oud-Zuid",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
+{id:"cafecito",type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"Zuid'de sakin specialty kahve; kısa-orta süre laptop için uygun.",name:"Cafecito",city:"Amsterdam",area:"Oud-Zuid",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
  web:"https://cafecito.nl/",ig:"https://www.instagram.com/cafecito_nl/",
  desc:"Specialty kahve & matcha kavurucusu/espresso barı.",note:"Önceki araştırmandan."},
-{id:"scandi",name:"Scandinavian Embassy",city:"Amsterdam",area:"De Pijp",cats:["kafe","kahvaltı"],best:["kahve","öğlen","kahvaltı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"scandi",type:"Kafe (İskandinav)",tags:["kahve","kahvaltı","öğlen"],tip:"Çok küçük ama harika Nordic kahve; laptop için uygun değil.",name:"Scandinavian Embassy",city:"Amsterdam",area:"De Pijp",cats:["kafe","kahvaltı"],best:["kahve","öğlen","kahvaltı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"http://scandinavianembassy.nl/",ig:"https://www.instagram.com/scandinavianembassy/",
  desc:"İskandinav tarzı samimi kafe, Nordic kavurucu kahveleri.",note:"Önceki araştırmandan. Küçük mekan, çalışma için ideal değil."},
-{id:"winkel43",name:"Winkel 43",city:"Amsterdam",area:"Jordaan",cats:["kafe"],best:["kahve","öğlen","tatlı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"winkel43",type:"Pastane (elmalı turta)",tags:["kahve","tatlı","öğlen"],tip:"Meşhur Hollanda elmalı turtası; sadece bunun için bile değer. Sıra olabilir.",name:"Winkel 43",city:"Amsterdam",area:"Jordaan",cats:["kafe"],best:["kahve","öğlen","tatlı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.winkel43.nl/en/",ig:"https://www.instagram.com/winkel43_applepie/",
  desc:"Noordermarkt’ta meşhur Hollanda elmalı turtası.",note:"Önceki araştırmandan: ‘sadece apple pie için’."},
-{id:"ceppis",name:"Ceppi's Trattoria",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran","italyan"],best:["akşam"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
+{id:"ceppis",type:"İtalyan trattoria",tags:["akşam","italyan"],tip:"Kanal kenarı sıcak İtalyan; rezervasyon iyi olur.",name:"Ceppi's Trattoria",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran","italyan"],best:["akşam"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.ceppis.com/",ig:"https://www.instagram.com/trattoriaceppis/",
  desc:"Kanal kenarı sıcak İtalyan trattoria/pizzeria.",note:"Önceki araştırmandan: ‘italyan & şarküteri’."},
-{id:"fiko",name:"Fiko",city:"Amsterdam",area:"Oud-West (Vondelpark)",cats:["restoran","italyan"],best:["akşam","öğlen"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
+{id:"fiko",type:"İtalyan restoran",tags:["öğlen","akşam","italyan"],tip:"Vondelpark yakını İtalyan; glutensiz seçenek var.",name:"Fiko",city:"Amsterdam",area:"Oud-West (Vondelpark)",cats:["restoran","italyan"],best:["akşam","öğlen"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.fikoamsterdam.com/",ig:"https://www.instagram.com/fikoamsterdam/",
  desc:"Vondelpark yakını İtalyan; glutensiz seçenekler.",note:"Önceki araştırmandan."},
-{id:"alba",name:"Alba Restaurant & Wijnbar",city:"Amsterdam",area:"Oost",cats:["restoran","wine bar"],best:["akşam","şarap"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
+{id:"alba",type:"Restoran & şarap barı",tags:["akşam","şarap"],tip:"Modern Avrupa + natürel şarap; rezervasyonla.",name:"Alba Restaurant & Wijnbar",city:"Amsterdam",area:"Oost",cats:["restoran","wine bar"],best:["akşam","şarap"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.alba-amsterdam.nl/",ig:"https://www.instagram.com/alba.amsterdam/",
  desc:"Wibautstraat’ta modern Avrupa mutfağı + natürel şarap barı.",note:"Önceki araştırmandan."},
-{id:"lottis",name:"Lotti's (The Hoxton)",city:"Amsterdam",area:"Centrum (9 Straatjes)",cats:["kafe","restoran","brunch"],best:["kahve","öğlen","akşam","brunch","çalışma"],src:"deck",fav:false,resv:"rec",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+{id:"lottis",type:"Tüm-gün kafe & grill",tags:["kahve","öğlen","akşam","brunch","çalışma"],tip:"Hoxton otelinde şık tüm-gün mekan; sabah laptopla çalışmaya uygun.",name:"Lotti's (The Hoxton)",city:"Amsterdam",area:"Centrum (9 Straatjes)",cats:["kafe","restoran","brunch"],best:["kahve","öğlen","akşam","brunch","çalışma"],src:"deck",fav:false,resv:"rec",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://thehoxton.com/amsterdam/herengracht/lottis-restaurant/",ig:"https://www.instagram.com/lottisamsterdam/",
  desc:"Hoxton otelinde şık tüm-gün kafe/bar/grill.",note:"Önceki araştırmandan: ‘Hoxton otelinin altında’."},
-{id:"dignita",name:"Dignita Hoftuin",city:"Amsterdam",area:"Plantage",cats:["brunch","kahvaltı","kafe"],best:["brunch","kahvaltı","öğlen"],src:"deck",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"dignita",type:"Brunch restoranı",tags:["kahvaltı","brunch","öğlen"],tip:"Bahçede cam serada brunch; hafta sonu dolar, rezervasyon iyi.",name:"Dignita Hoftuin",city:"Amsterdam",area:"Plantage",cats:["brunch","kahvaltı","kafe"],best:["brunch","kahvaltı","öğlen"],src:"deck",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://eatwelldogood.nl/en/dignita-hoftuin/",ig:"https://www.instagram.com/dignita_restaurants/",
  desc:"Sessiz bahçede cam-sera brunch restoranı; sosyal girişim.",note:"Önceki araştırmandan."},
-{id:"bakers",name:"Bakers & Roasters",city:"Amsterdam",area:"De Pijp",cats:["brunch","kahvaltı"],best:["brunch","kahvaltı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"bakers",type:"Brunch",tags:["kahvaltı","brunch"],tip:"Popüler brunch; hafta sonu uzun sıra, erken git.",name:"Bakers & Roasters",city:"Amsterdam",area:"De Pijp",cats:["brunch","kahvaltı"],best:["brunch","kahvaltı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://bakersandroasters.com/",ig:"https://www.instagram.com/bakersandroasters/",
  desc:"Brezilya/Yeni Zelanda esintili popüler brunch; hafta sonu sıra olur.",note:"Önceki araştırmandan."},
-{id:"coffeedistrict",name:"The Coffee District",city:"Amsterdam",area:"Oud-Zuid (Vondelpark)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
+{id:"coffeedistrict",type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"Zuid'de mahalle kahvecisi; laptop uygun.",name:"The Coffee District",city:"Amsterdam",area:"Oud-Zuid (Vondelpark)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
  web:"https://coffeedistrict.nl/",ig:"https://www.instagram.com/thecoffeedistrict/",
  desc:"Zuid’da mahalle specialty kahve barı.",note:"Önceki araştırmandan: ‘Hendrik Jacobszstraat’."},
-{id:"uncommon",name:"Uncommon",city:"Amsterdam",area:"Oud-West (Vondelpark)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+{id:"uncommon",type:"Kavurucu kafe",tags:["kahve","çalışma","öğlen"],tip:"Vondelpark yakını; yaratıcı içecekler, laptop uygun.",name:"Uncommon",city:"Amsterdam",area:"Oud-West (Vondelpark)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://uncommonams.com/",ig:"https://www.instagram.com/uncommon.ams/",
  desc:"Vondelpark yakını kavurucu-kafe, yaratıcı imza içecekler.",note:"Önceki araştırmandan."},
-{id:"tij",name:"Brouwerij 't IJ",city:"Amsterdam",area:"Oost (De Gooyer)",cats:["bar","market"],best:["akşam","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"tij",type:"Bira evi",tags:["akşam","öğlen"],tip:"Yel değirmeni yanında organik bira; teras. Laptop için değil.",name:"Brouwerij 't IJ",city:"Amsterdam",area:"Oost (De Gooyer)",cats:["bar","market"],best:["akşam","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.brouwerijhetij.nl/",ig:"https://www.instagram.com/brouwerijhetij/",
  desc:"Yel değirmeni yanında ikonik organik bira fabrikası & tadım odası.",note:"Önceki araştırmandan (Bira Evleri)."},
 
-{id:"monks",name:"Monks Coffee Roasters",city:"Amsterdam",area:"Oud-West",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:52.3712151,lng:4.8702463,conf:"high",
+{id:"monks",type:"Kavurucu kafe",tags:["kahve","çalışma","öğlen"],tip:"En güvenli çalışma kafelerinden; priz + wifi, sabah sakin.",name:"Monks Coffee Roasters",city:"Amsterdam",area:"Oud-West",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:52.3712151,lng:4.8702463,conf:"high",
  web:"https://monkscoffee.nl/",ig:"https://www.instagram.com/monkscoffee/",
  desc:"Sevilen kavurucu-kafe; harika kahve, fırın ürünleri, priz & wifi.",note:"Ek araştırma. <b>Çalışma:</b> en güvenli tercihlerden; sabah daha sakin."},
-{id:"whitelabel",name:"White Label Coffee",city:"Amsterdam",area:"De Baarsjes",cats:["kafe"],best:["kahve","çalışma"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+{id:"whitelabel",type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"De Baarsjes'te sakin; birkaç saat laptop için ideal.",name:"White Label Coffee",city:"Amsterdam",area:"De Baarsjes",cats:["kafe"],best:["kahve","çalışma"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://www.whitelabelcoffee.nl/",ig:"https://www.instagram.com/whitelabelcoffee/",
  desc:"De Baarsjes’te sakin specialty kavurucu-kafe.",note:"Ek araştırma. <b>Çalışma:</b> birkaç saatlik laptop için ideal, sakin."},
-{id:"coffeeroom",name:"Coffee Room",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+{id:"coffeeroom",type:"Kahve barı",tags:["kahve","çalışma","öğlen"],tip:"Geniş, öğrenci/uzaktan çalışan dostu; uzun oturmaya uygun.",name:"Coffee Room",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"http://www.coffeeroom.nl/",ig:"https://www.instagram.com/coffeeroomamsterdam/",
  desc:"Geniş mahalle kahve barı; öğrenci & uzaktan çalışan dostu.",note:"Ek araştırma. <b>Çalışma:</b> laptopla uzun oturmaya uygun."},
-{id:"kanarie",name:"De Kanarie Club",city:"Amsterdam",area:"Oud-West (De Hallen)",cats:["kafe","restoran","bar"],best:["çalışma","öğlen","kahve","akşam"],src:"extra",fav:false,resv:"rec",walkIn:true,work:true,lat:null,lng:null,conf:"high",
+{id:"kanarie",type:"Grand cafe",tags:["öğlen","akşam","kahve","çalışma"],tip:"Wifi + priz var ama öğle/akşam kalabalık & gürültülü olabilir — çalışmak için sabahı seç.",name:"De Kanarie Club",city:"Amsterdam",area:"Oud-West (De Hallen)",cats:["kafe","restoran","bar"],best:["çalışma","öğlen","kahve","akşam"],src:"extra",fav:false,resv:"rec",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://kanarieclub.nl/",ig:"https://www.instagram.com/kanarieclub/",
  desc:"Eski tramvay deposunda büyük tüm-gün grand cafe; hızlı wifi, bol priz.",note:"Ek araştırma. <b>Çalışma:</b> en çok önerilen laptop kafelerinden; gündüz sosyal-kalabalık."},
-{id:"espressofabriek",name:"Espressofabriek Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["kafe","park"],best:["kahve","çalışma","park"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
+{id:"espressofabriek",type:"Kavurucu kafe",tags:["kahve","çalışma","park"],tip:"Westergas'ta park kenarı; güneşli teras. Çalış + yürüyüş kombinasyonu.",name:"Espressofabriek Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["kafe","park"],best:["kahve","çalışma","park"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
  web:"https://espressofabriek.nl/",ig:"https://www.instagram.com/espressofabriek/",
  desc:"Westergas’ta kendi kavurucusu; güneşli teras, park kenarı.",note:"Ek araştırma. <b>Çalışma + yürüyüş</b> kombinasyonu için harika."},
-{id:"coffeevirus",name:"The Coffee Virus (A Lab)",city:"Amsterdam",area:"Noord (A Lab)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
+{id:"coffeevirus",type:"Espresso bar",tags:["kahve","çalışma","öğlen"],tip:"Yaratıcı hub binasında; Noord günüyle birleştir.",name:"The Coffee Virus (A Lab)",city:"Amsterdam",area:"Noord (A Lab)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
  web:"https://thecoffeevirus.nl/",ig:"https://www.instagram.com/thecoffeevirus/",
  desc:"Yaratıcı hub binasında lunchroom-espresso barı.",note:"Ek araştırma. <b>Çalışma:</b> Noord günü ile birleştir."},
-{id:"glouglou",name:"GlouGlou",city:"Amsterdam",area:"De Pijp",cats:["wine bar","bar"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"glouglou",type:"Natürel şarap barı",tags:["akşam","şarap"],tip:"Amsterdam'ın ilk natürel şarap barı; küçük atıştırmalık.",name:"GlouGlou",city:"Amsterdam",area:"De Pijp",cats:["wine bar","bar"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://glouglou.nl/",ig:"https://www.instagram.com/glouglou_amsterdam/",
  desc:"Amsterdam’ın ilk natürel şarap barı; katkısız şaraplar, küçük atıştırmalıklar.",note:"Ek araştırma."},
-{id:"barcentraal",name:"Bar Centraal",city:"Amsterdam",area:"Oud-West (Ten Katemarkt)",cats:["wine bar","bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"barcentraal",type:"Natürel şarap barı",tags:["akşam","şarap"],tip:"Mum ışığı + düşük-müdahale şarap; Rembrandtpark'a yakın.",name:"Bar Centraal",city:"Amsterdam",area:"Oud-West (Ten Katemarkt)",cats:["wine bar","bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://barcentraal.nl/",ig:"https://www.instagram.com/barcentraal/",
  desc:"Mum ışığında düşük-müdahale şarap barı, harika küçük tabaklar (GlouGlou’nun kardeşi).",note:"Ek araştırma. Rembrandtpark’a yakın."},
-{id:"fabus",name:"Fabus Wijnbar",city:"Amsterdam",area:"Oud-West",cats:["wine bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"low",
+{id:"fabus",type:"Şarap barı & mutfak",tags:["akşam","şarap"],tip:"Natürel şarap + Levanten tabaklar; adresini kontrol et.",name:"Fabus Wijnbar",city:"Amsterdam",area:"Oud-West",cats:["wine bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"low",
  web:"https://www.fabuswijnbar.nl/",ig:"https://www.instagram.com/fabus.amsterdam/",
  desc:"Kadın liderliğinde, az bilinen bölgelerden natürel şaraplar + Levanten mutfak.",note:"Ek araştırma. Adres kontrol edilmeli."},
-{id:"lusconi",name:"Bar Lusconi",city:"Amsterdam",area:"De Baarsjes (Mercatorplein)",cats:["restoran","italyan","bar"],best:["akşam","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"medium",
+{id:"lusconi",type:"İtalyan bar-restoran",tags:["öğlen","akşam","italyan"],tip:"Meydan terası, odun fırını pizza; Rembrandtpark'a yakın.",name:"Bar Lusconi",city:"Amsterdam",area:"De Baarsjes (Mercatorplein)",cats:["restoran","italyan","bar"],best:["akşam","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"medium",
  web:"https://barlusconi.nl/",ig:"https://www.instagram.com/barlusconi/",
  desc:"Rahat İtalyan bar-restoran; odun fırını pizza, antipasti, kokteyl; meydan terası.",note:"Ek araştırma. Rembrandtpark’a yakın."},
-{id:"september",name:"Restaurant September",city:"Amsterdam",area:"Oud-Zuid",cats:["restoran","brunch","kafe"],best:["akşam","öğlen","brunch"],src:"extra",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"low",
+{id:"september",type:"Tüm-gün restoran",tags:["öğlen","akşam","brunch"],tip:"Mevsimsel, yerel ürün; adresini kontrol et.",name:"Restaurant September",city:"Amsterdam",area:"Oud-Zuid",cats:["restoran","brunch","kafe"],best:["akşam","öğlen","brunch"],src:"extra",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"low",
  web:"https://restaurantseptember.nl/",ig:"https://www.instagram.com/restaurant_september/",
  desc:"Mevsimsel, yerel ürün odaklı çağdaş tüm-gün restoran.",note:"Ek araştırma. Adres kontrol edilmeli."},
-{id:"hartering",name:"Gebr. Hartering",city:"Amsterdam",area:"Centrum/Oost",cats:["restoran","wine bar"],best:["akşam","şarap"],src:"extra",fav:false,resv:"req",walkIn:false,work:false,lat:null,lng:null,conf:"low",
+{id:"hartering",type:"Bistro (tadım menüsü)",tags:["akşam","şarap"],tip:"Kanal kenarı; her gün değişen tadım menüsü. Rezervasyon şart.",name:"Gebr. Hartering",city:"Amsterdam",area:"Centrum/Oost",cats:["restoran","wine bar"],best:["akşam","şarap"],src:"extra",fav:false,resv:"req",walkIn:false,work:false,lat:null,lng:null,conf:"low",
  web:"https://gebroedershartering.nl/",ig:"https://www.instagram.com/gebr.hartering/",
  desc:"Kanal kenarı samimi bistro; her gün değişen tadım menüsü. Gerçek bir yerel favori.",note:"Ek araştırma. Rezervasyon şart; adres kontrol edilmeli."},
-{id:"ceuvel",name:"Café de Ceuvel",city:"Amsterdam",area:"Noord (De Ceuvel)",cats:["kafe","restoran","park"],best:["öğlen","kahve","park","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"low",
+{id:"ceuvel",type:"Kafe (su kenarı)",tags:["öğlen","kahve","park","akşam"],tip:"Eski tersanede su kenarı; rahat, dış mekan. Sakin saatte laptop olabilir.",name:"Café de Ceuvel",city:"Amsterdam",area:"Noord (De Ceuvel)",cats:["kafe","restoran","park"],best:["öğlen","kahve","park","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"low",
  web:"https://deceuvel.nl/en/",ig:"https://www.instagram.com/cafedeceuvel/",
  desc:"Eski tersanede sürdürülebilir kafe, su kenarı terası; rahat yerel kalabalık.",note:"Ek araştırma."},
-{id:"troost",name:"Brouwerij Troost Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["bar","park"],best:["akşam","park","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"low",
+{id:"troost",type:"Bira evi",tags:["akşam","park","öğlen"],tip:"Westergas'ta craft bira; geniş teras. Laptop için değil.",name:"Brouwerij Troost Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["bar","park"],best:["akşam","park","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"low",
  web:"https://brouwerijtroost.nl/",ig:"https://www.instagram.com/brouwerijtroost/",
  desc:"Westergas’ta yerel craft bira fabrikası & taproom; park kenarı geniş teras.",note:"Ek araştırma."},
-{id:"rembrandtpark",name:"Rembrandtpark",city:"Amsterdam",area:"De Baarsjes/West",cats:["park"],best:["park","parkta yemek"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3680,lng:4.8470,conf:"high",
+{id:"rembrandtpark",type:"Park",tags:["park","parkta yemek"],tip:"Dairenin yanı; piknik/koşu. Flo's veya Chun'dan sandviç al gel.",name:"Rembrandtpark",city:"Amsterdam",area:"De Baarsjes/West",cats:["park"],best:["park","parkta yemek"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3680,lng:4.8470,conf:"high",
  web:"https://www.iamsterdam.com/en/see-and-do/things-to-do/parks-and-gardens",ig:"",
  desc:"Dairenin hemen yanındaki büyük yeşil park; piknik, koşu, hızlı kaçış.",note:"Ek araştırma. <b>Parkta yemek:</b> Flo’s veya Chun’dan sandviç al, buraya gel."},
-{id:"westerpark",name:"Westerpark",city:"Amsterdam",area:"Westerpark",cats:["park"],best:["park","parkta yemek","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3865,lng:4.8760,conf:"high",
+{id:"westerpark",type:"Park",tags:["park","parkta yemek","öğlen"],tip:"Westergas'a bitişik; piknik çayırı + kafeler/bira.",name:"Westerpark",city:"Amsterdam",area:"Westerpark",cats:["park"],best:["park","parkta yemek","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3865,lng:4.8760,conf:"high",
  web:"https://westergas.nl/",ig:"",
  desc:"Westergas kültür parkına bitişik canlı park; piknik çayırları + kafeler/bira fabrikaları.",note:"Ek araştırma."}
 ];
@@ -705,23 +715,18 @@ function buildChips(){
    b.onclick=()=>{activeChips.has(cd.k)?activeChips.delete(cd.k):activeChips.add(cd.k);b.classList.toggle("active");applyFilters();};
    wrap.appendChild(b);});
 }
+function hasTag(v,t){return (v.tags||[]).indexOf(t)>-1;}
+function isWork(v){return hasTag(v,"çalışma");}
 function matchChip(v,k){
  switch(k){
    case"fav":return isFav(v.id);
-   case"work":return v.work;
+   case"work":return isWork(v);
    case"walkin":return v.resv==="no"||v.walkIn===true;
    case"resv":return v.resv==="req"||v.resv==="rec";
    case"near":return v.city==="Amsterdam"&&distKmFromHome(v)<=2.6;
-   case"şarap":return v.cats.includes("wine bar");
-   case"gece":return v.cats.includes("gece")||v.best.includes("gece");
-   case"parkta yemek":return v.best.includes("parkta yemek")||v.cats.includes("park");
-   case"mağaza":return v.cats.includes("mağaza");
-   case"deniz mahsulleri":return v.cats.includes("deniz mahsulleri");
-   case"italyan":return v.cats.includes("italyan");
-   case"taco":return v.cats.includes("taco");
-   case"bagel":return v.cats.includes("bagel")||v.cats.includes("take-away");
    case"noord":return(v.area||"").toLowerCase().includes("noord");
-   default:return v.best.includes(k)||v.cats.includes(k);
+   case"bagel":return hasTag(v,"bagel")||hasTag(v,"take-away");
+   default:return hasTag(v,k);
  }
 }
 function populateSelectors(){
@@ -756,20 +761,21 @@ function cardHtml(v){
  const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
  const badges=[];
  badges.push('<span class="badge src-'+v.src+'">'+SRCLBL[v.src]+'</span>');
- if(v.work)badges.push('<span class="badge work">💻 Çalışma</span>');
+ if(isWork(v))badges.push('<span class="badge work">💻 Çalışma</span>');
  if(v.conf==="low")badges.push('<span class="badge warn">kontrol et</span>');
- v.best.slice(0,3).forEach(b=>badges.push('<span class="badge">'+b+'</span>'));
+ (v.tags||v.best||[]).slice(0,3).forEach(b=>badges.push('<span class="badge">'+b+'</span>'));
  return '<div class="card">'+
    '<button class="heart" onclick="toggleFav(\''+v.id+'\')">'+(isFav(v.id)?"❤️":"🤍")+'</button>'+
    '<div class="top"><div><h3>'+v.name+'</h3>'+
-   '<div class="area">📍 '+v.area+(c.approx?' · <span title="Mahalle merkezine yaklaşık">~konum</span>':'')+
+   '<div class="area">🏷️ '+(v.type||'')+' · 📍 '+v.area+(c.approx?' · <span title="Mahalle merkezine yaklaşık">~konum</span>':'')+
    ' · <span class="dist">'+(km<100?("≈"+km.toFixed(1)+" km · 🚲"+bikeMin(km)+" dk"):"")+'</span></div></div></div>'+
    '<div class="tagline">'+v.desc+'</div>'+
+   (v.tip?'<div class="tip">💡 '+v.tip+'</div>':'')+
    '<div class="badges">'+badges.join("")+'</div>'+
    '<div class="resv '+r.c+'">'+r.t+'</div>'+
    '<div class="note" style="margin-top:9px">'+v.note+'</div>'+
    '<div class="actions">'+
-     '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google Maps</button>'+
+     '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button>'+
      (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
      (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 Instagram</button>':"")+
    '</div></div>';
@@ -811,9 +817,10 @@ function initMap(){
 function popupHtml(v){const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
  return '<div style="min-width:190px"><b style="font-size:14px">'+v.name+(isFav(v.id)?" ❤️":"")+'</b><br>'+
   '<span style="color:#666;font-size:11.5px">📍 '+v.area+(c.approx?" · ~konum":"")+' · ≈'+km.toFixed(1)+' km · 🚲 '+bikeMin(km)+' dk</span><br>'+
-  '<span style="font-size:11.5px">'+v.cats.join(", ")+' · '+r.t+'</span>'+
+  '<span style="font-size:11.5px">🏷️ '+(v.type||v.cats.join(", "))+' · '+r.t+'</span>'+
+  (v.tip?'<div style="font-size:11px;color:#5a6b3f;margin-top:3px">💡 '+v.tip+'</div>':'')+
   '<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">'+
-   '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google Maps</button>'+
+   '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button>'+
    (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
    (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 IG</button>':"")+
   '</div></div>';}
@@ -914,6 +921,13 @@ const PLANS={
 const WEEKEND=new Set([18,19,25,26]);
 const DOW=["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
 let calNotes={};try{calNotes=JSON.parse(localStorage.getItem("ams_cal")||"{}");}catch(e){}
+let calPlans={},calPhotos={};
+try{calPlans=JSON.parse(localStorage.getItem("ams_plan")||"{}");}catch(e){}
+try{calPhotos=JSON.parse(localStorage.getItem("ams_calphoto")||"{}");}catch(e){}
+function escT(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function saveLS(k,o){try{localStorage.setItem(k,JSON.stringify(o));}catch(e){alert("Depolama dolu olabilir (özellikle fotoğraflar). Bazı fotoğrafları silip tekrar dene.");}}
+function addPhoto(d,ev){const f=ev.target.files&&ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const mx=800;let w=img.width,h2=img.height;if(w>mx){h2=Math.round(h2*mx/w);w=mx;}const cv=document.createElement("canvas");cv.width=w;cv.height=h2;cv.getContext("2d").drawImage(img,0,0,w,h2);const data=cv.toDataURL("image/jpeg",0.7);(calPhotos[d]=calPhotos[d]||[]).push(data);saveLS("ams_calphoto",calPhotos);renderCal();};img.src=rd.result;};rd.readAsDataURL(f);}
+function delPhoto(d,i){if(calPhotos[d]){calPhotos[d].splice(i,1);if(!calPhotos[d].length)delete calPhotos[d];saveLS("ams_calphoto",calPhotos);renderCal();}}
 function renderCal(){
  const cal=document.getElementById("cal");cal.innerHTML="";
  const today=new Date();
@@ -921,16 +935,22 @@ function renderCal(){
    const date=new Date(2026,6,d);const dn=DOW[date.getDay()];
    const wk=WEEKEND.has(d);const p=PLANS[d]||{tag:"",txt:""};
    const isToday=today.getFullYear()===2026&&today.getMonth()===6&&today.getDate()===d;
+   const planVal=(calPlans[d]!=null?calPlans[d]:p.txt);
+   const phs=(calPhotos[d]||[]);
    const el=document.createElement("div");el.className="day"+(wk?" weekend":"")+(isToday?" today":"");
    el.innerHTML='<div class="dn">'+dn+'</div><div class="dd">'+d+' Tem</div>'+
-     '<span class="tag">'+p.tag+'</span><div class="plan">'+p.txt+'</div>'+
-     '<textarea placeholder="Kendi notun…" data-d="'+d+'">'+(calNotes[d]||"")+'</textarea>';
+     '<span class="tag">'+p.tag+'</span>'+
+     '<div class="pl-lbl">Plan (düzenlenebilir)</div>'+
+     '<textarea class="plan-edit" data-d="'+d+'" placeholder="Bugünkü planın…">'+escT(planVal)+'</textarea>'+
+     '<div class="pl-lbl">Notların</div>'+
+     '<textarea class="note-edit" data-d="'+d+'" placeholder="Not, rezervasyon, fikir…">'+escT(calNotes[d]||"")+'</textarea>'+
+     '<div class="photos">'+phs.map((src,i)=>'<span class="ph"><img src="'+src+'"><button title="Sil" onclick="delPhoto('+d+','+i+')">✕</button></span>').join("")+'</div>'+
+     '<label class="addphoto">📷 Fotoğraf ekle<input type="file" accept="image/*" data-d="'+d+'" style="display:none"></label>';
    cal.appendChild(el);
  }
- cal.querySelectorAll("textarea").forEach(t=>{
-   t.addEventListener("input",()=>{calNotes[t.dataset.d]=t.value;
-     try{localStorage.setItem("ams_cal",JSON.stringify(calNotes));}catch(e){}});
- });
+ cal.querySelectorAll("textarea.plan-edit").forEach(t=>t.addEventListener("input",()=>{calPlans[t.dataset.d]=t.value;saveLS("ams_plan",calPlans);}));
+ cal.querySelectorAll("textarea.note-edit").forEach(t=>t.addEventListener("input",()=>{calNotes[t.dataset.d]=t.value;saveLS("ams_cal",calNotes);}));
+ cal.querySelectorAll('input[type=file]').forEach(inp=>inp.addEventListener("change",ev=>addPhoto(inp.dataset.d,ev)));
 }
 
 /* ===== WEEKEND ===== */
@@ -1024,22 +1044,22 @@ function buildDE(){
 function deScore(v){
  let s=0;const m=deSel.mode,t=deSel.time;
  const modeMap={"Çalışmak":"work","Yemek":"akşam","Kahve":"kahve","İçki":"şarap","Yürüyüş":"park","Alışveriş":"mağaza","Park":"park","Spontane":null};
- if(m==="Çalışmak"){if(v.work)s+=5;else s-=3;}
+ if(m==="Çalışmak"){if(isWork(v))s+=5;else s-=3;}
  else if(m==="Spontane"){if(v.resv==="no")s+=3;}
- else{const key=modeMap[m];if(key&&(v.best.includes(key)||v.cats.includes(key)))s+=5;
+ else{const key=modeMap[m];if(key&&hasTag(v,key))s+=5;
    if(m==="İçki"&&v.cats.includes("wine bar"))s+=2;
    if(m==="Yemek"&&v.cats.includes("restoran"))s+=2;
    if(m==="Alışveriş"&&v.cats.includes("mağaza"))s+=3;}
  const tmap={"Sabah":["kahvaltı","kahve","brunch"],"Öğlen":["öğlen","take-away","kahve"],
    "Öğleden sonra":["kahve","öğlen","çalışma","mağaza"],"Akşam":["akşam","şarap"],"Gece":["gece","akşam"]};
- (tmap[t]||[]).forEach(k=>{if(v.best.includes(k)||v.cats.includes(k))s+=1.5;});
- if(t==="Gece"&&!(v.cats.includes("gece")||v.best.includes("gece")||v.cats.includes("bar")))s-=2;
+ (tmap[t]||[]).forEach(k=>{if(hasTag(v,k))s+=1.5;});
+ if(t==="Gece"&&!hasTag(v,"gece"))s-=2;
  if(deSel.resv==="Yok"&&v.resv==="req")s-=4;
  if(deSel.resv==="Yok"&&v.resv==="no")s+=2;
  if(deSel.resv==="Var"&&(v.resv==="req"||v.resv==="rec"))s+=1.5;
  const km=distKm(v);
  if(deSel.energy==="Düşük")s-=km*0.7;else if(deSel.energy==="Orta")s-=km*0.25;else s-=km*0.05;
- const terras=v.cats.includes("park")||v.best.includes("park")||v.id==="pllek"||v.id==="troost"||v.id==="espressofabriek";
+ const terras=hasTag(v,"park")||v.id==="pllek"||v.id==="troost"||v.id==="espressofabriek";
  if(deSel.weather==="Güneşli"&&terras)s+=2.5;
  if(deSel.weather==="Yağmurlu"&&terras)s-=2.5;
  if(isFav(v.id))s+=0.6;if(v.src==="user")s+=0.4;if(v.conf==="low")s-=0.6;
@@ -1058,9 +1078,10 @@ function runDE(){
    const v=o[1];const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
    return '<div class="de-res"><div class="role">'+o[0]+'</div>'+
      '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
-     '<div class="area">📍 '+v.area+' · ≈'+km.toFixed(1)+' km · 🚲'+bikeMin(km)+' dk · <span class="'+r.c+'">'+r.t+'</span></div>'+
+     '<div class="area">🏷️ '+(v.type||'')+' · 📍 '+v.area+' · ≈'+km.toFixed(1)+' km · 🚲'+bikeMin(km)+' dk · <span class="'+r.c+'">'+r.t+'</span></div>'+
      '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
-     '<button class="btn primary" style="max-width:220px" onclick="winopen(\''+gmaps(v)+'\')">📍 Google Maps’te aç</button></div>';
+     (v.tip?'<div class="tip">💡 '+v.tip+'</div>':'')+
+     '<button class="btn primary" style="max-width:260px" onclick="winopen(\''+gmaps(v)+'\')">📍 Google: saat, yorum, yol tarifi</button></div>';
  }).join("");
  document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
 }
