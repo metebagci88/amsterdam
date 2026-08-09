@@ -4,12 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Amsterdam · Lokal Yaşam Rehberi (11–31 Temmuz)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
 :root{
-  --bg:#f6f4ef; --bg2:#efece4; --card:#ffffff; --ink:#23211c; --ink2:#5f5a50;
-  --line:#e6e1d6; --accent:#9a6a4e; --accent2:#7d8c6a; --gold:#b8944f;
-  --fav:#c25a52; --blue:#5b7a96; --teal:#5a9a93; --green:#7d9a5a; --purple:#8a6fa3;
+  --bg:#f4f1ea; --bg2:#ece7dc; --card:#fffdf8; --ink:#221d17; --ink2:#655d4f;
+  --line:#e5ddce; --accent:#8f2d3b; --accent2:#5c6b3f; --gold:#b8944f;
+  --terra:#c8623b; --saffron:#d99a2b;
+  --fav:#c25a52; --blue:#2f5d74; --teal:#5a9a93; --green:#7d9a5a; --purple:#8a6fa3;
   --shadow:0 2px 10px rgba(40,35,25,.06), 0 8px 30px rgba(40,35,25,.05);
   --r:16px;
 }
@@ -17,13 +20,13 @@
 html,body{margin:0;padding:0}
 body{font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased;padding-bottom:84px}
-h1,h2,h3{font-family:"Georgia","Times New Roman",serif;font-weight:600;letter-spacing:.2px;margin:0}
+h1,h2,h3{font-family:"Fraunces","Georgia",serif;font-weight:600;letter-spacing:.2px;margin:0}
 a{color:inherit}
 .wrap{max-width:1100px;margin:0 auto;padding:0 16px}
 header.app{position:sticky;top:0;z-index:1200;background:rgba(246,244,239,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .hbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;max-width:1100px;margin:0 auto}
 .brand{display:flex;flex-direction:column}
-.brand .t{font-family:Georgia,serif;font-size:18px;font-weight:600}
+.brand .t{font-family:"Fraunces",Georgia,serif;font-size:18px;font-weight:600}
 .brand .s{font-size:11px;color:var(--ink2);letter-spacing:1.5px;text-transform:uppercase}
 .loc-btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:var(--shadow)}
 .loc-btn:active{transform:scale(.97)}
@@ -112,7 +115,7 @@ select.sel,button.sel{border:1px solid var(--line);border-radius:999px;padding:8
 .mapctrl{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:6px}
 .mapctrl button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:18px;cursor:pointer;box-shadow:var(--shadow);line-height:1}
 .mappop{position:absolute;left:12px;right:12px;bottom:12px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.18);max-width:440px}
-.mappop h4{font-family:Georgia,serif;font-size:17px;margin:0 30px 4px 0}
+.mappop h4{font-family:"Fraunces",Georgia,serif;font-size:17px;margin:0 30px 4px 0}
 .mappop .psub{font-size:12px;color:var(--ink2);margin-bottom:4px}
 .mappop .pbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
 .popclose{position:absolute;top:10px;right:12px;border:0;background:none;font-size:16px;cursor:pointer;color:var(--ink2)}
@@ -121,7 +124,7 @@ select.sel,button.sel{border:1px solid var(--line);border-radius:999px;padding:8
 .cal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:11px;margin:14px 0 26px}
 .day{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px;box-shadow:var(--shadow);position:relative}
 .day .dn{font-size:11px;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px}
-.day .dd{font-family:Georgia,serif;font-size:20px;margin:1px 0 6px}
+.day .dd{font-family:"Fraunces",Georgia,serif;font-size:20px;margin:1px 0 6px}
 .day.weekend{background:linear-gradient(135deg,#34402f,#4f4636);color:#f1ece2}
 .day.weekend .dn,.day.weekend .plan{color:#ddd4c5}
 .day.today{outline:2px solid var(--gold)}
@@ -150,7 +153,7 @@ table.cmp td:first-child,table.cmp th:first-child{text-align:left;font-weight:70
 .de-out{margin-top:16px;display:grid;gap:11px}
 .de-res{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
 .de-res .role{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);font-weight:800}
-.de-res h4{margin:3px 0 2px;font-family:Georgia,serif;font-size:16px}
+.de-res h4{margin:3px 0 2px;font-family:"Fraunces",Georgia,serif;font-size:16px}
 
 .notebox{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow);margin-bottom:14px}
 .notebox h3{font-size:16px;margin-bottom:8px}
@@ -178,7 +181,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .daymodal.hide{display:none}
 .daysheet{background:var(--bg);width:100%;max-width:640px;border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:20px 18px 30px;position:relative;margin-bottom:40px}
 .dayclose{position:absolute;top:12px;right:14px;border:0;background:var(--bg2);width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;line-height:1}
-.daysheet .dh{font-family:Georgia,serif;font-size:22px;margin:0 34px 2px 0}
+.daysheet .dh{font-family:"Fraunces",Georgia,serif;font-size:22px;margin:0 34px 2px 0}
 .daysheet .dsub{font-size:12px;color:var(--ink2)}
 .day-sec{margin-top:16px}
 .day-sec>.h{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);margin-bottom:8px}
@@ -229,7 +232,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 
 .gate{border:1px dashed var(--accent);background:linear-gradient(180deg,#fbf6ee,#f6efe3);border-radius:16px;padding:22px;text-align:center;margin-top:6px}
 .gate-i{font-size:26px}
-.gate-t{font-family:Georgia,serif;font-size:17px;font-weight:600;margin-top:6px;color:var(--ink)}
+.gate-t{font-family:"Fraunces",Georgia,serif;font-size:17px;font-weight:600;margin-top:6px;color:var(--ink)}
 .gate-d{font-size:13px;color:var(--ink2);margin:6px auto 14px;max-width:360px;line-height:1.5}
 .gate-b{background:var(--accent);color:#fff;border:0;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
 .gate-b:hover{filter:brightness(1.05)}
@@ -240,7 +243,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .vsheet{background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:640px;max-height:92vh;overflow:auto;padding:20px 18px 30px;position:relative;box-shadow:0 -10px 40px rgba(0,0,0,.25)}
 @media(min-width:700px){.vmodal{align-items:center}.vsheet{border-radius:20px;max-height:88vh}}
 .vclose{position:absolute;top:12px;right:14px;border:0;background:#f0ece3;width:32px;height:32px;border-radius:50%;font-size:16px;color:var(--ink2);cursor:pointer}
-.vhead h3{font-family:Georgia,serif;font-size:21px;margin:0 30px 4px 0}
+.vhead h3{font-family:"Fraunces",Georgia,serif;font-size:21px;margin:0 30px 4px 0}
 .vmeta{font-size:12.5px;color:var(--ink2)}
 .vtip{font-size:12.5px;color:#5a6b3f;background:#f2f5ea;border-radius:9px;padding:7px 10px;margin-top:8px}
 .vacts{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
@@ -279,14 +282,14 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .pp-id{flex:1;min-width:0}
 .pp-name{font-weight:700;font-size:17px}
 .pp-mail{font-size:12px;color:#d8d0c2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pp-logo{font-family:Georgia,serif;font-size:15px;opacity:.85}
+.pp-logo{font-family:"Fraunces",Georgia,serif;font-size:15px;opacity:.85}
 .pp-logo b{color:#e3c98f}
 .pp-row{display:flex;gap:10px;margin-top:14px}
 .pp-row>div{flex:1;background:rgba(255,255,255,.08);border-radius:10px;padding:8px 6px;text-align:center}
 .pp-row span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#cfc7b8}
 .pp-row b{font-size:14px}
 .seg-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
-.seg-h{font-family:Georgia,serif;font-size:15px;font-weight:600;margin-bottom:10px;color:var(--ink)}
+.seg-h{font-family:"Fraunces",Georgia,serif;font-size:15px;font-weight:600;margin-bottom:10px;color:var(--ink)}
 .likelist,.tierlist{display:flex;flex-direction:column;gap:8px}
 .likerow{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:#fbfaf7}
 .lk-i{flex:1;cursor:pointer;min-width:0}
@@ -327,7 +330,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .ad-body{font-size:13px;color:var(--ink2);margin-top:4px}
 .ad-venue{border:1px solid #ecdcb8 !important;background:linear-gradient(180deg,#fdf9f0,#fbf5e8) !important}
 .ad-decision{border:1px dashed var(--gold);background:linear-gradient(180deg,#fdf9f0,#f8f1e2);border-radius:14px;padding:16px;margin-top:14px}
-.ad-decision h4{font-family:Georgia,serif;font-size:16px;margin:2px 0 4px}
+.ad-decision h4{font-family:"Fraunces",Georgia,serif;font-size:16px;margin:2px 0 4px}
 #adMasthead:empty,#adCityBanner:empty,#adMekanlar:empty,#adKarar:empty,#adPlan:empty{display:none}
 
 </style>
@@ -514,9 +517,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
   <button data-v="map"><span class="ic">🗺️</span>Harita</button>
   <button data-v="list"><span class="ic">📋</span>Mekanlar</button>
   <button data-v="cal"><span class="ic">🗓️</span>Plan</button>
-  <button data-v="trip"><span class="ic">🚆</span>Hafta sonu</button>
   <button data-v="de"><span class="ic">🎯</span>Karar</button>
-  <button data-v="notes"><span class="ic">📝</span>Notlar</button>
   <button data-v="member"><span class="ic">👤</span>Üye</button>
 </nav>
 <div id="dayModal" class="daymodal hide" onclick="if(event.target===this)closeDay()">
@@ -836,8 +837,7 @@ const CTAS=[
  {e:"✅",l:"Rezervasyonsuz",d:"Spontane gün",act:()=>{go("list");setOnlyChip("walkin");}},
  {e:"☔",l:"Yağmurlu gün",d:"İçeride keyif",act:()=>openScenario("rain")},
  {e:"☀️",l:"Güneşli gün",d:"Teras & park",act:()=>openScenario("sun")},
- {e:"🎯",l:"Bana özel öner",d:"Karar motoru",act:()=>go("de")},
- {e:"🚆",l:"Hafta sonu",d:"Antwerp / Brüksel",act:()=>go("trip")}
+ {e:"🎯",l:"Bana özel öner",d:"Karar motoru",act:()=>go("de")}
 ];
 const cg=document.getElementById("ctaGrid");
 CTAS.forEach(c=>{const d=document.createElement("button");d.className="cta";
