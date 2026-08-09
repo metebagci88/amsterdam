@@ -555,7 +555,7 @@ function areaKey(area){
 }
 
 /* ===== VENUE DATA (src: user|deck|extra|audio) ===== */
-const V=[
+let V=[
 {id:"binnenvisser",hours:"12:00–00:00",garden:false,type:"Kafe & şarap barı",tags:["öğlen","akşam","şarap"],tip:"Küçük, popüler brown cafe; akşam natürel şarap + sebze tabakları. Laptopla çalışmaya uygun değil.",name:"Café Binnenvisser",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe","wine bar","restoran"],best:["kahve","öğlen","akşam","şarap"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36680,lng:4.87170,conf:"high",
  web:"https://binnenvisser.nl/",ig:"https://www.instagram.com/cafebinnenvisser/",
  desc:"Natürel şarap odaklı, sebze ağırlıklı mevsimsel mutfağı olan modern bir 'brown cafe'.",note:"<b>Senin notun:</b> Walk-in. Rezervasyon almıyor."},
@@ -1747,6 +1747,30 @@ try{ window.ADS=ADS; }catch(e){}
 document.addEventListener("DOMContentLoaded",()=>{ try{ADS.load("Amsterdam");}catch(e){} });
 if(document.readyState!=="loading"){ try{ADS.load("Amsterdam");}catch(e){} }
 
+
+
+/* ===== Mekanları DB'den oku (yönetim paneli kaynağı); DB boş/erişilemezse gömülü veriye düşer ===== */
+(function(){
+  const U="https://tosqsabuaomgqjtogdrn.supabase.co";
+  const K="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0";
+  async function loadVenuesFromDB(){
+    try{
+      if(!(window.supabase&&window.supabase.createClient)) return;
+      const db=window.supabase.createClient(U,K);
+      const {data,error}=await db.from("venues").select("*").eq("active",true);
+      if(error||!data||!data.length) return;
+      V = data.map(r=>({ id:r.id, hours:r.hours, garden:!!r.garden, type:r.type, tags:r.tags||[], tip:r.tip, name:r.name, city:r.city||"Amsterdam", area:r.area, cats:r.cats||[], best:r.best||[], src:r.src, fav:false, resv:r.resv, walkIn:!!r.walk_in, work:!!r.work, lat:r.lat, lng:r.lng, conf:r.conf, web:r.web, ig:r.ig, desc:r.description, note:r.note, sponsored:!!r.sponsored }));
+      try{ V.forEach(v=>{ if(typeof favSet!=="undefined"&&favSet.has(v.id)) v.fav=true; }); }catch(e){}
+      try{renderScenarios();}catch(e){}
+      try{renderCards();}catch(e){}
+      try{if(typeof MAP!=="undefined"&&MAP.map)drawMarkers();}catch(e){}
+      try{if(typeof buildDE==="function")buildDE();}catch(e){}
+      try{renderCal();}catch(e){}
+    }catch(e){}
+  }
+  document.addEventListener("DOMContentLoaded",loadVenuesFromDB);
+  if(document.readyState!=="loading") loadVenuesFromDB();
+})();
 
 </script>
 </body>

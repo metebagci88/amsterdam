@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>asalocal · Yönetim Paneli</title>
+<style>
+:root{--bg:#f4f2ec;--card:#fff;--ink:#23211c;--ink2:#5f5a50;--line:#e2ddd2;--accent:#9a6a4e;--accent2:#7d8c6a;--gold:#b8944f;--danger:#b03a2e;--shadow:0 1px 3px rgba(40,35,25,.08),0 6px 20px rgba(40,35,25,.05)}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Inter",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+h1,h2,h3{font-family:Georgia,serif;margin:0}
+.topbar{background:#2f2a22;color:#f4efe6;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+.topbar .b{font-family:Georgia,serif;font-size:19px}.topbar .b b{color:#e3c98f}
+.topbar .s{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;opacity:.7}
+.logout{background:none;border:1px solid rgba(255,255,255,.25);color:#f4efe6;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+.wrap{max-width:1200px;margin:0 auto;padding:16px}
+.nav{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+.nav button{border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:999px;padding:8px 15px;font-size:13.5px;font-weight:600;cursor:pointer}
+.nav button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.stat b{font-size:26px;display:block;font-family:Georgia,serif}
+.stat span{font-size:12px;color:var(--ink2)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input,.toolbar select{border:1px solid var(--line);background:#fbfaf7;border-radius:9px;padding:8px 11px;font-size:14px;color:var(--ink)}
+.toolbar input.search{flex:1;min-width:180px}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 13px;font-size:13.5px;cursor:pointer;font-weight:600}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.danger{background:#fdf3f1;color:var(--danger);border-color:#efd6d0}
+.btn.sm{padding:5px 9px;font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink2)}
+tr:hover td{background:#faf8f3}
+.tablewrap{overflow:auto}
+.pill{display:inline-block;font-size:11px;border-radius:99px;padding:2px 8px;border:1px solid var(--line)}
+.pill.on{background:#eef3e6;color:#4e6a2e;border-color:#d6e3bf}
+.pill.off{background:#f3efe9;color:#8a8172}
+.pill.soon{background:#fbf3e6;color:#8a6d2f;border-color:#ecdcc0}
+.pill.sp{background:#f3e6c9;color:#8a6d2f}
+.muted{color:var(--ink2);font-size:12px}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(30,25,15,.5);display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow:auto;z-index:60}
+.modal.hide{display:none}
+.sheet{background:var(--card);border-radius:16px;max-width:640px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.sheet h2{font-size:20px;margin-bottom:14px}
+.frow{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.fld{display:flex;flex-direction:column;gap:4px;flex:1;min-width:150px}
+.fld label{font-size:11.5px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.3px}
+.fld input,.fld select,.fld textarea{border:1px solid var(--line);background:#fbfaf7;border-radius:9px;padding:9px 11px;font-size:14px;color:var(--ink);font-family:inherit}
+.fld textarea{min-height:60px;resize:vertical}
+.fld.check{flex-direction:row;align-items:center;gap:8px;min-width:auto}
+.fld.check input{width:16px;height:16px}
+.fld.check label{text-transform:none;font-size:13.5px}
+.sheet .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+/* login */
+.login{max-width:360px;margin:80px auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;box-shadow:var(--shadow);text-align:center}
+.login h1{font-size:24px;margin-bottom:4px}.login h1 b{color:var(--accent)}
+.login p{font-size:13px;color:var(--ink2);margin:6px 0 16px}
+.login input{width:100%;border:1px solid var(--line);background:#fbfaf7;border-radius:11px;padding:12px;font-size:15px;margin-bottom:10px}
+.err{color:var(--danger);font-size:13px;min-height:16px}
+.hint{font-size:11.5px;color:var(--ink2);margin-top:12px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="modal hide" id="modal"><div class="sheet" id="sheet"></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0",pw:"asaadmin2026"};
+let db=null; try{ db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
+const $=id=>document.getElementById(id);
+const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const arr=s=>(s||"").split(",").map(x=>x.trim()).filter(Boolean);
+let DATA={venues:[],cities:[],members:[],comments:[],ads:[],trips:0};
+let seg="ozet";
+
+function isAuthed(){ try{return sessionStorage.getItem("asa_admin")==="1";}catch(e){return false;} }
+
+function renderLogin(msg){
+  $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Yönetici şifresi ile giriş yap</p><input id="apw" type="password" placeholder="Yönetici şifresi" autocomplete="off"><div class="err" id="aerr">'+(msg||"")+'</div><button class="btn primary" id="abtn" style="width:100%">Giriş</button><div class="hint">Prototip: paylaşımlı yönetici şifresi. Gerçek rol/kimlik doğrulama sonraki aşamada.</div></div>';
+  $("abtn").onclick=()=>{ if($("apw").value===CFG.pw){ try{sessionStorage.setItem("asa_admin","1");}catch(e){} boot(); } else { $("aerr").textContent="Şifre yanlış."; } };
+  $("apw").onkeydown=e=>{if(e.key==="Enter")$("abtn").click();};
+}
+
+async function loadAll(){
+  try{ const {data}=await db.from("venues").select("*").order("name"); DATA.venues=data||[]; }catch(e){}
+  try{ const {data}=await db.from("cities").select("*").order("name"); DATA.cities=data||[]; }catch(e){}
+  try{ const {data}=await db.from("members").select("*").order("created_at",{ascending:false}); DATA.members=data||[]; }catch(e){}
+  try{ const {data}=await db.from("comments").select("*").order("created_at",{ascending:false}); DATA.comments=data||[]; }catch(e){}
+  try{ const {data}=await db.from("ads").select("*").order("id"); DATA.ads=data||[]; }catch(e){}
+  try{ const {count}=await db.from("trips").select("*",{count:"exact",head:true}); DATA.trips=count||0; }catch(e){}
+}
+
+function shell(body){
+  $("app").innerHTML=
+   '<div class="topbar"><div><div class="b"><b>asa</b>local · Yönetim</div><div class="s">Merkezi kontrol paneli</div></div><button class="logout" id="lo">Çıkış</button></div>'
+   +'<div class="wrap"><div class="nav" id="nav"></div><div id="body"></div></div>';
+  $("lo").onclick=()=>{ try{sessionStorage.removeItem("asa_admin");}catch(e){} renderLogin(); };
+  const segs=[["ozet","Özet"],["venues","Mekanlar"],["cities","Şehirler"],["tags","Etiketler"],["comments","Moderasyon"],["ads","Reklamlar"],["members","Üyeler"]];
+  $("nav").innerHTML=segs.map(s=>'<button class="'+(seg===s[0]?"on":"")+'" onclick="go(\''+s[0]+'\')">'+s[1]+'</button>').join("");
+  $("body").innerHTML=body;
+}
+function go(s){ seg=s; render(); }
+
+function render(){
+  if(seg==="ozet") return renderOzet();
+  if(seg==="venues") return renderVenues();
+  if(seg==="cities") return renderCities();
+  if(seg==="tags") return renderTags();
+  if(seg==="comments") return renderComments();
+  if(seg==="ads") return renderAds();
+  if(seg==="members") return renderMembers();
+}
+
+function renderOzet(){
+  const v=DATA.venues, act=v.filter(x=>x.active).length, sp=v.filter(x=>x.sponsored).length, ck=v.filter(x=>x.conf==="low").length;
+  const body='<div class="cards">'
+    +stat(v.length,"Mekan")+stat(act,"Aktif mekan")+stat(DATA.cities.filter(c=>c.status==="active").length+"/"+DATA.cities.length,"Aktif/Toplam şehir")
+    +stat(DATA.members.length,"Üye")+stat(DATA.comments.length,"Yorum")+stat(DATA.trips,"Gezi talebi")+stat(DATA.ads.filter(a=>a.active).length,"Aktif reklam")+stat(ck,"Kontrol gereken")
+    +'</div><div class="panel"><h3 style="margin-bottom:8px">Hızlı bakış</h3><p class="muted">Kontrol bekleyen ('+ck+') düşük güvenli mekan, '+sp+' sponsorlu mekan. Mekanlar sekmesinden düzenle; değişiklikler yayına alındığında siteye yansıyacak.</p></div>';
+  shell(body);
+}
+function stat(n,l){ return '<div class="stat"><b>'+n+'</b><span>'+l+'</span></div>'; }
+
+/* ---------- MEKANLAR ---------- */
+let vFilter={q:"",city:"",active:""};
+function renderVenues(){
+  const cities=[...new Set(DATA.venues.map(v=>v.city))];
+  let list=DATA.venues.filter(v=>{
+    if(vFilter.city&&v.city!==vFilter.city)return false;
+    if(vFilter.active==="1"&&!v.active)return false;
+    if(vFilter.active==="0"&&v.active)return false;
+    if(vFilter.q){ const q=vFilter.q.toLowerCase(); if(!((v.name||"").toLowerCase().includes(q)||(v.area||"").toLowerCase().includes(q)||(v.tags||[]).join(",").toLowerCase().includes(q)||(v.type||"").toLowerCase().includes(q)))return false; }
+    return true;
+  });
+  const body='<div class="panel"><div class="toolbar">'
+    +'<input class="search" id="vq" placeholder="Ara: ad, semt, etiket, tür…" value="'+esc(vFilter.q)+'">'
+    +'<select id="vcity"><option value="">Tüm şehirler</option>'+cities.map(c=>'<option'+(vFilter.city===c?" selected":"")+'>'+esc(c)+'</option>').join("")+'</select>'
+    +'<select id="vact"><option value="">Hepsi</option><option value="1"'+(vFilter.active==="1"?" selected":"")+'>Aktif</option><option value="0"'+(vFilter.active==="0"?" selected":"")+'>Pasif</option></select>'
+    +'<button class="btn primary" onclick="editVenue(null)">+ Yeni mekan</button>'
+    +'<span class="muted">'+list.length+' / '+DATA.venues.length+'</span></div>'
+    +'<div class="tablewrap"><table><thead><tr><th>Ad</th><th>Şehir · Semt</th><th>Tür</th><th>Etiketler</th><th>Saat</th><th>Durum</th><th></th></tr></thead><tbody>'
+    +list.map(v=>'<tr>'
+      +'<td><b>'+esc(v.name)+'</b>'+(v.conf==="low"?' <span class="pill soon">kontrol</span>':'')+(v.sponsored?' <span class="pill sp">sponsor</span>':'')+'</td>'
+      +'<td>'+esc(v.city)+'<div class="muted">'+esc(v.area||"")+'</div></td>'
+      +'<td>'+esc(v.type||"")+'</td>'
+      +'<td class="muted">'+esc((v.tags||[]).join(", "))+'</td>'
+      +'<td class="muted">'+esc(v.hours||"")+'</td>'
+      +'<td>'+(v.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')+'</td>'
+      +'<td style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm" onclick="toggleVenue(\''+esc(v.id)+'\')">'+(v.active?"Pasifle":"Aktifle")+'</button></td>'
+      +'</tr>').join("")
+    +'</tbody></table></div></div>';
+  shell(body);
+  $("vq").oninput=()=>{vFilter.q=$("vq").value; const l=DATA.venues; renderVenues(); $("vq").focus(); const el=$("vq"); el.setSelectionRange(el.value.length,el.value.length);};
+  $("vcity").onchange=()=>{vFilter.city=$("vcity").value; renderVenues();};
+  $("vact").onchange=()=>{vFilter.active=$("vact").value; renderVenues();};
+}
+function venueById(id){ return DATA.venues.find(v=>v.id===id); }
+function editVenue(id){
+  const v=id?venueById(id):{id:"",city:"Amsterdam",active:true,garden:false,walk_in:false,work:false,sponsored:false,tags:[],cats:[],best:[]};
+  const isNew=!id;
+  const f=(k,l,val,type)=>'<div class="fld"><label>'+l+'</label><input id="f_'+k+'" '+(type?'type="'+type+'"':'')+' value="'+esc(val)+'"></div>';
+  const ta=(k,l,val)=>'<div class="fld" style="flex:1 1 100%"><label>'+l+'</label><textarea id="f_'+k+'">'+esc(val)+'</textarea></div>';
+  const chk=(k,l,val)=>'<div class="fld check"><input type="checkbox" id="f_'+k+'" '+(val?"checked":"")+'><label>'+l+'</label></div>';
+  const self=(k,l,val,opts)=>'<div class="fld"><label>'+l+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(val===o?" selected":"")+'>'+o+'</option>').join("")+'</select></div>';
+  $("sheet").innerHTML='<h2>'+(isNew?"Yeni mekan":"Mekanı düzenle")+'</h2>'
+    +'<div class="frow">'+f("id","ID (kısa, benzersiz)",v.id)+f("name","Ad",v.name||"")+'</div>'
+    +'<div class="frow">'+f("city","Şehir",v.city||"")+f("area","Semt",v.area||"")+f("type","Tür",v.type||"")+'</div>'
+    +'<div class="frow">'+f("tags","Etiketler (virgülle)",(v.tags||[]).join(", "))+'</div>'
+    +'<div class="frow">'+f("cats","Kategoriler (virgülle)",(v.cats||[]).join(", "))+f("best","Best (virgülle)",(v.best||[]).join(", "))+'</div>'
+    +'<div class="frow">'+f("hours","Çalışma saatleri",v.hours||"")+self("resv","Rezervasyon",v.resv||"unknown",["no","rec","req","unknown"])+self("conf","Güven",v.conf||"high",["high","med","low"])+'</div>'
+    +'<div class="frow">'+f("lat","Enlem (lat)",v.lat==null?"":v.lat)+f("lng","Boylam (lng)",v.lng==null?"":v.lng)+f("src","Kaynak",v.src||"")+'</div>'
+    +'<div class="frow">'+f("web","Web",v.web||"")+f("ig","Instagram",v.ig||"")+'</div>'
+    +ta("tip","Yerli tüyosu (tip)",v.tip||"")
+    +ta("description","Açıklama",v.description||"")
+    +ta("note","Not",v.note||"")
+    +'<div class="frow">'+chk("garden","Bahçeli / dış mekan",v.garden)+chk("walk_in","Rezervasyonsuz girilebilir",v.walk_in)+chk("work","Çalışmaya uygun",v.work)+chk("sponsored","Sponsorlu",v.sponsored)+chk("active","Aktif (yayında)",v.active)+'</div>'
+    +'<div class="err" id="verr"></div>'
+    +'<div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button>'+(isNew?"":'<button class="btn danger" onclick="delVenue(\''+esc(v.id)+'\')">Sil</button>')+'<button class="btn primary" id="vsave">Kaydet</button></div>';
+  openModal();
+  $("vsave").onclick=()=>saveVenue(isNew);
+}
+async function saveVenue(isNew){
+  const g=k=>{const e=$("f_"+k);return e?e.value:"";};
+  const gc=k=>{const e=$("f_"+k);return e?e.checked:false;};
+  const id=g("id").trim();
+  if(!id||!g("name").trim()){ $("verr").textContent="ID ve Ad zorunlu."; return; }
+  const row={id, name:g("name").trim(), city:g("city").trim()||"Amsterdam", area:g("area").trim(), type:g("type").trim(),
+    tags:arr(g("tags")), cats:arr(g("cats")), best:arr(g("best")), hours:g("hours").trim()||null,
+    resv:g("resv"), conf:g("conf"), src:g("src").trim()||null, web:g("web").trim()||null, ig:g("ig").trim()||null,
+    tip:g("tip").trim()||null, description:g("description").trim()||null, note:g("note").trim()||null,
+    lat:g("lat")?parseFloat(g("lat")):null, lng:g("lng")?parseFloat(g("lng")):null,
+    garden:gc("garden"), walk_in:gc("walk_in"), work:gc("work"), sponsored:gc("sponsored"), active:gc("active"),
+    updated_at:new Date().toISOString()};
+  const btn=$("vsave"); btn.disabled=true; btn.textContent="Kaydediliyor…";
+  try{ const {error}=await db.from("venues").upsert(row,{onConflict:"id"}); if(error)throw error; }catch(e){ $("verr").textContent="Hata: "+(e.message||e); btn.disabled=false; btn.textContent="Kaydet"; return; }
+  const i=DATA.venues.findIndex(x=>x.id===id); if(i>=0)DATA.venues[i]=Object.assign(DATA.venues[i],row); else DATA.venues.push(row);
+  closeModal(); renderVenues();
+}
+async function toggleVenue(id){ const v=venueById(id); if(!v)return; const na=!v.active; try{ await db.from("venues").update({active:na,updated_at:new Date().toISOString()}).eq("id",id); v.active=na; }catch(e){} renderVenues(); }
+async function delVenue(id){ if(!confirm("Bu mekanı silmek istediğine emin misin?"))return; try{ await db.from("venues").delete().eq("id",id); }catch(e){} DATA.venues=DATA.venues.filter(v=>v.id!==id); closeModal(); renderVenues(); }
+
+/* ---------- ŞEHİRLER ---------- */
+function renderCities(){
+  const body='<div class="panel"><div class="toolbar"><button class="btn primary" onclick="editCity(null)">+ Yeni şehir</button></div>'
+    +'<div class="tablewrap"><table><thead><tr><th>Şehir</th><th>Ülke</th><th>Durum</th><th>Mekan</th><th></th></tr></thead><tbody>'
+    +DATA.cities.map(c=>{const vn=DATA.venues.filter(v=>v.city===c.name).length;return '<tr><td>'+esc(c.flag||"")+' <b>'+esc(c.name)+'</b></td><td>'+esc(c.country||"")+'</td><td><span class="pill '+(c.status==="active"?"on":(c.status==="soon"?"soon":"off"))+'">'+esc(c.status)+'</span></td><td class="muted">'+vn+'</td><td><button class="btn sm" onclick="editCity(\''+esc(c.code)+'\')">Düzenle</button></td></tr>';}).join("")
+    +'</tbody></table></div></div>';
+  shell(body);
+}
+function editCity(code){
+  const c=code?DATA.cities.find(x=>x.code===code):{code:"",name:"",country:"",flag:"",status:"draft"};
+  const isNew=!code;
+  const f=(k,l,val)=>'<div class="fld"><label>'+l+'</label><input id="c_'+k+'" value="'+esc(val)+'"></div>';
+  $("sheet").innerHTML='<h2>'+(isNew?"Yeni şehir":"Şehri düzenle")+'</h2>'
+    +'<div class="frow">'+f("code","Kod (benzersiz)",c.code)+f("name","Ad",c.name)+'</div>'
+    +'<div class="frow">'+f("country","Ülke",c.country||"")+f("flag","Bayrak (emoji)",c.flag||"")+'</div>'
+    +'<div class="frow"><div class="fld"><label>Durum</label><select id="c_status">'+["draft","soon","active","inactive"].map(o=>'<option'+(c.status===o?" selected":"")+'>'+o+'</option>').join("")+'</select></div></div>'
+    +'<div class="err" id="cerr"></div><div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn primary" id="csave">Kaydet</button></div>';
+  openModal();
+  $("csave").onclick=async()=>{ const g=k=>$("c_"+k).value; const code2=g("code").trim(); if(!code2||!g("name").trim()){$("cerr").textContent="Kod ve Ad zorunlu.";return;} const row={code:code2,name:g("name").trim(),country:g("country").trim(),flag:g("flag").trim(),status:g("status"),updated_at:new Date().toISOString()}; try{await db.from("cities").upsert(row,{onConflict:"code"});}catch(e){$("cerr").textContent="Hata: "+(e.message||e);return;} const i=DATA.cities.findIndex(x=>x.code===code2); if(i>=0)DATA.cities[i]=Object.assign(DATA.cities[i],row); else DATA.cities.push(row); closeModal(); renderCities(); };
+}
+
+/* ---------- ETIKETLER ---------- */
+function renderTags(){
+  const map={}; DATA.venues.forEach(v=>(v.tags||[]).forEach(t=>{map[t]=(map[t]||0)+1;}));
+  const rows=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  const body='<div class="panel"><h3 style="margin-bottom:10px">Etiket kullanımı ('+rows.length+' etiket)</h3><p class="muted" style="margin-bottom:12px">Karar motoru ve filtreler bu etiketleri kullanır. Bir mekanın etiketlerini Mekanlar sekmesinden düzenleyebilirsin.</p>'
+    +'<div class="tablewrap"><table><thead><tr><th>Etiket</th><th>Mekan sayısı</th></tr></thead><tbody>'
+    +rows.map(r=>'<tr><td><b>'+esc(r[0])+'</b></td><td>'+r[1]+'</td></tr>').join("")+'</tbody></table></div></div>';
+  shell(body);
+}
+
+/* ---------- MODERASYON (yorumlar) ---------- */
+function renderComments(){
+  const body='<div class="panel"><h3 style="margin-bottom:10px">Yorumlar ('+DATA.comments.length+')</h3>'
+    +(DATA.comments.length?'<div class="tablewrap"><table><thead><tr><th>Üye</th><th>Mekan</th><th>Yorum</th><th>Foto</th><th></th></tr></thead><tbody>'
+    +DATA.comments.map(c=>{const v=venueById(c.venue_id);return '<tr><td>'+esc(c.display_name||c.email||"")+'</td><td>'+esc(v?v.name:c.venue_id)+'</td><td>'+esc((c.body||"").slice(0,120))+'</td><td>'+(c.photo_url?'📷':'')+'</td><td><button class="btn sm danger" onclick="delComment('+c.id+')">Kaldır</button></td></tr>';}).join("")
+    +'</tbody></table></div>':'<p class="muted">Henüz yorum yok.</p>')+'</div>';
+  shell(body);
+}
+async function delComment(id){ if(!confirm("Yorumu kaldır?"))return; try{await db.from("comments").delete().eq("id",id);}catch(e){} DATA.comments=DATA.comments.filter(c=>c.id!==id); renderComments(); }
+
+/* ---------- REKLAMLAR ---------- */
+function renderAds(){
+  const body='<div class="panel"><h3 style="margin-bottom:10px">Reklam kampanyaları ('+DATA.ads.length+')</h3><p class="muted" style="margin-bottom:12px">Slot bazlı IAB birimleri. Aktif/pasif yapabilirsin (tam kreatif düzenleme sonraki aşamada).</p>'
+    +'<div class="tablewrap"><table><thead><tr><th>Slot</th><th>Boyut</th><th>Tür</th><th>Sponsor</th><th>Durum</th><th></th></tr></thead><tbody>'
+    +DATA.ads.map(a=>'<tr><td><b>'+esc(a.slot)+'</b></td><td>'+esc(a.format||"")+'</td><td>'+esc(a.creative_type||"")+'</td><td>'+esc(a.sponsor||"")+'</td><td>'+(a.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')+'</td><td><button class="btn sm" onclick="toggleAd('+a.id+')">'+(a.active?"Pasifle":"Aktifle")+'</button></td></tr>').join("")
+    +'</tbody></table></div></div>';
+  shell(body);
+}
+async function toggleAd(id){ const a=DATA.ads.find(x=>x.id===id); if(!a)return; const na=!a.active; try{await db.from("ads").update({active:na}).eq("id",id);}catch(e){} a.active=na; renderAds(); }
+
+/* ---------- ÜYELER ---------- */
+function renderMembers(){
+  const body='<div class="panel"><h3 style="margin-bottom:10px">Üyeler ('+DATA.members.length+')</h3>'
+    +(DATA.members.length?'<div class="tablewrap"><table><thead><tr><th>E-posta</th><th>Ad</th><th>Seviye</th><th>Puan</th></tr></thead><tbody>'
+    +DATA.members.map(m=>'<tr><td>'+esc(m.email)+'</td><td>'+esc(m.display_name||"")+'</td><td>'+esc(m.tier||"")+'</td><td>'+esc(m.points!=null?m.points:"")+'</td></tr>').join("")
+    +'</tbody></table></div>':'<p class="muted">Henüz üye yok.</p>')+'</div>';
+  shell(body);
+}
+
+/* ---------- modal ---------- */
+function openModal(){ $("modal").classList.remove("hide"); }
+function closeModal(){ $("modal").classList.add("hide"); }
+$("modal").onclick=e=>{ if(e.target===$("modal"))closeModal(); };
+
+async function boot(){
+  if(!isAuthed()){ renderLogin(); return; }
+  $("app").innerHTML='<div class="wrap"><p class="muted" style="padding:40px;text-align:center">Yükleniyor…</p></div>';
+  await loadAll();
+  render();
+}
+boot();
+</script>
+</body>
+</html>
