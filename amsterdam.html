@@ -269,6 +269,41 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .marchb{font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.45}
 .marchp{max-width:140px;border-radius:8px;margin-top:6px;display:block}
 
+/* SEGMENTLİ PROFİL */
+.segnav{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;-webkit-overflow-scrolling:touch}
+.segpill{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.segpill.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.passport{background:linear-gradient(135deg,#2f3a2c,#54493a);color:#f4efe6;border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:14px}
+.pp-top{display:flex;align-items:center;gap:12px}
+.pp-badge{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:24px;flex:none}
+.pp-id{flex:1;min-width:0}
+.pp-name{font-weight:700;font-size:17px}
+.pp-mail{font-size:12px;color:#d8d0c2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-logo{font-family:Georgia,serif;font-size:15px;opacity:.85}
+.pp-logo b{color:#e3c98f}
+.pp-row{display:flex;gap:10px;margin-top:14px}
+.pp-row>div{flex:1;background:rgba(255,255,255,.08);border-radius:10px;padding:8px 6px;text-align:center}
+.pp-row span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#cfc7b8}
+.pp-row b{font-size:14px}
+.seg-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
+.seg-h{font-family:Georgia,serif;font-size:15px;font-weight:600;margin-bottom:10px;color:var(--ink)}
+.likelist,.tierlist{display:flex;flex-direction:column;gap:8px}
+.likerow{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:#fbfaf7}
+.lk-i{flex:1;cursor:pointer;min-width:0}
+.lk-i b{display:block;font-size:14px}
+.lk-i span{font-size:12px;color:var(--ink2)}
+.lk-x{border:1px solid #efd6d0;background:#fdf3f1;color:#b03a2e;border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer;flex:none}
+.tierrow{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13.5px;color:var(--ink2);opacity:.6}
+.tierrow.on{opacity:1;background:#fbf3e6;border-color:#ecdcc0;color:var(--ink)}
+.badges2{display:flex;flex-wrap:wrap;gap:8px}
+.bdg{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:6px 11px;color:var(--ink2);background:#fbfaf7;opacity:.55}
+.bdg.on{opacity:1;background:#fbf3e6;border-color:#ecdcc0;color:#7a5a2a}
+.tasterow{border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:8px;background:#fbfaf7}
+.tm-h{display:flex;justify-content:space-between;align-items:center}
+.tm-h b{font-size:14px}
+.tm-c{font-size:11.5px;color:var(--accent2);font-weight:600}
+.tm-s{font-size:12.5px;color:var(--ink2);margin-top:4px}
+
 </style>
 </head>
 <body>
@@ -1302,7 +1337,8 @@ const ASA = (function(){
     {name:"Küratör", min:15, emoji:"🎨"},
     {name:"Insider", min:30, emoji:"💎"}
   ];
-  let db=null, session=null, member=null, inited=false;
+  let db=null, session=null, member=null, inited=false, curSeg="passport", memberMeta=null, postCount=0, photoCount=0;
+  function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function tierFor(p){let t=TIERS[0];for(const x of TIERS){if(p>=x.min)t=x;}return t;}
   function nextTier(p){for(const x of TIERS){if(p<x.min)return x;}return null;}
   function saveSession(){try{localStorage.setItem("asa_session",JSON.stringify(session));}catch(e){}}
@@ -1333,6 +1369,8 @@ const ASA = (function(){
     let m=null;
     try{ const {data}=await db.from("members").select("*").eq("email",email).maybeSingle(); m=data; }catch(e){}
     if(!m){ m={email,display_name:null,tier:"Kaşif",points:0}; }
+    memberMeta=m;
+    try{ const {data}=await db.from("comments").select("id,photo_url").eq("email",email); postCount=(data||[]).length; photoCount=(data||[]).filter(x=>x.photo_url).length; }catch(e){}
     let cloud=[];
     try{ const {data}=await db.from("favorites").select("venue_id").eq("email",email); cloud=(data||[]).map(r=>r.venue_id); }catch(e){}
     const local=[...favSet];
@@ -1396,25 +1434,67 @@ const ASA = (function(){
       const pwi=el("asaPw"); if(pwi)pwi.onkeydown=(e)=>{if(e.key==="Enter")el("asaLoginBtn").click();};
       return;
     }
-    const points=favSet.size; const t=tierFor(points); const nt=nextTier(points);
-    const prog = nt ? Math.max(4,Math.round(((points - t.min)/(nt.min - t.min))*100)) : 100;
-    const name = session.display_name || session.email.split("@")[0];
-    const favs=favNames();
     box.innerHTML =
-      '<div class="mcard">'
-      +'<div class="mhead"><div class="mbadge">'+t.emoji+'</div><div><div class="mname">'+name+'</div><div class="memail">'+session.email+'</div></div></div>'
-      +'<div class="mstats"><div><b>'+t.name+'</b><span>Seviye</span></div><div><b>'+points+'</b><span>Puan</span></div><div><b>'+favSet.size+'</b><span>Favori</span></div></div>'
-      +(nt?'<div class="mprog"><div class="mprogbar"><i style="width:'+prog+'%"></i></div><div class="mprogtxt">'+nt.emoji+' <b>'+nt.name+'</b> seviyesine '+(nt.min-points)+' favori kaldı</div></div>':'<div class="mprogtxt">En üst seviyedesin 💎</div>')
-      +'<div class="mrow2"><input id="asaName" type="text" placeholder="Görünen adın" value="'+(session.display_name||"").replace(/"/g,"&quot;")+'"><button class="btn" id="asaNameBtn">Kaydet</button></div>'
-      +(favs.length?'<div class="mfavs"><div class="mfavh">Beğendiğin / kaydettiğin yerler ('+favs.length+')</div>'+favs.slice(0,40).map(n=>'<span class="mchip">❤ '+n+'</span>').join("")+'</div>':'<p class="asahint">Henüz favori yok. Mekanlar sekmesinden ❤ ekle; her favori seni bir üst seviyeye yaklaştırır.</p>')+'<div class="mfavs" id="mArchive"><div class="mfavh">Yorumların & fotoğrafların</div><div id="mArchiveBody" class="asahint">Yükleniyor…</div></div>'
-      +'<button class="btn" id="asaLogout" style="margin-top:12px">Çıkış yap</button>'
-      +'</div>';
-    el("asaNameBtn").onclick=()=>saveName(el("asaName").value);
+      '<div class="segnav">'+SEGS.map(s=>'<button class="segpill'+(curSeg===s[0]?" on":"")+'" onclick="ASA.seg(\''+s[0]+'\')">'+s[1]+'</button>').join("")+'</div>'
+      +'<div id="segBody"></div>'
+      +'<button class="btn" id="asaLogout" style="margin-top:16px">Çıkış yap</button>';
     el("asaLogout").onclick=()=>logout();
-    try{ if(window.loadMemberArchive) loadMemberArchive(session.email); }catch(e){}
+    renderSeg();
+  }
+  const SEGS=[["passport","Kart"],["points","Puan & Seviye"],["likes","Beğeniler"],["posts","Paylaşımlarım"],["taste","Zevk Grupları"]];
+  function seg(s){ curSeg=s; render(); }
+  function renderSeg(){
+    const b=el("segBody"); if(!b) return;
+    if(curSeg==="passport"){ b.innerHTML=passportHtml(); const nb=el("asaNameBtn"); if(nb)nb.onclick=()=>saveName(el("asaName").value); }
+    else if(curSeg==="points"){ b.innerHTML=pointsHtml(); }
+    else if(curSeg==="likes"){ b.innerHTML=likesHtml(); }
+    else if(curSeg==="posts"){ b.innerHTML=postsHtml(); loadPosts(); }
+    else if(curSeg==="taste"){ b.innerHTML=tasteHtml(); loadTaste(); }
+  }
+  function passportHtml(){
+    const t=tierFor(favSet.size);
+    const name=session.display_name||session.email.split("@")[0];
+    const since=(memberMeta&&memberMeta.created_at)?new Date(memberMeta.created_at).toLocaleDateString("tr-TR"):"—";
+    return '<div class="passport"><div class="pp-top"><div class="pp-badge">'+t.emoji+'</div><div class="pp-id"><div class="pp-name">'+esc(name)+'</div><div class="pp-mail">'+esc(session.email)+'</div></div><div class="pp-logo">asa<b>local</b></div></div>'
+      +'<div class="pp-row"><div><span>Seviye</span><b>'+t.name+'</b></div><div><span>Puan</span><b>'+favSet.size+'</b></div><div><span>Üye olma</span><b>'+since+'</b></div></div></div>'
+      +'<div class="seg-card"><div class="seg-h">Profil bilgilerin</div><div class="mrow2"><input id="asaName" type="text" placeholder="Görünen adın" value="'+(session.display_name||"").replace(/"/g,"&quot;")+'"><button class="btn" id="asaNameBtn">Kaydet</button></div><p class="asahint" style="margin-top:8px">Görünen adın yorumlarında ve zevk gruplarında görünür.</p></div>';
+  }
+  function pointsHtml(){
+    const points=favSet.size; const t=tierFor(points); const nt=nextTier(points);
+    const prog=nt?Math.max(4,Math.round(((points-t.min)/(nt.min-t.min))*100)):100;
+    const badge=(on,e,tx)=>'<span class="bdg'+(on?" on":"")+'">'+e+' '+tx+'</span>';
+    const badges=[badge(points>=1,"🌱","İlk kayıt"),badge(points>=5,"🏙️","Şehirli"),badge(points>=15,"🎨","Küratör"),badge(points>=30,"💎","Insider"),badge(postCount>0,"✍️","Yorumcu"),badge(photoCount>0,"📷","Fotoğrafçı")];
+    return '<div class="seg-card"><div class="mstats"><div><b>'+t.emoji+' '+t.name+'</b><span>Seviye</span></div><div><b>'+points+'</b><span>Puan</span></div></div>'
+      +(nt?'<div class="mprog"><div class="mprogbar"><i style="width:'+prog+'%"></i></div><div class="mprogtxt">'+nt.emoji+' <b>'+nt.name+'</b> seviyesine '+(nt.min-points)+' favori kaldı</div></div>':'<div class="mprogtxt">En üst seviyedesin 💎</div>')
+      +'<div class="tierlist">'+TIERS.map(x=>'<div class="tierrow'+(points>=x.min?" on":"")+'"><span>'+x.emoji+' '+x.name+'</span><b>'+x.min+'+ puan</b></div>').join("")+'</div></div>'
+      +'<div class="seg-card"><div class="seg-h">Rozetlerin</div><div class="badges2">'+badges.join("")+'</div></div>';
+  }
+  function likesHtml(){
+    const ids=[...favSet];
+    if(!ids.length) return '<div class="seg-card"><p class="asahint">Henüz bir yeri kaydetmedin. Mekanlar sekmesinden ya da 💬 panelinden ❤ ile ekle.</p></div>';
+    return '<div class="seg-card"><div class="seg-h">Kaydettiklerin ('+ids.length+')</div><div class="likelist">'+ids.map(id=>{const v=byId(id);const nm=v?v.name:id;const ar=v?v.area:"";return '<div class="likerow"><div class="lk-i" onclick="VEN.open(\''+id+'\')"><b>'+esc(nm)+'</b><span>'+esc(ar)+'</span></div><button class="lk-x" title="Kaldır" onclick="ASA.removeFav(\''+id+'\')">✕</button></div>';}).join("")+'</div></div>';
+  }
+  function removeFav(id){ try{toggleFav(id);}catch(e){} curSeg="likes"; render(); }
+  function postsHtml(){ return '<div class="seg-card"><div class="seg-h">Yorumların & fotoğrafların</div><div id="segPosts" class="asahint">Yükleniyor…</div></div>'; }
+  async function loadPosts(){
+    const e2=el("segPosts"); if(!e2)return; let list=[];
+    try{ const {data}=await db.from("comments").select("*").eq("email",session.email).order("created_at",{ascending:false}); list=data||[]; }catch(e){}
+    if(!list.length){ e2.innerHTML="Henüz yorum/fotoğraf yok. Bir mekanı açıp (💬 Yorum) yerli tüyonu bırak."; return; }
+    e2.innerHTML=list.map(c=>{const v=byId(c.venue_id);const nm=v?v.name:c.venue_id;return '<div class="march"><div class="marchh">📍 '+esc(nm)+' <button class="lk-x" style="float:right" title="Sil" onclick="ASA.delPost('+c.id+')">✕</button></div>'+(c.body?'<div class="marchb">'+esc(c.body)+'</div>':'')+(c.photo_url?'<img class="marchp" src="'+c.photo_url+'">':'')+'</div>';}).join("");
+  }
+  async function delPost(id){ try{ await db.from("comments").delete().eq("id",id).eq("email",session.email); }catch(e){} try{ const {data}=await db.from("comments").select("id,photo_url").eq("email",session.email); postCount=(data||[]).length; photoCount=(data||[]).filter(x=>x.photo_url).length; }catch(e){} loadPosts(); }
+  function tasteHtml(){ return '<div class="seg-card"><div class="seg-h">Zevk grupların</div><p class="asahint" style="margin-top:0">Ortak beğenilere göre sana en yakın üyeler. Onların kaydettiklerinden yeni yerler keşfet.</p><div id="segTaste">Hesaplanıyor…</div></div>'; }
+  async function loadTaste(){
+    const e2=el("segTaste"); if(!e2)return;
+    const my=[...favSet]; if(!my.length){ e2.innerHTML="Önce birkaç yer kaydet; sonra sana benzeyen üyeleri kümeleyelim."; return; }
+    let rows=[]; try{ const {data}=await db.from("favorites").select("email,venue_id").in("venue_id",my); rows=data||[]; }catch(e){}
+    const map={}; rows.forEach(r=>{ if(r.email===session.email)return; (map[r.email]=map[r.email]||[]).push(r.venue_id); });
+    const arr=Object.keys(map).map(em=>({email:em,shared:map[em]})).sort((a,b)=>b.shared.length-a.shared.length).slice(0,12);
+    if(!arr.length){ e2.innerHTML="Şu an ortak beğenisi olan başka üye yok. Sen ve arkadaşların kaydettikçe kümeler oluşacak."; return; }
+    e2.innerHTML=arr.map(x=>{const names=x.shared.map(id=>{const v=byId(id);return v?v.name:id;}).slice(0,6).join(", ");const masked=esc((x.email.split("@")[0]||"üye").slice(0,2))+"•••";const pct=Math.round(x.shared.length/my.length*100);return '<div class="tasterow"><div class="tm-h"><b>'+masked+'</b><span class="tm-c">'+x.shared.length+' ortak · %'+pct+' örtüşme</span></div><div class="tm-s">Ortak yerler: '+esc(names)+'</div></div>';}).join("");
   }
 
-  return { init, login, logout, onFav, saveName, render, get session(){return session;} };
+  return { init, login, logout, onFav, saveName, render, seg, removeFav, delPost, get session(){return session;} };
 })();
 try{window.ASA=ASA;}catch(e){}
 document.addEventListener("DOMContentLoaded",()=>{ try{ASA.init();}catch(e){} });
