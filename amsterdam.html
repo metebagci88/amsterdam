@@ -234,6 +234,41 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .gate-b{background:var(--accent);color:#fff;border:0;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
 .gate-b:hover{filter:brightness(1.05)}
 
+/* MEKAN MODALI + YORUMLAR */
+.vmodal{position:fixed;inset:0;background:rgba(30,25,15,.5);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;z-index:2000;padding:0}
+.vmodal.hide{display:none}
+.vsheet{background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:640px;max-height:92vh;overflow:auto;padding:20px 18px 30px;position:relative;box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+@media(min-width:700px){.vmodal{align-items:center}.vsheet{border-radius:20px;max-height:88vh}}
+.vclose{position:absolute;top:12px;right:14px;border:0;background:#f0ece3;width:32px;height:32px;border-radius:50%;font-size:16px;color:var(--ink2);cursor:pointer}
+.vhead h3{font-family:Georgia,serif;font-size:21px;margin:0 30px 4px 0}
+.vmeta{font-size:12.5px;color:var(--ink2)}
+.vtip{font-size:12.5px;color:#5a6b3f;background:#f2f5ea;border-radius:9px;padding:7px 10px;margin-top:8px}
+.vacts{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.vcomposer{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.vcomposer textarea{width:100%;box-sizing:border-box;min-height:70px;border:1px solid var(--line);border-radius:11px;padding:10px 12px;font-size:14px;font-family:inherit;background:#fbfaf7;color:var(--ink);resize:vertical}
+.vcrow{display:flex;align-items:center;gap:10px;margin-top:8px}
+.vphoto{font-size:13px;border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer;background:#fbfaf7;color:var(--ink)}
+.vpn{font-size:12px;color:var(--accent2);flex:1}
+.vlogin{font-size:13px;color:var(--ink2);line-height:1.6}
+.vlogin .btn{margin-top:6px}
+.vclist{margin-top:18px}
+.vch{font-size:12.5px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.vempty{font-size:13px;color:var(--ink2);background:#fbf9f4;border:1px dashed var(--line);border-radius:11px;padding:16px;text-align:center}
+.vc{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:#fff}
+.vcm{font-size:13.5px}
+.vct{font-size:11.5px;color:var(--ink2);margin-left:6px}
+.vcb{font-size:14px;margin-top:5px;line-height:1.5;color:var(--ink)}
+.vcp{max-width:100%;border-radius:10px;margin-top:8px;display:block}
+.vcr{display:flex;gap:8px;margin-top:9px}
+.vreact{border:1px solid var(--line);background:#fbfaf7;border-radius:99px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--ink)}
+.vreact.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.vreact.del{margin-left:auto;color:#b03a2e;border-color:#efd6d0;background:#fdf3f1}
+/* profil arşivi */
+.march{border:1px solid var(--line);border-radius:11px;padding:10px;margin-bottom:8px;background:#fff}
+.marchh{font-size:13px;font-weight:600;color:var(--ink)}
+.marchb{font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.45}
+.marchp{max-width:140px;border-radius:8px;margin-top:6px;display:block}
+
 </style>
 </head>
 <body>
@@ -420,6 +455,9 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 </nav>
 <div id="dayModal" class="daymodal hide" onclick="if(event.target===this)closeDay()">
   <div class="daysheet"><button class="dayclose" onclick="closeDay()">✕</button><div id="dayBody"></div></div>
+</div>
+<div id="venueModal" class="vmodal hide" onclick="if(event.target===this)closeVenue()">
+  <div class="vsheet"><button class="vclose" onclick="closeVenue()">✕</button><div id="venueBody"></div></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -716,9 +754,9 @@ document.querySelectorAll("#nav button").forEach(b=>{
  };
 });
 function go(v){document.querySelector('#nav button[data-v="'+v+'"]').click();}
-function isMember(){return !!(window.ASA&&ASA.session);}
+function isMember(){return !!(window.ASA&&window.ASA.session);}
 function gateCard(msg){return '<div class="gate"><div class="gate-i">🔒</div><div class="gate-t">'+(msg||"Devamı üyelere özel")+'</div><div class="gate-d">Ücretsiz üyelikle tüm sonuçları gör, favorilerini buluta kaydet, seviyeni yükselt.</div><button class="gate-b" onclick="go(\'member\')">Üye ol / Giriş yap</button></div>';}
-function refreshGated(){try{renderCards();}catch(e){}try{renderScenarios();}catch(e){}try{renderTrips();}catch(e){}}
+function refreshGated(){try{renderCards();}catch(e){}try{renderScenarios();}catch(e){}try{renderTrips();}catch(e){}try{var _d=document.getElementById("deOut");if(_d&&_d.innerHTML.trim()!=="")runDE();}catch(e){}}
 
 /* ===== DASHBOARD CTA ===== */
 const CTAS=[
@@ -864,6 +902,7 @@ function cardHtml(v){
    '<div class="actions">'+
      '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button>'+
      '<button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button>'+
+     '<button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button>'+
      (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
      (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 Instagram</button>':"")+
    '</div></div>';
@@ -912,6 +951,7 @@ function popupHtml(v){const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv
   (v.tip?'<div style="font-size:11px;color:#5a6b3f;margin-top:3px">💡 '+v.tip+'</div>':'')+
   '<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">'+
    '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button>'+
+   '<button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button>'+
    (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
    (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 IG</button>':"")+
   '</div></div>';}
@@ -1224,7 +1264,7 @@ function runDE(){
      '<div class="area">🏷️ '+(v.type||'')+(v.hours?' · ⏰ ~'+v.hours:'')+' · 📍 '+v.area+' · ≈'+km.toFixed(1)+' km · 🚲'+bikeMin(km)+' dk · <span class="'+r.c+'">'+r.t+'</span></div>'+
      '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
      (v.tip?'<div class="tip">💡 '+v.tip+'</div>':'')+
-     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button></div></div>';
+     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div></div>';
  }).join("")+((!_m&&_items.length>1)?gateCard((_items.length-1)+' alternatif daha üyelere özel'):"");
  document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
 }
@@ -1306,9 +1346,7 @@ const ASA = (function(){
     member={email,display_name:m.display_name,tier:t.name,points};
     session={email,display_name:m.display_name};
     saveSession();
-    try{renderCards();}catch(e){}
-    try{renderScenarios();}catch(e){}
-    try{renderTrips();}catch(e){}
+    try{refreshGated();}catch(e){}
     try{if(typeof MAP!=="undefined"&&MAP.map)drawMarkers();}catch(e){}
     render();
   }
@@ -1333,7 +1371,7 @@ const ASA = (function(){
     session.display_name=name; if(member)member.display_name=name; saveSession(); render();
   }
 
-  function logout(){ session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); try{renderCards();}catch(e){} try{renderScenarios();}catch(e){} try{renderTrips();}catch(e){} }
+  function logout(){ session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); try{refreshGated();}catch(e){} }
 
   function favNames(){
     try{ return [...favSet].map(id=>{const v=V.find(x=>x.id===id);return v?v.name:null;}).filter(Boolean); }catch(e){ return []; }
@@ -1368,11 +1406,12 @@ const ASA = (function(){
       +'<div class="mstats"><div><b>'+t.name+'</b><span>Seviye</span></div><div><b>'+points+'</b><span>Puan</span></div><div><b>'+favSet.size+'</b><span>Favori</span></div></div>'
       +(nt?'<div class="mprog"><div class="mprogbar"><i style="width:'+prog+'%"></i></div><div class="mprogtxt">'+nt.emoji+' <b>'+nt.name+'</b> seviyesine '+(nt.min-points)+' favori kaldı</div></div>':'<div class="mprogtxt">En üst seviyedesin 💎</div>')
       +'<div class="mrow2"><input id="asaName" type="text" placeholder="Görünen adın" value="'+(session.display_name||"").replace(/"/g,"&quot;")+'"><button class="btn" id="asaNameBtn">Kaydet</button></div>'
-      +(favs.length?'<div class="mfavs"><div class="mfavh">Favorilerin ('+favs.length+')</div>'+favs.slice(0,40).map(n=>'<span class="mchip">❤ '+n+'</span>').join("")+'</div>':'<p class="asahint">Henüz favori yok. Mekanlar sekmesinden ❤ ekle; her favori seni bir üst seviyeye yaklaştırır.</p>')
+      +(favs.length?'<div class="mfavs"><div class="mfavh">Beğendiğin / kaydettiğin yerler ('+favs.length+')</div>'+favs.slice(0,40).map(n=>'<span class="mchip">❤ '+n+'</span>').join("")+'</div>':'<p class="asahint">Henüz favori yok. Mekanlar sekmesinden ❤ ekle; her favori seni bir üst seviyeye yaklaştırır.</p>')+'<div class="mfavs" id="mArchive"><div class="mfavh">Yorumların & fotoğrafların</div><div id="mArchiveBody" class="asahint">Yükleniyor…</div></div>'
       +'<button class="btn" id="asaLogout" style="margin-top:12px">Çıkış yap</button>'
       +'</div>';
     el("asaNameBtn").onclick=()=>saveName(el("asaName").value);
     el("asaLogout").onclick=()=>logout();
+    try{ if(window.loadMemberArchive) loadMemberArchive(session.email); }catch(e){}
   }
 
   return { init, login, logout, onFav, saveName, render, get session(){return session;} };
@@ -1394,6 +1433,120 @@ if(document.readyState!=="loading"){ try{ASA.init();}catch(e){} }
     }
   }catch(e){}
 })();
+
+
+/* ===== MEKAN ETKİLEŞİMLERİ: yorum + fotoğraf + like/dislike (Aşama 3.5) ===== */
+const VEN=(function(){
+  const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"};
+  let db=null, curVenue=null, pendingPhoto=null;
+  try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
+  function sess(){ return (window.ASA&&window.ASA.session)?window.ASA.session:null; }
+  function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  function timeAgo(ts){ try{const d=new Date(ts);const s=(Date.now()-d.getTime())/1000; if(s<60)return "az önce"; if(s<3600)return Math.floor(s/60)+" dk önce"; if(s<86400)return Math.floor(s/3600)+" sa önce"; return Math.floor(s/86400)+" gün önce";}catch(e){return "";} }
+
+  function open(id){ const v=(typeof byId==="function")?byId(id):null; if(!v)return; curVenue=v; pendingPhoto=null; document.getElementById("venueModal").classList.remove("hide"); renderHead(v); loadComments(v.id); }
+  function close(){ document.getElementById("venueModal").classList.add("hide"); pendingPhoto=null; curVenue=null; }
+
+  function renderHead(v){
+    const s=sess();
+    let h='<div class="vhead"><h3>'+esc(v.name)+'</h3>'
+      +'<div class="vmeta">🏷️ '+esc(v.type||'')+(v.hours?' · ⏰ ~'+esc(v.hours):'')+' · 📍 '+esc(v.area)+'</div>'
+      +(v.tip?'<div class="vtip">💡 '+esc(v.tip)+'</div>':'')
+      +'<div class="vacts">'
+      +'<button class="btn" id="vFav" onclick="VEN.fav()">'+(isFav(v.id)?"❤️ Kayıtlı":"🤍 Kaydet")+'</button>'
+      +'<button class="btn" onclick="winopen(\''+gmaps(v)+'\')">📍 Google</button>'
+      +'<button class="btn" onclick="VEN.close();showOnMap(\''+v.id+'\')">🗺️ Haritada</button>'
+      +'</div></div>';
+    h+='<div class="vcomposer">';
+    if(s){
+      h+='<textarea id="vBody" placeholder="Bu mekan hakkında yorumun… yerli tüyosu, ne yedin/içtin, ne zaman gidilir?"></textarea>'
+        +'<div class="vcrow"><label class="vphoto">📷 Fotoğraf ekle<input type="file" accept="image/*" onchange="VEN.photo(event)" hidden></label><span id="vPhotoName" class="vpn"></span><button class="btn primary" id="vSend" onclick="VEN.post()">Gönder</button></div>';
+    } else {
+      h+='<div class="vlogin">Yorum yapmak, fotoğraf ve beğeni bırakmak için <button class="btn primary" onclick="VEN.close();go(\'member\')">üye ol / giriş yap</button></div>';
+    }
+    h+='</div><div class="vclist" id="vComments">Yorumlar yükleniyor…</div>';
+    document.getElementById("venueBody").innerHTML=h;
+  }
+
+  function fav(){ if(curVenue){ toggleFav(curVenue.id); const b=document.getElementById("vFav"); if(b)b.innerHTML=isFav(curVenue.id)?"❤️ Kayıtlı":"🤍 Kaydet"; } }
+
+  function photo(ev){ const f=ev.target.files&&ev.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=()=>{const img=new Image();img.onload=()=>{const mx=900;let w=img.width,h=img.height;if(w>mx){h=Math.round(h*mx/w);w=mx;}const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);pendingPhoto=cv.toDataURL("image/jpeg",0.7);var pn=document.getElementById("vPhotoName");if(pn)pn.textContent="✓ fotoğraf hazır";};img.src=rd.result;};rd.readAsDataURL(f); }
+
+  async function post(){
+    const s=sess(); if(!s||!db||!curVenue) return;
+    const body=(document.getElementById("vBody").value||"").trim();
+    if(!body && !pendingPhoto){ var pn=document.getElementById("vPhotoName"); if(pn)pn.textContent="Bir şeyler yaz ya da fotoğraf ekle."; return; }
+    const btn=document.getElementById("vSend"); if(btn){btn.disabled=true;btn.textContent="Gönderiliyor…";}
+    try{ await db.from("comments").insert([{venue_id:curVenue.id,city:"Amsterdam",email:s.email,display_name:s.display_name||s.email.split("@")[0],body:body,photo_url:pendingPhoto}]); }catch(e){}
+    pendingPhoto=null;
+    renderHead(curVenue);
+    loadComments(curVenue.id);
+  }
+
+  async function loadComments(vid){
+    const box=document.getElementById("vComments"); if(!box)return;
+    let comments=[], reactions=[];
+    try{ const {data}=await db.from("comments").select("*").eq("venue_id",vid).order("created_at",{ascending:false}); comments=data||[]; }catch(e){}
+    const ids=comments.map(c=>c.id);
+    if(ids.length){ try{ const {data}=await db.from("comment_reactions").select("*").in("comment_id",ids); reactions=data||[]; }catch(e){} }
+    renderComments(box, comments, reactions);
+  }
+
+  function renderComments(box, comments, reactions){
+    const s=sess();
+    if(!comments.length){ box.innerHTML='<div class="vempty">Henüz yorum yok. İlk yerli tüyosunu sen bırak.</div>'; return; }
+    box.innerHTML='<div class="vch">Yorumlar ('+comments.length+')</div>'+comments.map(c=>{
+      const likes=reactions.filter(r=>r.comment_id===c.id&&r.reaction==="like").length;
+      const dis=reactions.filter(r=>r.comment_id===c.id&&r.reaction==="dislike").length;
+      const mine=s?reactions.find(r=>r.comment_id===c.id&&r.email===s.email):null;
+      return '<div class="vc">'
+        +'<div class="vcm"><b>'+esc(c.display_name||"Üye")+'</b> <span class="vct">'+timeAgo(c.created_at)+'</span></div>'
+        +(c.body?'<div class="vcb">'+esc(c.body)+'</div>':'')
+        +(c.photo_url?'<img class="vcp" src="'+c.photo_url+'" alt="">':'')
+        +'<div class="vcr">'
+          +'<button class="vreact'+(mine&&mine.reaction==="like"?" on":"")+'" onclick="VEN.react('+c.id+',\'like\')">👍 '+likes+'</button>'
+          +'<button class="vreact'+(mine&&mine.reaction==="dislike"?" on":"")+'" onclick="VEN.react('+c.id+',\'dislike\')">👎 '+dis+'</button>'
+          +(s&&c.email===s.email?'<button class="vreact del" onclick="VEN.del('+c.id+')">🗑 Sil</button>':'')
+        +'</div></div>';
+    }).join("");
+  }
+
+  async function react(cid, r){
+    const s=sess(); if(!s){ close(); go("member"); return; } if(!db) return;
+    try{
+      const {data}=await db.from("comment_reactions").select("reaction").eq("comment_id",cid).eq("email",s.email).maybeSingle();
+      if(data&&data.reaction===r){ await db.from("comment_reactions").delete().eq("comment_id",cid).eq("email",s.email); }
+      else { await db.from("comment_reactions").upsert([{comment_id:cid,email:s.email,reaction:r}],{onConflict:"comment_id,email"}); }
+    }catch(e){}
+    if(curVenue) loadComments(curVenue.id);
+  }
+
+  async function del(cid){
+    const s=sess(); if(!s||!db)return;
+    try{ await db.from("comments").delete().eq("id",cid).eq("email",s.email); }catch(e){}
+    if(curVenue) loadComments(curVenue.id);
+  }
+
+  async function profileArchive(email){
+    if(!db) return {comments:[]};
+    try{ const {data}=await db.from("comments").select("*").eq("email",email).order("created_at",{ascending:false}); return {comments:data||[]}; }catch(e){ return {comments:[]}; }
+  }
+
+  return { open, close, fav, photo, post, react, del, profileArchive };
+})();
+function openVenue(id){VEN.open(id);}
+function closeVenue(){VEN.close();}
+
+async function loadMemberArchive(email){
+  const el=document.getElementById("mArchiveBody"); if(!el)return;
+  const {comments}=await VEN.profileArchive(email);
+  if(!comments.length){ el.innerHTML='Henüz yorum/fotoğraf yok. Bir mekanı açıp (💬 Yorum) yerli tüyonu bırak.'; return; }
+  el.innerHTML=comments.slice(0,40).map(c=>{
+    const v=(typeof byId==="function")?byId(c.venue_id):null; const nm=v?v.name:c.venue_id;
+    const b=(c.body||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    return '<div class="march"><div class="marchh">📍 '+nm+'</div>'+(b?'<div class="marchb">'+b+'</div>':'')+(c.photo_url?'<img class="marchp" src="'+c.photo_url+'">':'')+'</div>';
+  }).join("");
+}
 
 </script>
 </body>
