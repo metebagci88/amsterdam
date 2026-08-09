@@ -433,7 +433,7 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 
   <!-- PLAN -->
   <section class="view" id="v-cal">
-    <h2 class="section-title">20 günlük akış · 11–31 Temmuz</h2>
+    <h2 class="section-title" id="calTitle">Günlük akış</h2>
     <p class="section-sub">Bir güne tıkla → o günün sayfası açılır: pinlediğin (❤️) mekanlardan seç, plan notu yaz, fotoğraf ekle. Hepsi tarayıcında saklanır. Koyu günler hafta sonu kaçamağı için. (Üyelik gelince veriler hesabına taşınacak.)</p>
     <div class="cal" id="cal"></div>
   </section>
@@ -1129,24 +1129,44 @@ function escT(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").repla
 function saveLS(k,o){try{localStorage.setItem(k,JSON.stringify(o));}catch(e){alert("Depolama dolu olabilir (özellikle fotoğraflar). Bazı fotoğrafları silip tekrar dene.");}}
 function addPhoto(d,ev){const f=ev.target.files&&ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const mx=800;let w=img.width,h2=img.height;if(w>mx){h2=Math.round(h2*mx/w);w=mx;}const cv=document.createElement("canvas");cv.width=w;cv.height=h2;cv.getContext("2d").drawImage(img,0,0,w,h2);const data=cv.toDataURL("image/jpeg",0.7);(calPhotos[d]=calPhotos[d]||[]).push(data);saveLS("ams_calphoto",calPhotos);refreshDayUI();};img.src=rd.result;};rd.readAsDataURL(f);}
 function delPhoto(d,i){if(calPhotos[d]){calPhotos[d].splice(i,1);if(!calPhotos[d].length)delete calPhotos[d];saveLS("ams_calphoto",calPhotos);refreshDayUI();}}
+function buildCalDays(){
+ let trip=null; try{trip=JSON.parse(localStorage.getItem("asa_trip")||"null");}catch(e){}
+ const MON=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+ const arr=[];
+ if(trip&&trip.start_date&&trip.end_date){
+   const s=new Date(trip.start_date+"T00:00:00"), e=new Date(trip.end_date+"T00:00:00");
+   if(!isNaN(s)&&!isNaN(e)&&e>=s){
+     for(let dt=new Date(s); dt<=e; dt.setDate(dt.getDate()+1)){
+       var kk=dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+       arr.push({key:kk,label:dt.getDate()+" "+MON[dt.getMonth()],dow:DOW[dt.getDay()],weekend:(dt.getDay()===0||dt.getDay()===6)});
+     }
+     return {days:arr,title:arr.length+" günlük akış · "+arr[0].label+"–"+arr[arr.length-1].label,sample:false};
+   }
+ }
+ let n=0;
+ if(trip&&trip.duration_days) n=trip.duration_days;
+ else if(trip&&trip.duration){ const m={"2–3 gün":3,"4–6 gün":5,"1 hafta":7,"2 hafta+":14}; n=m[trip.duration]||5; }
+ const sample=!n; if(!n) n=5;
+ for(let i=1;i<=n;i++) arr.push({key:"g"+i,label:i+". gün",dow:"",weekend:false});
+ return {days:arr,title:n+" günlük akış"+(sample?" · örnek plan":""),sample:sample};
+}
+let CAL=buildCalDays();
+function dayInfo(k){return CAL.days.find(x=>x.key===k)||{key:k,label:String(k),dow:"",weekend:false};}
 function renderCal(){
  const cal=document.getElementById("cal");cal.innerHTML="";
- const today=new Date();
- for(let d=11;d<=31;d++){
-   const date=new Date(2026,6,d);const dn=DOW[date.getDay()];
-   const wk=WEEKEND.has(d);const p=PLANS[d]||{tag:"",txt:""};
-   const isToday=today.getFullYear()===2026&&today.getMonth()===6&&today.getDate()===d;
-   const planVal=(calPlans[d]!=null&&calPlans[d]!==""?calPlans[d]:p.txt);
-   const nSel=(dayVenues[d]||[]).length,nPh=(calPhotos[d]||[]).length,hasNote=!!(calNotes[d]&&calNotes[d].trim());
-   const el=document.createElement("div");el.className="day"+(wk?" weekend":"")+(isToday?" today":"");
-   el.innerHTML='<div class="dn">'+dn+'</div><div class="dd">'+d+' Tem</div>'+
-     '<span class="tag">'+p.tag+'</span>'+
+ const tt=document.getElementById("calTitle"); if(tt)tt.textContent=CAL.title;
+ CAL.days.forEach(D=>{
+   const key=D.key;
+   const planVal=(calPlans[key]!=null?calPlans[key]:"");
+   const nSel=(dayVenues[key]||[]).length,nPh=(calPhotos[key]||[]).length,hasNote=!!(calNotes[key]&&calNotes[key].trim());
+   const el=document.createElement("div");el.className="day"+(D.weekend?" weekend":"");
+   el.innerHTML='<div class="dn">'+D.dow+'</div><div class="dd">'+D.label+'</div>'+
      '<div class="plan">'+escT(planVal).replace(/\n/g," ").slice(0,90)+'</div>'+
      '<div class="daymeta">'+(nSel?'📍 '+nSel+' mekan':'')+(nPh?((nSel?' · ':'')+'📷 '+nPh):'')+(hasNote?' · 📝 not':'')+'</div>'+
      '<button class="dayopen">Aç / düzenle →</button>';
-   el.addEventListener("click",()=>openDay(d));
+   el.addEventListener("click",()=>openDay(key));
    cal.appendChild(el);
- }
+ });
 }
 function openDay(d){renderDay(d);const m=document.getElementById("dayModal");m.classList.remove("hide");window.scrollTo({top:0});}
 function closeDay(){const m=document.getElementById("dayModal");if(m)m.classList.add("hide");renderCal();}
@@ -1156,12 +1176,12 @@ function removeDayVenue(d,id){if(dayVenues[d]){dayVenues[d]=dayVenues[d].filter(
 function dayRoute(d){const list=(dayVenues[d]||[]).map(byId).filter(Boolean);if(list.length)winopen(gmapsRoute(list));}
 function renderDay(d){
  dayCur=d;
- const date=new Date(2026,6,d);const dn=DOW[date.getDay()];const p=PLANS[d]||{tag:"",txt:""};
+ const D=dayInfo(d);
  const sel=(dayVenues[d]||[]);
  const favs=V.filter(v=>v.city==="Amsterdam"&&isFav(v.id)&&sel.indexOf(v.id)<0);
- const planVal=(calPlans[d]!=null?calPlans[d]:p.txt);
+ const planVal=(calPlans[d]!=null?calPlans[d]:"");
  const phs=(calPhotos[d]||[]);
- let x='<h3 class="dh">'+d+' Temmuz · '+dn+'</h3><div class="dsub">'+p.tag+'</div>';
+ let x='<h3 class="dh">'+D.label+(D.dow?' · '+D.dow:'')+'</h3>';
  x+='<div class="day-sec"><div class="h">📍 Bugünün mekanları ('+sel.length+')</div>';
  if(sel.length){
    sel.forEach(id=>{const v=byId(id);if(!v)return;
@@ -1540,7 +1560,11 @@ if(document.readyState!=="loading"){ try{ASA.init();}catch(e){} }
     var el=document.getElementById("tripBanner");
     if(t&&el&&(t.city==="Amsterdam"||!t.city)){
       var vt=(t.vacation_types&&t.vacation_types.length)?t.vacation_types.join(", "):null;
-      el.innerHTML="🧭 Planın: <b>Amsterdam</b>"+(t.duration?" · "+t.duration:"")+(vt?" · "+vt:"");
+      var dstr=null;
+      if(t.start_date&&t.end_date){ var MO=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"]; var s=new Date(t.start_date+"T00:00:00"),e=new Date(t.end_date+"T00:00:00"); if(!isNaN(s)&&!isNaN(e)){ dstr=s.getDate()+" "+MO[s.getMonth()]+"–"+e.getDate()+" "+MO[e.getMonth()]; } }
+      else if(t.approx_period){ dstr=t.approx_period; }
+      var durTxt=(t.duration_days?t.duration_days+" gün":(t.duration||null));
+      el.innerHTML="🧭 Planın: <b>Amsterdam</b>"+(dstr?" · "+dstr:"")+(durTxt?" · "+durTxt:"")+(vt?" · "+vt:"");
       el.classList.remove("hide");
     }
   }catch(e){}

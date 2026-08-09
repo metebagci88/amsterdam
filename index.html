@@ -99,6 +99,13 @@ footer{color:var(--ink2);font-size:12px;text-align:center;padding:30px 0 40px}
 @media(min-width:1024px){ .only-desktop{display:inline-block} .only-mobile{display:none} }
 #adMasthead:empty{display:none}
 
+
+.daterow{display:flex;gap:10px;flex-wrap:wrap}
+.datefld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink2);font-weight:600;flex:1;min-width:140px}
+.datefld input{border:1px solid var(--line);background:#fbfaf7;border-radius:11px;padding:11px 12px;font-size:15px;color:var(--ink);font-family:inherit}
+.dunk{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:13.5px;color:var(--ink);cursor:pointer}
+.dunk input{width:16px;height:16px}
+
 </style>
 </head>
 <body>
@@ -130,8 +137,19 @@ footer{color:var(--ink2);font-size:12px;text-align:center;padding:30px 0 40px}
       <div class="chips" id="cityChips"></div>
     </div>
     <div class="step">
-      <div class="lbl">3 · Ne kadar kalacaksın?</div>
+      <div class="lbl">3 · Tarihler & süre</div>
+      <div class="daterow">
+        <label class="datefld">Gidiş<input type="date" id="dStart"></label>
+        <label class="datefld">Dönüş<input type="date" id="dEnd"></label>
+      </div>
+      <label class="dunk"><input type="checkbox" id="dUnknown"> Tarihlerim henüz belli değil</label>
+      <div id="approxWrap" style="display:none">
+        <div class="lbl" style="margin-top:12px">Yaklaşık dönem</div>
+        <div class="chips" id="approxChips"></div>
+      </div>
+      <div class="lbl" style="margin-top:12px">Süre</div>
       <div class="chips" id="durChips"></div>
+      <div class="gonote" id="dInfo"></div>
     </div>
     <div class="step">
       <div class="lbl">4 · Nasıl bir tatil? <span style="font-weight:400;text-transform:none;letter-spacing:0">(birden fazla seçebilirsin)</span></div>
@@ -193,7 +211,7 @@ const DURATIONS=["2–3 gün","4–6 gün","1 hafta","2 hafta+"];
 const TYPES=["Gastronomi","Kültür & sanat","Gece hayatı","Doğa & yürüyüş","Alışveriş","Rahat & dinlence","Romantik","Aile"];
 
 let db=null, session=null;
-let sel={country:null,city:null,active:false,duration:null,types:new Set()};
+let sel={country:null,city:null,active:false,duration:null,durationDays:null,startDate:null,endDate:null,approx:null,types:new Set()};
 
 try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
 try{ session=JSON.parse(localStorage.getItem("asa_session")||"null"); }catch(e){ session=null; }
@@ -229,7 +247,7 @@ function renderDur(){
     const b=document.createElement("div");
     b.className="chip"+(sel.duration===d?" sel":"");
     b.textContent=d;
-    b.onclick=()=>{ sel.duration=d; renderDur(); };
+    b.onclick=()=>{ sel.duration=(sel.duration===d?null:d); renderDur(); updateDInfo(); };
     $("durChips").appendChild(b);
   });
 }
@@ -242,6 +260,27 @@ function renderTypes(){
     b.onclick=()=>{ sel.types.has(t)?sel.types.delete(t):sel.types.add(t); renderTypes(); };
     $("typeChips").appendChild(b);
   });
+}
+const DURMAP={"2–3 gün":3,"4–6 gün":5,"1 hafta":7,"2 hafta+":14};
+const APPROX=["Bu ay","Gelecek ay","İki hafta içinde"];
+function renderApprox(){
+  $("approxChips").innerHTML="";
+  APPROX.forEach(a=>{ const b=document.createElement("div"); b.className="chip"+(sel.approx===a?" sel":""); b.textContent=a; b.onclick=()=>{ sel.approx=(sel.approx===a?null:a); renderApprox(); updateDInfo(); }; $("approxChips").appendChild(b); });
+}
+function daysBetween(a,b){ const s=new Date(a+"T00:00:00"),e=new Date(b+"T00:00:00"); if(isNaN(s)||isNaN(e)||e<s)return null; return Math.round((e-s)/86400000)+1; }
+function updateDInfo(){
+  const info=$("dInfo");
+  if(sel.startDate&&sel.endDate){ const n=daysBetween(sel.startDate,sel.endDate); if(n){ sel.durationDays=n; info.textContent="Seçilen: "+n+" gün ("+(n-1)+" gece)"; } else { sel.durationDays=null; info.textContent="Dönüş, gidişten önce olamaz."; } }
+  else if(sel.duration){ sel.durationDays=DURMAP[sel.duration]||null; info.textContent=""; }
+  else { info.textContent=""; }
+}
+function wireDates(){
+  renderApprox();
+  const ds=$("dStart"), de=$("dEnd"), un=$("dUnknown");
+  const today=new Date().toISOString().slice(0,10); if(ds)ds.min=today;
+  ds.onchange=()=>{ sel.startDate=ds.value||null; if(ds.value)de.min=ds.value; if(de.value&&de.value<ds.value)de.value=""; sel.endDate=de.value||null; updateDInfo(); };
+  de.onchange=()=>{ sel.endDate=de.value||null; updateDInfo(); };
+  un.onchange=()=>{ if(un.checked){ ds.value="";de.value="";sel.startDate=null;sel.endDate=null;sel.durationDays=null; $("approxWrap").style.display="block"; $("daterowWrap")&&0; document.querySelector(".daterow").style.opacity=".4"; ds.disabled=true;de.disabled=true; } else { $("approxWrap").style.display="none"; document.querySelector(".daterow").style.opacity="1"; ds.disabled=false;de.disabled=false; sel.approx=null; renderApprox(); } updateDInfo(); };
 }
 function updateGo(){
   const go=$("goBtn"), note=$("goNote");
@@ -263,9 +302,9 @@ function renderDests(){
 
 async function saveTrip(navigate){
   const c=COUNTRIES.find(x=>x.code===sel.country);
-  const trip={country:c?c.name:null,city:sel.city,duration:sel.duration,vacation_types:[...sel.types]};
+  const trip={country:c?c.name:null,city:sel.city,duration:sel.duration,duration_days:sel.durationDays,start_date:sel.startDate,end_date:sel.endDate,approx_period:sel.approx,vacation_types:[...sel.types]};
   try{ localStorage.setItem("asa_trip",JSON.stringify(trip)); }catch(e){}
-  if(db){ try{ await db.from("trips").insert([{email:session?session.email:null,country:trip.country,city:trip.city,duration:trip.duration,vacation_types:trip.vacation_types}]); }catch(e){} }
+  if(db){ try{ await db.from("trips").insert([{email:session?session.email:null,country:trip.country,city:trip.city,duration:trip.duration,duration_days:trip.duration_days,start_date:trip.start_date,end_date:trip.end_date,approx_period:trip.approx_period,vacation_types:trip.vacation_types}]); }catch(e){} }
   if(navigate){ location.href="amsterdam.html"; }
 }
 $("goBtn").onclick=async()=>{
@@ -322,7 +361,7 @@ $("acctBtn").onclick=openAuth;
 $("authX").onclick=closeAuth;
 $("authModal").onclick=e=>{ if(e.target===$("authModal")) closeAuth(); };
 
-renderCountries(); renderDur(); renderTypes(); renderDests(); renderAcct(); updateGo();
+renderCountries(); renderDur(); renderTypes(); renderDests(); renderAcct(); wireDates(); updateGo();
 (async function loadAds(){
   if(!db) return;
   let ads=[];
