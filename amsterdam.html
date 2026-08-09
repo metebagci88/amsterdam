@@ -40,19 +40,19 @@ nav.tabs button.active{color:var(--accent)}
 .view.active{display:block}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
-.section-title{font-size:22px;margin:22px 0 4px}
+.section-title{font-size:26px;margin:24px 0 4px;letter-spacing:-.01em}
 .section-sub{color:var(--ink2);font-size:13.5px;margin:0 0 16px}
 
-.hero{background:linear-gradient(135deg,#2f3a2c,#54493a);color:#f4efe6;border-radius:var(--r);padding:22px;margin:16px 0;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.hero h2{font-size:21px;color:#fff}
-.hero p{margin:8px 0 0;font-size:13.5px;color:#e3dccd;max-width:640px}
-.hero .pill{display:inline-block;margin-top:14px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);padding:6px 12px;border-radius:999px;font-size:12px}
+.hero{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:var(--r);padding:26px;margin:16px 0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero h2{font-size:28px;color:var(--ink);font-weight:600}
+.hero p{margin:10px 0 0;font-size:14.5px;color:var(--ink2);max-width:640px;line-height:1.6}
+.hero .pill{display:inline-block;margin-top:16px;background:#f3e6e8;border:1px solid #e7ccd1;color:var(--accent);padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600}
 .grid-cta{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0}
 @media(min-width:680px){.grid-cta{grid-template-columns:repeat(3,1fr)}}
 .cta{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;text-align:left;box-shadow:var(--shadow);transition:.15s}
 .cta:hover{transform:translateY(-2px);border-color:var(--accent)}
 .cta .e{font-size:20px}
-.cta .l{font-weight:700;font-size:13.5px;margin-top:6px}
+.cta .l{font-family:"Fraunces",serif;font-weight:600;font-size:15px;margin-top:8px}
 .cta .d{font-size:11.5px;color:var(--ink2);margin-top:2px}
 
 .scenarios{display:grid;grid-template-columns:1fr;gap:12px}
@@ -75,14 +75,17 @@ select.sel,button.sel{border:1px solid var(--line);border-radius:999px;padding:8
 .chips{display:flex;gap:7px;overflow-x:auto;padding:10px 0 4px;-webkit-overflow-scrolling:touch}
 .chips::-webkit-scrollbar{height:0}
 .chip{white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:999px;padding:7px 13px;font-size:12.5px;cursor:pointer;font-weight:600;flex:0 0 auto}
-.chip.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .chip.fav.active{background:var(--fav);border-color:var(--fav)}
 .count{font-size:12px;color:var(--ink2);margin:10px 0}
 
 .cards{display:grid;grid-template-columns:1fr;gap:13px;margin-bottom:24px}
 @media(min-width:620px){.cards{grid-template-columns:repeat(2,1fr)}}
 @media(min-width:920px){.cards{grid-template-columns:repeat(3,1fr)}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative;overflow:hidden;transition:.16s}
+.card:hover{transform:translateY(-2px);box-shadow:0 8px 26px rgba(40,35,25,.10)}
+.cimg{height:158px;background:#ddd6c7 center/cover no-repeat;position:relative}
+.cbody{padding:16px;display:flex;flex-direction:column}
 .card .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
 .card h3{font-size:16.5px;line-height:1.25;padding-right:6px}
 .card .area{font-size:11.5px;color:var(--ink2);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
@@ -102,7 +105,7 @@ select.sel,button.sel{border:1px solid var(--line);border-radius:999px;padding:8
 .btn{flex:1;min-width:96px;text-align:center;border:1px solid var(--line);border-radius:10px;padding:9px 8px;font-size:12px;font-weight:700;color:var(--ink);background:var(--card);cursor:pointer;font-family:inherit}
 .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .btn.ghost{background:var(--bg2)}
-.heart{position:absolute;top:14px;right:14px;font-size:18px;cursor:pointer;background:none;border:0;line-height:1;opacity:.85}
+.heart{position:absolute;top:12px;right:12px;font-size:16px;cursor:pointer;background:rgba(255,253,248,.94);border:0;line-height:1;width:34px;height:34px;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.18);z-index:2}
 .resv{font-size:11.5px;font-weight:700}
 .resv.req{color:#b4523f}.resv.rec{color:#9a6a1e}.resv.no{color:#5a7a36}
 .linklike{border:0;background:none;color:var(--accent);font-size:11.5px;font-weight:600;cursor:pointer;padding:0;font-family:inherit}
@@ -948,6 +951,27 @@ function currentList(){
  else list.sort((a,b)=>{const s=x=>(isFav(x.id)?-4:0)+(x.src==="user"?-2:0)+(x.conf==="high"?-1:0);return s(a)-s(b);});
  return list;
 }
+const CATIMG={
+ coffee:"https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=520&q=65&auto=format&fit=crop",
+ food:"https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=520&q=65&auto=format&fit=crop",
+ wine:"https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=520&q=65&auto=format&fit=crop",
+ brunch:"https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=520&q=65&auto=format&fit=crop",
+ bar:"https://images.unsplash.com/photo-1436076863939-06870fe779c2?w=520&q=65&auto=format&fit=crop",
+ park:"https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=520&q=65&auto=format&fit=crop",
+ culture:"https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=520&q=65&auto=format&fit=crop",
+ shop:"https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=520&q=65&auto=format&fit=crop"
+};
+function venueImg(v){
+ const t=((v.tags||[]).join(" ")+" "+(v.cats||[]).join(" ")+" "+(v.type||"")).toLowerCase();
+ if(/kahve|coffee|kafe|kavurucu/.test(t))return CATIMG.coffee;
+ if(/şarap|sarap|wine|natürel|naturel/.test(t))return CATIMG.wine;
+ if(/kahvaltı|kahvalti|brunch/.test(t))return CATIMG.brunch;
+ if(/bira|bar|kokteyl|cocktail/.test(t))return CATIMG.bar;
+ if(/park|doğa|doga|yürüyüş|yuruyus/.test(t))return CATIMG.park;
+ if(/müze|muze|kültür|kultur|sanat|galeri/.test(t))return CATIMG.culture;
+ if(/mağaza|magaza|alışveriş|alisveris|konsept|dükkan|dukkan/.test(t))return CATIMG.shop;
+ return CATIMG.food;
+}
 function cardHtml(v){
  const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
  const badges=[];
@@ -956,7 +980,8 @@ function cardHtml(v){
  if(v.conf==="low")badges.push('<span class="badge warn">kontrol et</span>');
  (v.tags||v.best||[]).slice(0,3).forEach(b=>badges.push('<span class="badge">'+b+'</span>'));
  return '<div class="card">'+
-   '<button class="heart" onclick="toggleFav(\''+v.id+'\')">'+(isFav(v.id)?"❤️":"🤍")+'</button>'+
+   '<div class="cimg" style="background-image:url(\''+venueImg(v)+'\')"><button class="heart" onclick="toggleFav(\''+v.id+'\')">'+(isFav(v.id)?"❤️":"🤍")+'</button></div>'+
+   '<div class="cbody">'+
    '<div class="top"><div><h3>'+v.name+'</h3>'+
    '<div class="area">🏷️ '+(v.type||'')+(v.hours?' · ⏰ ~'+v.hours:'')+' · 📍 '+v.area+(c.approx?' · <span title="Mahalle merkezine yaklaşık">~konum</span>':'')+
    ' · <span class="dist">'+(km<100?("≈"+km.toFixed(1)+" km · 🚲"+bikeMin(km)+" dk"):"")+'</span></div></div></div>'+
@@ -971,7 +996,7 @@ function cardHtml(v){
      '<button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button>'+
      (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
      (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 Instagram</button>':"")+
-   '</div></div>';
+   '</div></div></div>';
 }
 function renderCards(){
  const list=currentList();
