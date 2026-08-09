@@ -336,6 +336,55 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .ad-decision h4{font-family:"Fraunces",Georgia,serif;font-size:16px;margin:2px 0 4px}
 #adMasthead:empty,#adCityBanner:empty,#adMekanlar:empty,#adKarar:empty,#adPlan:empty{display:none}
 
+
+/* ===== EDITORIAL (Stitch · Urban Heritage Modernism) OVERRIDE ===== */
+body{background:var(--bg)}
+main.wrap{max-width:1120px;padding:0 24px 116px}
+header.app{background:rgba(244,241,234,.9)}
+.hbar{padding:16px 24px;max-width:1120px}
+.brand .t{font-size:23px;letter-spacing:.2px}
+.section-title{font-family:"Fraunces",serif;font-size:30px;font-weight:600;letter-spacing:-.015em;margin:44px 0 6px;color:var(--ink)}
+.section-sub{font-size:14px;color:var(--ink2);margin:0 0 22px;max-width:600px;line-height:1.55}
+.hero{padding:34px;margin:26px 0 6px}
+.hero h2{font-size:clamp(26px,4vw,34px);line-height:1.1}
+.hero p{font-size:15px}
+.tripbanner{padding:11px 24px;font-size:13px}
+.grid-cta{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin:24px 0}
+.cta{padding:18px;border-radius:14px}
+.cta .e{font-size:22px}
+.scenarios{gap:18px}
+.scn{padding:22px 24px;border-radius:16px}
+.scn h3{font-size:20px;font-weight:600}
+.scn .meta{font-size:11px;letter-spacing:1px;margin:6px 0 14px}
+.chips{gap:9px;padding:14px 0 6px}
+.chip{padding:9px 15px;font-size:13px;background:#fff;color:var(--ink);font-weight:500;border-color:var(--line)}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip.fav.active{background:var(--accent);border-color:var(--accent)}
+.count{font-size:12.5px;margin:16px 0 4px;letter-spacing:.2px}
+.cards{gap:24px}
+.cimg{height:170px}
+.card h3{font-family:"Fraunces",serif;font-size:20px;font-weight:600}
+.cbody{padding:18px}
+.tagline{font-size:14px;color:var(--ink);margin-top:9px;line-height:1.55}
+.tip{margin-top:11px}
+.actions{margin-top:13px;gap:8px}
+.btn{border-radius:10px;padding:10px 12px;font-size:12.5px;font-weight:600}
+.de-out{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;align-items:start}
+.de-res{overflow:hidden;padding:0;border-left:0;border-radius:16px}
+.deimg{height:132px;background:#ddd6c7 center/cover no-repeat}
+.debody{padding:16px 18px}
+.de-res .role{color:var(--accent);font-weight:800}
+.de-res h4{font-size:19px}
+nav.tabs{background:rgba(255,253,248,.97);border-top:1px solid var(--line);padding:9px 6px env(safe-area-inset-bottom)}
+nav.tabs button{font-size:10.5px;font-weight:600;color:var(--ink2)}
+nav.tabs button .ic{font-size:19px}
+nav.tabs button.active{color:var(--accent)}
+.vsheet{max-width:680px}
+.vhero{height:210px;background:#ddd6c7 center/cover no-repeat;border-radius:18px 18px 0 0;margin:-20px -18px 18px}
+.vhead h3{font-size:26px}
+.gate{border:1px dashed var(--accent);border-radius:16px}
+.gate-b{background:var(--accent)}
 </style>
 </head>
 <body>
@@ -360,8 +409,8 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
       <p>Rembrandtpark’taki dairen merkez. Klasik turist değil, lokal yaşam modundasın: iyi kahve, güzel öğle yemeği, bisikletle keşif, akşam şarabı. Aşağıdan hızlı seç ya da “Karar” sekmesinden sana özel öneri al.</p>
       <span class="pill" id="heroLoc">📍 Referans konum: Rembrandtpark</span>
     </div>
-    <div id="adCityBanner"></div>
     <div class="grid-cta" id="ctaGrid"></div>
+    <div id="adCityBanner"></div>
     <h2 class="section-title">Günlük senaryo rotaları</h2>
     <p class="section-sub">Her biri 3–6 duraklı. “Haritada rota” ile Google Maps’te sırayla açılır.</p>
     <div class="scenarios" id="scnGrid"></div>
@@ -1371,12 +1420,12 @@ function runDE(){
    ["Rezervasyonsuz alternatif",walk?walk.v:null],["Daha lokal alternatif",lokal?lokal.v:null]];
  let _items=out.filter(o=>o[1]);const _m=isMember();document.getElementById("deOut").innerHTML=(_m?_items:_items.slice(0,1)).map(o=>{
    const v=o[1];const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
-   return '<div class="de-res"><div class="role">'+o[0]+'</div>'+
+   return '<div class="de-res"><div class="deimg" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="debody"><div class="role">'+o[0]+'</div>'+
      '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
      '<div class="area">🏷️ '+(v.type||'')+(v.hours?' · ⏰ ~'+v.hours:'')+' · 📍 '+v.area+' · ≈'+km.toFixed(1)+' km · 🚲'+bikeMin(km)+' dk · <span class="'+r.c+'">'+r.t+'</span></div>'+
      '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
      (v.tip?'<div class="tip">💡 '+v.tip+'</div>':'')+
-     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div></div>';
+     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div></div></div>';
  }).join("")+((!_m&&_items.length>1)?gateCard((_items.length-1)+' alternatif daha üyelere özel'):"");
  document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
 }
@@ -1610,7 +1659,7 @@ const VEN=(function(){
 
   function renderHead(v){
     const s=sess();
-    let h='<div class="vhead"><h3>'+esc(v.name)+'</h3>'
+    let h='<div class="vhero" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="vhead"><h3>'+esc(v.name)+'</h3>'
       +'<div class="vmeta">🏷️ '+esc(v.type||'')+(v.hours?' · ⏰ ~'+esc(v.hours):'')+' · 📍 '+esc(v.area)+'</div>'
       +(v.tip?'<div class="vtip">💡 '+esc(v.tip)+'</div>':'')
       +'<div class="vacts">'
