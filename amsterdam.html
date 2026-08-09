@@ -226,6 +226,14 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .tripbanner{padding:7px 16px;font-size:12.5px;color:#5a4a2a;background:linear-gradient(90deg,#fbf3e4,#f6ecd8);border-top:1px solid #eaddc2}
 .tripbanner b{color:#4a3a1a}
 
+
+.gate{border:1px dashed var(--accent);background:linear-gradient(180deg,#fbf6ee,#f6efe3);border-radius:16px;padding:22px;text-align:center;margin-top:6px}
+.gate-i{font-size:26px}
+.gate-t{font-family:Georgia,serif;font-size:17px;font-weight:600;margin-top:6px;color:var(--ink)}
+.gate-d{font-size:13px;color:var(--ink2);margin:6px auto 14px;max-width:360px;line-height:1.5}
+.gate-b{background:var(--accent);color:#fff;border:0;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
+.gate-b:hover{filter:brightness(1.05)}
+
 </style>
 </head>
 <body>
@@ -708,6 +716,9 @@ document.querySelectorAll("#nav button").forEach(b=>{
  };
 });
 function go(v){document.querySelector('#nav button[data-v="'+v+'"]').click();}
+function isMember(){return !!(window.ASA&&ASA.session);}
+function gateCard(msg){return '<div class="gate"><div class="gate-i">🔒</div><div class="gate-t">'+(msg||"Devamı üyelere özel")+'</div><div class="gate-d">Ücretsiz üyelikle tüm sonuçları gör, favorilerini buluta kaydet, seviyeni yükselt.</div><button class="gate-b" onclick="go(\'member\')">Üye ol / Giriş yap</button></div>';}
+function refreshGated(){try{renderCards();}catch(e){}try{renderScenarios();}catch(e){}try{renderTrips();}catch(e){}}
 
 /* ===== DASHBOARD CTA ===== */
 const CTAS=[
@@ -754,7 +765,9 @@ function stopHtml(v,i){if(!v)return"";
   '<button class="linklike" onclick="winopen(\''+gmaps(v)+'\')">Maps’te aç →</button></div></div>';}
 function renderScenarios(){
  const g=document.getElementById("scnGrid");g.innerHTML="";
- SCN.forEach(s=>{
+ const _m=isMember();
+ SCN.forEach((s,si)=>{
+   if(!_m&&si>=1)return;
    const vs=s.stops.map(byId).filter(Boolean);
    const el=document.createElement("div");el.className="scn";
    el.innerHTML='<h3>'+s.t+'</h3><div class="meta">'+s.m+' · '+vs.length+' durak</div>'+
@@ -762,6 +775,7 @@ function renderScenarios(){
      '<button class="route-btn" onclick="winopen(\''+gmapsRoute(vs)+'\')">🗺️ Haritada rota</button>';
    g.appendChild(el);
  });
+ if(!_m&&SCN.length>1){const gg=document.createElement("div");gg.style.gridColumn="1/-1";gg.innerHTML=gateCard((SCN.length-1)+' rota daha üyelere özel');g.appendChild(gg);}
 }
 function openScenario(id){go("pano");const el=document.getElementById("scnGrid");
  const idx=SCN.findIndex(s=>s.id===id);
@@ -856,8 +870,11 @@ function cardHtml(v){
 }
 function renderCards(){
  const list=currentList();
- document.getElementById("cards").innerHTML=list.map(cardHtml).join("")||
-   '<div class="note" style="grid-column:1/-1">Bu filtrelerle sonuç yok. Bir filtreyi kaldır.</div>';
+ let _h;
+ if(!list.length){_h='<div class="note" style="grid-column:1/-1">Bu filtrelerle sonuç yok. Bir filtreyi kaldır.</div>';}
+ else if(!isMember()){_h=cardHtml(list[0])+'<div style="grid-column:1/-1">'+gateCard((list.length-1)+' mekan daha üyelere özel')+'</div>';}
+ else{_h=list.map(cardHtml).join("");}
+ document.getElementById("cards").innerHTML=_h;
  document.getElementById("count").textContent=list.length+" mekan"+
    (document.getElementById("fSort").value==="dist"?(" · "+(userLoc?"konumuna":"Rembrandtpark’a")+" göre sıralı"):"");
  syncChips();
@@ -1065,6 +1082,12 @@ function renderDay(d){
 
 /* ===== WEEKEND ===== */
 function renderTrips(){
+ if(!isMember()){
+   document.getElementById("tripReco").innerHTML='<div class="reco"><h3>Hafta sonu kaçamakları</h3><p>Antwerp, Brüksel ve Brugge için tren süreleri, lokal kalınacak mahalleler ve saatlik günübirlik planlar — hepsi üyelere özel.</p></div>'+gateCard('Hafta sonu planlarının tamamı üyelere özel');
+   var _c=document.getElementById("cmp");if(_c)_c.innerHTML="";
+   ["antwerpPlan","brusselsPlan","brugesPlan"].forEach(function(id){var e=document.getElementById(id);if(e)e.innerHTML="";});
+   return;
+ }
  document.getElementById("tripReco").innerHTML='<div class="reco">'+
    '<h3>Önerim</h3>'+
    '<p><b>1. hafta sonu (18–19 Tem): Antwerp.</b> En güçlü aday — hızlı direkt tren (≈1s15), olağanüstü yeme-içme/kahve/natürel şarap ve birebir senin sevdiğin yürünebilir mahalleler (Zurenborg, Zuid). 1 gece için ideal, yormaz.</p>'+
@@ -1194,15 +1217,15 @@ function runDE(){
  const lokal=cands.find(x=>(x.v.src==="extra"||x.v.src==="deck")&&x.v.id!==best.id);
  const out=[["En iyi seçenek",best],["Yakın alternatif",near],["Favori alternatif",fav?fav.v:null],
    ["Rezervasyonsuz alternatif",walk?walk.v:null],["Daha lokal alternatif",lokal?lokal.v:null]];
- document.getElementById("deOut").innerHTML=out.filter(o=>o[1]).map(o=>{
+ let _items=out.filter(o=>o[1]);const _m=isMember();document.getElementById("deOut").innerHTML=(_m?_items:_items.slice(0,1)).map(o=>{
    const v=o[1];const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
    return '<div class="de-res"><div class="role">'+o[0]+'</div>'+
      '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
      '<div class="area">🏷️ '+(v.type||'')+(v.hours?' · ⏰ ~'+v.hours:'')+' · 📍 '+v.area+' · ≈'+km.toFixed(1)+' km · 🚲'+bikeMin(km)+' dk · <span class="'+r.c+'">'+r.t+'</span></div>'+
      '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
      (v.tip?'<div class="tip">💡 '+v.tip+'</div>':'')+
-     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button></div></div>';
- }).join("");
+     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button></div></div>';
+ }).join("")+((!_m&&_items.length>1)?gateCard((_items.length-1)+' alternatif daha üyelere özel'):"");
  document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
 }
 
@@ -1284,6 +1307,8 @@ const ASA = (function(){
     session={email,display_name:m.display_name};
     saveSession();
     try{renderCards();}catch(e){}
+    try{renderScenarios();}catch(e){}
+    try{renderTrips();}catch(e){}
     try{if(typeof MAP!=="undefined"&&MAP.map)drawMarkers();}catch(e){}
     render();
   }
@@ -1308,7 +1333,7 @@ const ASA = (function(){
     session.display_name=name; if(member)member.display_name=name; saveSession(); render();
   }
 
-  function logout(){ session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); }
+  function logout(){ session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); try{renderCards();}catch(e){} try{renderScenarios();}catch(e){} try{renderTrips();}catch(e){} }
 
   function favNames(){
     try{ return [...favSet].map(id=>{const v=V.find(x=>x.id===id);return v?v.name:null;}).filter(Boolean); }catch(e){ return []; }
