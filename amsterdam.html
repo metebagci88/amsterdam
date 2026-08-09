@@ -10,8 +10,8 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
 :root{
-  --bg:#faf9f6; --bg2:#f4f3f1; --card:#ffffff; --ink:#1a1c1a; --ink2:#464840;
-  --line:#dcdcd3; --line2:#c6c7bd; --accent:#a63936; --accent2:#272e1b; --gold:#8a6a2f;
+  --bg:#fcf9f5; --bg2:#f0edea; --scl:#f6f3ef; --card:#ffffff; --ink:#1c1c1a; --ink2:#464840;
+  --title:#131908; --line:#e5e2de; --line2:#c6c7bd; --accent:#a63936; --accent2:#272e1b; --gold:#8a6a2f;
   --terra:#a63936; --saffron:#8a6a2f; --tertiary:#4f1b00;
   --fav:#a63936; --blue:#3f5a6b; --teal:#4f6b62; --green:#5c6b3f; --purple:#6f5a7a;
   --shadow:0 1px 2px rgba(26,28,26,.04), 0 6px 20px rgba(26,28,26,.04);
@@ -100,12 +100,17 @@ select.sel:hover,button.sel:hover{border-color:var(--accent2)}
 .cimg{aspect-ratio:16/10;border-radius:var(--r);background:#e7e4db center/cover no-repeat;position:relative;transition:transform .18s;box-shadow:var(--shadow)}
 .cbody{padding:14px 2px 0;display:flex;flex-direction:column}
 .card .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
-.kicker{font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink2);margin-bottom:6px}
-.card h3{font-size:22px;line-height:1.15;padding-right:6px;letter-spacing:-.01em}
-.card .area{font-size:12.5px;color:var(--ink2);margin-top:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.kicker{font-size:11px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;color:var(--ink2);margin-bottom:6px}
+.card h3{font-size:20px;line-height:1.2;padding-right:6px;letter-spacing:-.01em;color:var(--title)}
+.cloc{font-size:13px;color:var(--ink2);margin-top:5px;display:flex;align-items:center;gap:5px}
+.cloc .msym{font-size:16px;color:var(--ink2)}
+.card .area{font-size:13px;color:var(--ink2);margin-top:8px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .card .area .mi{display:inline-flex;align-items:center;gap:5px}
-.card .area .mi .msym{font-size:17px;color:var(--ink2)}
-.tagline{font-size:14px;line-height:1.5;color:var(--ink2);margin:8px 0 10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .area .mi .msym{font-size:16px;color:var(--ink2)}
+.tagline{font-size:14px;line-height:1.5;color:var(--ink);margin:8px 0 10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cnote{background:var(--scl);border-radius:8px;padding:12px 14px;margin:10px 0;display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.5;color:var(--ink2)}
+.cnote .msym{font-size:18px;color:var(--accent2);margin-top:1px;flex:none}
+.cnote b{color:var(--ink)}
 .badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 .badge{font-size:10.5px;padding:3px 8px;border-radius:999px;background:var(--bg2);color:var(--ink2);font-weight:600}
 .badge.src-user{background:#e7eef4;color:#3f6383}
@@ -1021,22 +1026,23 @@ function cardHtml(v){
  if(isWork(v))badges.push('<span class="badge work">💻 Çalışma</span>');
  if(v.conf==="low")badges.push('<span class="badge warn">kontrol et</span>');
  (v.tags||v.best||[]).slice(0,3).forEach(b=>badges.push('<span class="badge">'+b+'</span>'));
- const kick=((v.type||'')+(v.area?' · '+v.area:'')).replace(/^ · /,'');
- const distTxt=(km<100)?('≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk bisiklet'):'';
+ const kick=(v.type||'').toUpperCase();
+ const distTxt=(km<100)?('≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk'):'';
+ const noteTxt=v.tip||v.note||'';
  return '<div class="card">'+
    '<div class="cimg" style="background-image:url(\''+venueImg(v)+'\')"><button class="heart" onclick="event.stopPropagation();toggleFav(\''+v.id+'\')"><span class="msym">'+(isFav(v.id)?"favorite":"favorite_border")+'</span></button></div>'+
    '<div class="cbody">'+
    '<div class="kicker">'+kick+'</div>'+
    '<h3>'+v.name+'</h3>'+
    '<div class="tagline">'+v.desc+'</div>'+
+   '<div class="cloc"><span class="msym">location_on</span>'+(v.area||'')+(c.approx?' · ~konum':'')+'</div>'+
    '<div class="area">'+
-     (distTxt?'<span class="mi"><span class="msym">directions_bike</span>'+distTxt+'</span>':'')+
-     '<span class="mi"><span class="msym">place</span>'+(v.area||'')+(v.hours?' · '+v.hours:'')+(c.approx?' · ~konum':'')+'</span>'+
+     (distTxt?'<span class="mi"><span class="msym">pedal_bike</span>'+distTxt+'</span>':'')+
+     (v.hours?'<span class="mi"><span class="msym">schedule</span>'+v.hours+'</span>':'')+
    '</div>'+
-   (v.tip?'<div class="tip">💡 '+v.tip+'</div>':'')+
+   (noteTxt?'<div class="cnote"><span class="msym">chat_bubble</span><span>'+noteTxt+'</span></div>':'')+
    '<div class="badges">'+badges.join("")+'</div>'+
    '<div class="resv '+r.c+'">'+r.t+'</div>'+
-   (v.note?'<div class="note" style="margin-top:9px">'+v.note+'</div>':'')+
    '<div class="actions">'+
      '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')"><span class="msym" style="font-size:16px;vertical-align:-3px">place</span> Google</button>'+
      '<button class="btn" onclick="showOnMap(\''+v.id+'\')">Haritada</button>'+
