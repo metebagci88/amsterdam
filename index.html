@@ -195,6 +195,31 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 .pickrow .px span{font-size:11px;color:var(--ink2)}
 .pickrow button{border:1px solid var(--accent);color:var(--accent);background:none;border-radius:8px;font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer;white-space:nowrap}
 .daymodal textarea{width:100%;border:1px solid var(--line);border-radius:10px;font-size:13px;padding:9px;font-family:inherit;background:var(--card);min-height:72px;resize:vertical}
+
+/* ÜYELİK */
+#v-member .mcard{background:var(--card,#fff);border:1px solid var(--line,#e7e2d9);border-radius:16px;padding:18px;box-shadow:0 6px 20px rgba(30,25,15,.06);max-width:560px}
+#v-member .mrow{margin-bottom:10px}
+#v-member .mrow input,#v-member .mrow2 input{width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line,#e0dacf);border-radius:11px;font-size:15px;background:#fbfaf7;color:var(--ink,#2a251d)}
+#v-member .mrow2{display:flex;gap:8px;align-items:center}
+#v-member .mrow2 input{flex:1}
+.asaerr{color:#b03a2e;font-size:13px;min-height:16px;margin-bottom:6px}
+.asahint{font-size:12.5px;color:var(--ink2,#8a8172);margin:12px 0 0;line-height:1.5}
+.mhead{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.mbadge{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;background:linear-gradient(135deg,#f3ead7,#e7d9be);border:1px solid #e4d6bb;flex:none}
+.mname{font-weight:700;font-size:18px;color:var(--ink,#2a251d)}
+.memail{font-size:12.5px;color:var(--ink2,#8a8172)}
+.mstats{display:flex;gap:10px;text-align:center;margin-bottom:14px}
+.mstats>div{flex:1;background:#fbf9f4;border:1px solid var(--line,#eee6d8);border-radius:12px;padding:10px 6px}
+.mstats b{display:block;font-size:16px;color:var(--ink,#2a251d)}
+.mstats span{font-size:11px;color:var(--ink2,#8a8172);text-transform:uppercase;letter-spacing:.4px}
+.mprog{margin-bottom:6px}
+.mprogbar{height:9px;background:#eee6d8;border-radius:99px;overflow:hidden}
+.mprogbar i{display:block;height:100%;background:linear-gradient(90deg,#caa46a,#b98a3e);border-radius:99px;transition:width .4s}
+.mprogtxt{font-size:12.5px;color:var(--ink2,#8a8172);margin-top:6px}
+.mfavs{margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#eee6d8)}
+.mfavh{font-size:12.5px;font-weight:600;color:var(--ink2,#8a8172);margin-bottom:8px}
+.mchip{display:inline-block;font-size:12px;background:#fbf3e6;border:1px solid #ecdcc0;color:#7a5a2a;border-radius:99px;padding:4px 9px;margin:0 5px 6px 0}
+
 </style>
 </head>
 <body>
@@ -357,6 +382,12 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
     </div>
   </section>
 
+  <section class="view" id="v-member">
+    <h2 class="section-title">Üyelik</h2>
+    <p class="section-sub">E-posta + ortak şifre ile giriş yap; favorilerin buluta kaydolsun, profilin ve seviyen oluşsun. Seviyeler: 🧭 Kaşif · 🏙️ Şehirli · 🎨 Küratör · 💎 Insider.</p>
+    <div id="memberBody"></div>
+  </section>
+
 </main>
 
 <nav class="tabs" id="nav">
@@ -367,12 +398,14 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
   <button data-v="trip"><span class="ic">🚆</span>Hafta sonu</button>
   <button data-v="de"><span class="ic">🎯</span>Karar</button>
   <button data-v="notes"><span class="ic">📝</span>Notlar</button>
+  <button data-v="member"><span class="ic">👤</span>Üye</button>
 </nav>
 <div id="dayModal" class="daymodal hide" onclick="if(event.target===this)closeDay()">
   <div class="daysheet"><button class="dayclose" onclick="closeDay()">✕</button><div id="dayBody"></div></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===== referans noktaları ===== */
 const HOME={lat:52.3680,lng:4.8470,name:"Rembrandtpark"};
@@ -649,7 +682,8 @@ V.forEach(v=>{if(v.fav)favSet.add(v.id);});
 function isFav(id){return favSet.has(id);}
 function toggleFav(id){if(favSet.has(id))favSet.delete(id);else favSet.add(id);
  try{localStorage.setItem("ams_fav",JSON.stringify([...favSet]));}catch(e){}
- renderCards();if(MAP.map)drawMarkers();}
+ renderCards();if(MAP.map)drawMarkers();
+ if(window.ASA){ASA.onFav(id,favSet.has(id));}}
 
 /* ===== NAV ===== */
 document.querySelectorAll("#nav button").forEach(b=>{
@@ -1181,6 +1215,137 @@ document.getElementById("checkList").innerHTML=CHECKS.map(c=>'<li>'+c+'</li>').j
 
 /* ===== INIT ===== */
 populateSelectors();populateRefSels();buildChips();renderScenarios();renderCards();renderCal();renderTrips();buildDE();
+
+/* ===== ÜYELİK (Aşama 2) ===== */
+const ASA = (function(){
+  const CFG = {
+    url: "https://tosqsabuaomgqjtogdrn.supabase.co",
+    key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0",
+    pw:  "asalocal2026"
+  };
+  const TIERS = [
+    {name:"Kaşif",   min:0,  emoji:"🧭"},
+    {name:"Şehirli", min:5,  emoji:"🏙️"},
+    {name:"Küratör", min:15, emoji:"🎨"},
+    {name:"Insider", min:30, emoji:"💎"}
+  ];
+  let db=null, session=null, member=null, inited=false;
+  function tierFor(p){let t=TIERS[0];for(const x of TIERS){if(p>=x.min)t=x;}return t;}
+  function nextTier(p){for(const x of TIERS){if(p<x.min)return x;}return null;}
+  function saveSession(){try{localStorage.setItem("asa_session",JSON.stringify(session));}catch(e){}}
+  function loadSession(){try{session=JSON.parse(localStorage.getItem("asa_session")||"null");}catch(e){session=null;}}
+  function el(id){return document.getElementById(id);}
+
+  async function init(){
+    if(inited) return; inited=true;
+    loadSession();
+    try{ if(window.supabase&&window.supabase.createClient){ db=window.supabase.createClient(CFG.url,CFG.key); } }catch(e){}
+    render();
+    if(session&&db){ try{ await syncOnLogin(session.email,true); }catch(e){} }
+  }
+
+  async function login(email,pw){
+    email=(email||"").trim().toLowerCase();
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return {ok:false,msg:"Geçerli bir e-posta gir."};
+    if(pw!==CFG.pw) return {ok:false,msg:"Şifre yanlış."};
+    if(!db) return {ok:false,msg:"Bağlantı kurulamadı, sayfayı yenile."};
+    try{
+      await db.from("members").upsert({email},{onConflict:"email",ignoreDuplicates:true});
+      await syncOnLogin(email,false);
+      return {ok:true};
+    }catch(e){ return {ok:false,msg:"Sunucu hatası, tekrar dene."}; }
+  }
+
+  async function syncOnLogin(email, silent){
+    let m=null;
+    try{ const {data}=await db.from("members").select("*").eq("email",email).maybeSingle(); m=data; }catch(e){}
+    if(!m){ m={email,display_name:null,tier:"Kaşif",points:0}; }
+    let cloud=[];
+    try{ const {data}=await db.from("favorites").select("venue_id").eq("email",email); cloud=(data||[]).map(r=>r.venue_id); }catch(e){}
+    const local=[...favSet];
+    const union=new Set([...cloud,...local]);
+    const toAdd=local.filter(id=>!cloud.includes(id)).map(id=>({email,venue_id:id,city:"Amsterdam"}));
+    if(toAdd.length){ try{ await db.from("favorites").upsert(toAdd,{onConflict:"email,venue_id",ignoreDuplicates:true}); }catch(e){} }
+    favSet=new Set(union);
+    try{localStorage.setItem("ams_fav",JSON.stringify([...favSet]));}catch(e){}
+    const points=favSet.size; const t=tierFor(points);
+    try{ await db.from("members").update({points,tier:t.name,updated_at:new Date().toISOString()}).eq("email",email); }catch(e){}
+    member={email,display_name:m.display_name,tier:t.name,points};
+    session={email,display_name:m.display_name};
+    saveSession();
+    try{renderCards();}catch(e){}
+    try{if(typeof MAP!=="undefined"&&MAP.map)drawMarkers();}catch(e){}
+    render();
+  }
+
+  async function onFav(id, added){
+    if(!session||!db) { render(); return; }
+    const email=session.email;
+    try{
+      if(added){ await db.from("favorites").upsert([{email,venue_id:id,city:"Amsterdam"}],{onConflict:"email,venue_id",ignoreDuplicates:true}); }
+      else { await db.from("favorites").delete().eq("email",email).eq("venue_id",id); }
+    }catch(e){}
+    const points=favSet.size; const t=tierFor(points);
+    if(member){member.points=points;member.tier=t.name;}
+    try{ await db.from("members").update({points,tier:t.name,updated_at:new Date().toISOString()}).eq("email",email); }catch(e){}
+    render();
+  }
+
+  async function saveName(name){
+    if(!session||!db) return;
+    name=(name||"").trim().slice(0,40);
+    try{ await db.from("members").update({display_name:name,updated_at:new Date().toISOString()}).eq("email",session.email); }catch(e){}
+    session.display_name=name; if(member)member.display_name=name; saveSession(); render();
+  }
+
+  function logout(){ session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); }
+
+  function favNames(){
+    try{ return [...favSet].map(id=>{const v=V.find(x=>x.id===id);return v?v.name:null;}).filter(Boolean); }catch(e){ return []; }
+  }
+
+  function render(){
+    const box=el("memberBody"); if(!box) return;
+    if(!session){
+      box.innerHTML =
+        '<div class="mcard">'
+        +'<div class="mrow"><input id="asaEmail" type="email" placeholder="E-posta adresin" autocomplete="email"></div>'
+        +'<div class="mrow"><input id="asaPw" type="password" placeholder="Ortak şifre" autocomplete="off"></div>'
+        +'<div id="asaErr" class="asaerr"></div>'
+        +'<button class="btn primary" id="asaLoginBtn" style="width:100%">Giriş yap</button>'
+        +'<p class="asahint">E-posta seni diğer üyelerden ayırır; ortak şifre giriş kapısıdır. Girince favorilerin buluta kaydolur ve tüm cihazlarında görünür.</p>'
+        +'</div>';
+      el("asaLoginBtn").onclick=async()=>{
+        const b=el("asaLoginBtn"); b.disabled=true; b.textContent="Giriş yapılıyor…"; el("asaErr").textContent="";
+        const r=await login(el("asaEmail").value, el("asaPw").value);
+        if(!r.ok){ el("asaErr").textContent=r.msg; b.disabled=false; b.textContent="Giriş yap"; }
+      };
+      const pwi=el("asaPw"); if(pwi)pwi.onkeydown=(e)=>{if(e.key==="Enter")el("asaLoginBtn").click();};
+      return;
+    }
+    const points=favSet.size; const t=tierFor(points); const nt=nextTier(points);
+    const prog = nt ? Math.max(4,Math.round(((points - t.min)/(nt.min - t.min))*100)) : 100;
+    const name = session.display_name || session.email.split("@")[0];
+    const favs=favNames();
+    box.innerHTML =
+      '<div class="mcard">'
+      +'<div class="mhead"><div class="mbadge">'+t.emoji+'</div><div><div class="mname">'+name+'</div><div class="memail">'+session.email+'</div></div></div>'
+      +'<div class="mstats"><div><b>'+t.name+'</b><span>Seviye</span></div><div><b>'+points+'</b><span>Puan</span></div><div><b>'+favSet.size+'</b><span>Favori</span></div></div>'
+      +(nt?'<div class="mprog"><div class="mprogbar"><i style="width:'+prog+'%"></i></div><div class="mprogtxt">'+nt.emoji+' <b>'+nt.name+'</b> seviyesine '+(nt.min-points)+' favori kaldı</div></div>':'<div class="mprogtxt">En üst seviyedesin 💎</div>')
+      +'<div class="mrow2"><input id="asaName" type="text" placeholder="Görünen adın" value="'+(session.display_name||"").replace(/"/g,"&quot;")+'"><button class="btn" id="asaNameBtn">Kaydet</button></div>'
+      +(favs.length?'<div class="mfavs"><div class="mfavh">Favorilerin ('+favs.length+')</div>'+favs.slice(0,40).map(n=>'<span class="mchip">❤ '+n+'</span>').join("")+'</div>':'<p class="asahint">Henüz favori yok. Mekanlar sekmesinden ❤ ekle; her favori seni bir üst seviyeye yaklaştırır.</p>')
+      +'<button class="btn" id="asaLogout" style="margin-top:12px">Çıkış yap</button>'
+      +'</div>';
+    el("asaNameBtn").onclick=()=>saveName(el("asaName").value);
+    el("asaLogout").onclick=()=>logout();
+  }
+
+  return { init, login, logout, onFav, saveName, render, get session(){return session;} };
+})();
+try{window.ASA=ASA;}catch(e){}
+document.addEventListener("DOMContentLoaded",()=>{ try{ASA.init();}catch(e){} });
+if(document.readyState!=="loading"){ try{ASA.init();}catch(e){} }
+
 </script>
 </body>
 </html>
