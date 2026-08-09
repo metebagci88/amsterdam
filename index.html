@@ -1128,10 +1128,23 @@ function deScore(v){
  if(isFav(v.id))s+=0.6;if(v.src==="user")s+=0.4;if(v.conf==="low")s-=0.6;
  s+=Math.random()*0.3;return s;
 }
+function modeMatch(v){
+ const m=deSel.mode;
+ if(m==="Çalışmak")return isWork(v);
+ if(m==="Kahve")return hasTag(v,"kahve")||hasTag(v,"kahvaltı")||hasTag(v,"brunch");
+ if(m==="Yemek")return v.cats.includes("restoran")||hasTag(v,"akşam")||hasTag(v,"öğlen");
+ if(m==="İçki")return hasTag(v,"şarap")||v.cats.includes("wine bar")||v.cats.includes("bar")||hasTag(v,"gece");
+ if(m==="Yürüyüş"||m==="Park")return hasTag(v,"park")||v.cats.includes("park");
+ if(m==="Alışveriş")return v.cats.includes("mağaza")||hasTag(v,"mağaza");
+ return true;
+}
 function runDE(){
- const cands=V.filter(v=>v.city==="Amsterdam").map(v=>({v,s:deScore(v)})).sort((a,b)=>b.s-a.s);
+ let pool=V.filter(v=>v.city==="Amsterdam"&&modeMatch(v));
+ if(pool.length<2)pool=V.filter(v=>v.city==="Amsterdam");
+ const cands=pool.map(v=>({v,s:deScore(v)})).sort((a,b)=>b.s-a.s);
  const best=cands[0].v;
- const near=[...cands].sort((a,b)=>distKm(a.v)-distKm(b.v)).find(x=>x.v.id!==best.id).v;
+ const nearC=[...cands].sort((a,b)=>distKm(a.v)-distKm(b.v)).find(x=>x.v.id!==best.id);
+ const near=nearC?nearC.v:null;
  const fav=cands.find(x=>isFav(x.v.id)&&x.v.id!==best.id);
  const walk=cands.find(x=>x.v.resv==="no"&&x.v.id!==best.id);
  const lokal=cands.find(x=>(x.v.src==="extra"||x.v.src==="deck")&&x.v.id!==best.id);
