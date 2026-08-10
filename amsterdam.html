@@ -1560,13 +1560,17 @@ function mapDbVenue(r){
    fav:false, active:(r.active!==false)
  };
 }
+let _dbVenues=null;
 async function mergeDbVenues(){
+ window.__mv={t:Date.now()};
  try{
-   if(!(window.supabase&&window.supabase.createClient))return;
-   const _db=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0");
-   const {data}=await _db.from("venues").select("*");
+   if(!(window.supabase&&window.supabase.createClient)){window.__mv.err="no-supabase";return;}
+   if(!_dbVenues){_dbVenues=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0");}
+   const _db=_dbVenues;
+   const res=await _db.from("venues").select("*");
+   const data=res.data; window.__mv.err=res.error?res.error.message:null; window.__mv.rows=data?data.length:0;
    if(!data||!data.length)return;
-   let changed=false;
+   let changed=false, photoN=0;
    data.forEach(r=>{
      if(!r||!r.id)return;
      const i=V.findIndex(x=>x.id===r.id);
@@ -1576,20 +1580,24 @@ async function mergeDbVenues(){
        ["photo_url","name","area","type","hours","web","ig","tip","desc","note"].forEach(k=>{ if(src[k]!==""&&src[k]!=null) V[i][k]=src[k]; });
        if(Array.isArray(r.tags)&&r.tags.length)V[i].tags=r.tags;
        if(Array.isArray(r.cats)&&r.cats.length)V[i].cats=r.cats;
+       if(src.photo_url)photoN++;
        changed=true;
      } else if(r.active!==false){
        // yeni mekan: uygulamaya ekle
-       V.push(mapDbVenue(r)); changed=true;
+       const nv=mapDbVenue(r); V.push(nv); if(nv.photo_url)photoN++; changed=true;
      }
    });
+   window.__mv.photoN=photoN; window.__mv.changed=changed;
    if(changed){
      try{populateSelectors();}catch(e){}
      try{renderCards();}catch(e){}
      try{if(typeof drawMarkers==="function"&&MAP&&MAP.map)drawMarkers();}catch(e){}
    }
- }catch(e){}
+ }catch(e){ window.__mv.ex=(e&&e.message)||String(e); }
 }
 mergeDbVenues();
+document.addEventListener("DOMContentLoaded",function(){ setTimeout(mergeDbVenues,300); });
+setTimeout(mergeDbVenues,2000);
 
 /* ===== ÜYELİK (Aşama 2) ===== */
 const ASA = (function(){
