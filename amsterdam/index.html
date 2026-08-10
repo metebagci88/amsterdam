@@ -230,7 +230,10 @@ footer{padding:20px 0 30px;text-align:center;font-size:11.5px;color:var(--ink2)}
 /* ÜYELİK */
 #v-member .mcard{background:var(--card,#fff);border:1px solid var(--line,#e7e2d9);border-radius:16px;padding:18px;box-shadow:0 6px 20px rgba(30,25,15,.06);max-width:560px}
 #v-member .mrow{margin-bottom:10px}
-#v-member .mrow input,#v-member .mrow2 input{width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line,#e0dacf);border-radius:11px;font-size:15px;background:#fbfaf7;color:var(--ink,#2a251d)}
+#v-member .mrow input,#v-member .mrow2 input,#v-member .mrow select{width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid var(--line,#e0dacf);border-radius:11px;font-size:15px;background:#fbfaf7;color:var(--ink,#2a251d);font-family:inherit}
+#v-member .authtabs{display:flex;gap:8px;margin-bottom:14px}
+#v-member .authtab{flex:1;padding:10px;border:1px solid var(--line2,#c6c7bd);background:var(--card,#fff);border-radius:10px;font-size:14px;font-weight:600;color:var(--ink2,#464840);cursor:pointer;font-family:inherit}
+#v-member .authtab.on{background:var(--accent2,#272e1b);color:#fff;border-color:var(--accent2,#272e1b)}
 #v-member .mrow2{display:flex;gap:8px;align-items:center}
 #v-member .mrow2 input{flex:1}
 .asaerr{color:#b03a2e;font-size:13px;min-height:16px;margin-bottom:6px}
@@ -1632,7 +1635,8 @@ const ASA = (function(){
     {name:"Küratör", min:15, emoji:"🎨"},
     {name:"Insider", min:30, emoji:"💎"}
   ];
-  let db=null, session=null, member=null, inited=false, curSeg="passport", memberMeta=null, postCount=0, photoCount=0;
+  let db=null, session=null, member=null, inited=false, curSeg="passport", memberMeta=null, postCount=0, photoCount=0, authMode="login";
+  function setAuthMode(m){ authMode=m; render(); }
   function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function tierFor(p){let t=TIERS[0];for(const x of TIERS){if(p>=x.min)t=x;}return t;}
   function nextTier(p){for(const x of TIERS){if(p<x.min)return x;}return null;}
@@ -1642,23 +1646,48 @@ const ASA = (function(){
 
   async function init(){
     if(inited) return; inited=true;
-    loadSession();
     try{ if(window.supabase&&window.supabase.createClient){ db=window.supabase.createClient(CFG.url,CFG.key); } }catch(e){}
     render();
-    if(session&&db){ try{ await syncOnLogin(session.email,true); }catch(e){} }
+    if(db){
+      try{ const {data}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ await afterAuth(data.session.user); } }catch(e){}
+    }
+  }
+  function mapAuthErr(e){ const m=((e&&e.message)||"").toLowerCase();
+    if(m.indexOf("invalid login")>-1||m.indexOf("invalid credentials")>-1) return "E-posta veya şifre hatalı.";
+    if(m.indexOf("already")>-1) return "Bu e-posta zaten kayıtlı. ‘Giriş yap’ ile devam et.";
+    if(m.indexOf("password")>-1) return "Şifre en az 6 karakter olmalı.";
+    if(m.indexOf("email")>-1&&(m.indexOf("valid")>-1||m.indexOf("format")>-1)) return "Geçerli bir e-posta gir.";
+    return (e&&e.message)||"Bir hata oluştu, tekrar dene."; }
+  async function afterAuth(user){
+    const email=((user&&user.email)||"").toLowerCase();
+    if(!email) return {ok:false,msg:"Oturum alınamadı."};
+    try{ await db.from("members").upsert({email},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
+    try{ const {data:mrow}=await db.from("members").select("blocked").eq("email",email).maybeSingle(); if(mrow&&mrow.blocked){ try{await db.auth.signOut();}catch(e){} session=null;member=null;render(); return {ok:false,msg:"Bu hesap engellendi. Erişimin kısıtlı."}; } }catch(e){}
+    await syncOnLogin(email,false);
+    return {ok:true};
   }
 
-  async function login(email,pw){
+  async function login(email,password){
     email=(email||"").trim().toLowerCase();
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return {ok:false,msg:"Geçerli bir e-posta gir."};
-    if(pw!==CFG.pw) return {ok:false,msg:"Şifre yanlış."};
+    if(!password) return {ok:false,msg:"Şifreni gir."};
     if(!db) return {ok:false,msg:"Bağlantı kurulamadı, sayfayı yenile."};
-    try{
-      await db.from("members").upsert({email},{onConflict:"email",ignoreDuplicates:true});
-      try{ const {data:mrow}=await db.from("members").select("blocked").eq("email",email).maybeSingle(); if(mrow&&mrow.blocked) return {ok:false,msg:"Bu hesap engellendi. Erişimin kısıtlı."}; }catch(e){}
-      await syncOnLogin(email,false);
-      return {ok:true};
-    }catch(e){ return {ok:false,msg:"Sunucu hatası, tekrar dene."}; }
+    const {data,error}=await db.auth.signInWithPassword({email,password});
+    if(error) return {ok:false,msg:mapAuthErr(error)};
+    return await afterAuth(data.user);
+  }
+  async function signup(email,password,gender,city){
+    email=(email||"").trim().toLowerCase();
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return {ok:false,msg:"Geçerli bir e-posta gir."};
+    if(!password||password.length<6) return {ok:false,msg:"Şifre en az 6 karakter olmalı."};
+    if(!gender) return {ok:false,msg:"Cinsiyet alanı zorunlu."};
+    if(!city||!city.trim()) return {ok:false,msg:"Şehir alanı zorunlu."};
+    if(!db) return {ok:false,msg:"Bağlantı kurulamadı, sayfayı yenile."};
+    const {data,error}=await db.auth.signUp({email,password,options:{data:{gender,home_city:city.trim()}}});
+    if(error) return {ok:false,msg:mapAuthErr(error)};
+    try{ await db.from("members").upsert({email,gender,home_city:city.trim(),display_name:email.split("@")[0]},{onConflict:"email"}); }catch(e){}
+    if(data&&data.session&&data.user){ return await afterAuth(data.user); }
+    return {ok:false,info:true,msg:"Kayıt alındı. E-postana gelen doğrulama bağlantısına tıkla, sonra ‘Giriş yap’."};
   }
 
   async function syncOnLogin(email, silent){
@@ -1706,7 +1735,7 @@ const ASA = (function(){
     session.display_name=name; if(member)member.display_name=name; saveSession(); render();
   }
 
-  function logout(){ session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); try{refreshGated();}catch(e){} }
+  async function logout(){ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); try{refreshGated();}catch(e){} }
 
   function favNames(){
     try{ return [...favSet].map(id=>{const v=V.find(x=>x.id===id);return v?v.name:null;}).filter(Boolean); }catch(e){ return []; }
@@ -1715,20 +1744,29 @@ const ASA = (function(){
   function render(){
     const box=el("memberBody"); if(!box) return;
     if(!session){
-      box.innerHTML =
-        '<div class="mcard">'
+      const su=(authMode==="signup");
+      let h='<div class="mcard">'
+        +'<div class="authtabs"><button class="authtab'+(su?"":" on")+'" onclick="ASA.setAuthMode(\'login\')">Giriş yap</button><button class="authtab'+(su?" on":"")+'" onclick="ASA.setAuthMode(\'signup\')">Kayıt ol</button></div>'
         +'<div class="mrow"><input id="asaEmail" type="email" placeholder="E-posta adresin" autocomplete="email"></div>'
-        +'<div class="mrow"><input id="asaPw" type="password" placeholder="Ortak şifre" autocomplete="off"></div>'
-        +'<div id="asaErr" class="asaerr"></div>'
-        +'<button class="btn primary" id="asaLoginBtn" style="width:100%">Giriş yap</button>'
-        +'<p class="asahint">E-posta seni diğer üyelerden ayırır; ortak şifre giriş kapısıdır. Girince favorilerin buluta kaydolur ve tüm cihazlarında görünür.</p>'
+        +'<div class="mrow"><input id="asaPw" type="password" placeholder="'+(su?"Şifre belirle (en az 6 karakter)":"Şifren")+'" autocomplete="'+(su?"new-password":"current-password")+'"></div>';
+      if(su){
+        h+='<div class="mrow"><select id="asaGender"><option value="">Cinsiyet seç (zorunlu)…</option><option>Kadın</option><option>Erkek</option><option>Belirtmek istemiyorum</option></select></div>'
+          +'<div class="mrow"><input id="asaCity" type="text" placeholder="Yaşadığın şehir (zorunlu)" autocomplete="address-level2"></div>';
+      }
+      h+='<div id="asaErr" class="asaerr"></div>'
+        +'<button class="btn primary" id="asaAuthBtn" style="width:100%">'+(su?"Kayıt ol":"Giriş yap")+'</button>'
+        +'<p class="asahint">'+(su?"Kendi şifreni belirliyorsun; cinsiyet ve şehir zorunlu. Girince favorilerin buluta kaydolur, tüm cihazlarında görünür.":"E-posta ve şifrenle giriş yap. Hesabın yoksa ‘Kayıt ol’ sekmesine geç.")+'</p>'
         +'</div>';
-      el("asaLoginBtn").onclick=async()=>{
-        const b=el("asaLoginBtn"); b.disabled=true; b.textContent="Giriş yapılıyor…"; el("asaErr").textContent="";
-        const r=await login(el("asaEmail").value, el("asaPw").value);
-        if(!r.ok){ el("asaErr").textContent=r.msg; b.disabled=false; b.textContent="Giriş yap"; }
+      box.innerHTML=h;
+      const b=el("asaAuthBtn");
+      b.onclick=async()=>{
+        b.disabled=true; const orig=b.textContent; b.textContent="Lütfen bekle…"; el("asaErr").textContent=""; el("asaErr").style.color="";
+        const r = su
+          ? await signup(el("asaEmail").value, el("asaPw").value, (el("asaGender")||{}).value, (el("asaCity")||{}).value)
+          : await login(el("asaEmail").value, el("asaPw").value);
+        if(!r.ok){ el("asaErr").textContent=r.msg; if(r.info)el("asaErr").style.color="var(--accent2)"; b.disabled=false; b.textContent=orig; }
       };
-      const pwi=el("asaPw"); if(pwi)pwi.onkeydown=(e)=>{if(e.key==="Enter")el("asaLoginBtn").click();};
+      const pwi=el("asaPw"); if(pwi)pwi.onkeydown=(e)=>{if(e.key==="Enter")b.click();};
       return;
     }
     box.innerHTML =
@@ -1791,7 +1829,7 @@ const ASA = (function(){
     e2.innerHTML=arr.map(x=>{const names=x.shared.map(id=>{const v=byId(id);return v?v.name:id;}).slice(0,6).join(", ");const masked=esc((x.email.split("@")[0]||"üye").slice(0,2))+"•••";const pct=Math.round(x.shared.length/my.length*100);return '<div class="tasterow"><div class="tm-h"><b>'+masked+'</b><span class="tm-c">'+x.shared.length+' ortak · %'+pct+' örtüşme</span></div><div class="tm-s">Ortak yerler: '+esc(names)+'</div></div>';}).join("");
   }
 
-  return { init, login, logout, onFav, saveName, render, seg, removeFav, delPost, get session(){return session;} };
+  return { init, login, signup, setAuthMode, logout, onFav, saveName, render, seg, removeFav, delPost, get session(){return session;} };
 })();
 try{window.ASA=ASA;}catch(e){}
 document.addEventListener("DOMContentLoaded",()=>{ try{ASA.init();}catch(e){} });
