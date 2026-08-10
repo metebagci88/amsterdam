@@ -61,6 +61,13 @@ tr:hover td{background:#faf8f3}
 .login input{width:100%;border:1px solid var(--line);background:#fbfaf7;border-radius:11px;padding:12px;font-size:15px;margin-bottom:10px}
 .err{color:var(--danger);font-size:13px;min-height:16px}
 .hint{font-size:11.5px;color:var(--ink2);margin-top:12px;line-height:1.5}
+.acc{display:flex;flex-direction:column;gap:8px}
+.accitem{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.acchead{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;user-select:none}
+.acchead:hover{background:#faf8f4}
+.accbody{border-top:1px solid var(--line);padding:6px 0}
+.accrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 14px;font-size:13.5px}
+.accrow:not(:last-child){border-bottom:1px solid #f0ece3}
 </style>
 </head>
 <body>
@@ -234,13 +241,29 @@ function editCity(code){
 }
 
 /* ---------- ETIKETLER ---------- */
+let openTag=null;
 function renderTags(){
   const map={}; DATA.venues.forEach(v=>(v.tags||[]).forEach(t=>{map[t]=(map[t]||0)+1;}));
   const rows=Object.entries(map).sort((a,b)=>b[1]-a[1]);
-  const body='<div class="panel"><h3 style="margin-bottom:10px">Etiket kullanımı ('+rows.length+' etiket)</h3><p class="muted" style="margin-bottom:12px">Karar motoru ve filtreler bu etiketleri kullanır. Bir mekanın etiketlerini Mekanlar sekmesinden düzenleyebilirsin.</p>'
-    +'<div class="tablewrap"><table><thead><tr><th>Etiket</th><th>Mekan sayısı</th></tr></thead><tbody>'
-    +rows.map(r=>'<tr><td><b>'+esc(r[0])+'</b></td><td>'+r[1]+'</td></tr>').join("")+'</tbody></table></div></div>';
+  const body='<div class="panel"><h3 style="margin-bottom:10px">Etiketler ('+rows.length+')</h3><p class="muted" style="margin-bottom:12px">Bir etikete tıkla → o etiketteki mekanlar açılır; oradan düzenle ya da etiketi mekandan kaldır. Etiketleri karar motoru ve filtreler kullanır.</p>'
+    +'<div class="acc">'+rows.map(r=>{
+      const t=r[0], open=(openTag===t);
+      let inner='';
+      if(open){
+        const vs=DATA.venues.filter(v=>(v.tags||[]).indexOf(t)>-1).sort((a,b)=>(a.name||"").localeCompare(b.name||"","tr"));
+        inner='<div class="accbody">'+vs.map(v=>'<div class="accrow"><span><b>'+esc(v.name)+'</b> <span class="muted">· '+esc(v.city||"")+(v.area?" · "+esc(v.area):"")+'</span></span>'
+          +'<span style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm danger" onclick="removeTag(\''+esc(v.id)+'\',\''+esc(t).replace(/'/g,"\\'")+'\')">Etiketi kaldır</button></span></div>').join("")+'</div>';
+      }
+      return '<div class="accitem"><div class="acchead" onclick="toggleTag(\''+esc(t).replace(/'/g,"\\'")+'\')"><span>'+(open?"▾":"▸")+' <b>'+esc(t)+'</b></span><span class="pill">'+r[1]+' mekan</span></div>'+inner+'</div>';
+    }).join("")+'</div></div>';
   shell(body);
+}
+function toggleTag(t){ openTag=(openTag===t?null:t); renderTags(); }
+async function removeTag(id,t){
+  const v=venueById(id); if(!v)return;
+  const nt=(v.tags||[]).filter(x=>x!==t);
+  try{ await db.from("venues").update({tags:nt,updated_at:new Date().toISOString()}).eq("id",id); }catch(e){ alert("Hata: "+(e.message||e)); return; }
+  v.tags=nt; renderTags();
 }
 
 /* ---------- MODERASYON (yorumlar) ---------- */
