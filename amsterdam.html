@@ -571,12 +571,12 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 </main>
 
 <nav class="tabs" id="nav">
-  <button data-v="pano" class="active"><span class="ic msym">dashboard</span>Pano</button>
-  <button data-v="map"><span class="ic msym">map</span>Harita</button>
-  <button data-v="list"><span class="ic msym">explore</span>Mekanlar</button>
-  <button data-v="cal"><span class="ic msym">calendar_month</span>Plan</button>
-  <button data-v="de"><span class="ic msym">bolt</span>Karar</button>
-  <button data-v="member"><span class="ic msym">person</span>Üye</button>
+  <button data-v="pano" class="active" onclick="setActiveView('pano')"><span class="ic msym">dashboard</span>Pano</button>
+  <button data-v="map" onclick="setActiveView('map')"><span class="ic msym">map</span>Harita</button>
+  <button data-v="list" onclick="setActiveView('list')"><span class="ic msym">explore</span>Mekanlar</button>
+  <button data-v="cal" onclick="setActiveView('cal')"><span class="ic msym">calendar_month</span>Plan</button>
+  <button data-v="de" onclick="setActiveView('de')"><span class="ic msym">bolt</span>Karar</button>
+  <button data-v="member" onclick="setActiveView('member')"><span class="ic msym">person</span>Üye</button>
 </nav>
 <div id="dayModal" class="daymodal hide" onclick="if(event.target===this)closeDay()">
   <div class="daysheet"><button class="dayclose" onclick="closeDay()">✕</button><div id="dayBody"></div></div>
