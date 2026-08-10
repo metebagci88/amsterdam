@@ -867,8 +867,9 @@ function toggleFav(id){if(favSet.has(id))favSet.delete(id);else favSet.add(id);
  if(window.ASA){ASA.onFav(id,favSet.has(id));}}
 
 /* ===== NAV ===== */
-let viewHist=["pano"];
-function setActiveView(v){
+window.viewHist=["pano"];
+function setActiveView(v,record){
+  if(record!==false && window.viewHist[window.viewHist.length-1]!==v) window.viewHist.push(v);
   document.querySelectorAll("#nav button").forEach(x=>x.classList.toggle("active",x.dataset.v===v));
   document.querySelectorAll(".view").forEach(s=>s.classList.remove("active"));
   const el=document.getElementById("v-"+v); if(el)el.classList.add("active");
@@ -877,19 +878,15 @@ function setActiveView(v){
   if(v==="cal")setTimeout(ensurePlan,10);
 }
 document.querySelectorAll("#nav button").forEach(b=>{
- b.onclick=()=>{
-   const v=b.dataset.v;
-   if(viewHist[viewHist.length-1]!==v)viewHist.push(v);
-   setActiveView(v);
- };
+ b.onclick=()=>{ setActiveView(b.dataset.v); };
 });
-function go(v){ if(viewHist[viewHist.length-1]!==v)viewHist.push(v); setActiveView(v); }
+function go(v){ setActiveView(v); }
 function goBack(){
   // 1) açık modal varsa önce onu kapat
   const vm=document.getElementById("venueModal"); if(vm&&!vm.classList.contains("hide")){try{closeVenue();}catch(e){vm.classList.add("hide");} return;}
   const dm=document.getElementById("dayModal"); if(dm&&!dm.classList.contains("hide")){try{closeDay();}catch(e){dm.classList.add("hide");} return;}
   // 2) ekran geçmişinde bir adım geri
-  if(viewHist.length>1){ viewHist.pop(); setActiveView(viewHist[viewHist.length-1]); return; }
+  if(window.viewHist.length>1){ window.viewHist.pop(); setActiveView(window.viewHist[window.viewHist.length-1],false); return; }
   // 3) en başta isek ana sayfaya
   location.href="./";
 }
