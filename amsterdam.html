@@ -383,13 +383,17 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 /* Gate */
 .gate{border:1px solid var(--line2);border-radius:var(--r);background:var(--bg2)}
 .gate-b{background:var(--accent2)}
+.planctl{margin:6px 0 18px}
+.planbtns{display:flex;gap:10px;flex-wrap:wrap}
+.planhint{font-size:13px;color:var(--ink2);margin-top:10px;background:var(--scl);border-radius:8px;padding:10px 12px;line-height:1.5}
 </style>
 </head>
 <body>
 <header class="app">
   <div class="hbar">
     <div class="brand" style="display:flex;align-items:center;gap:10px">
-      <a href="./" class="homelink msym" title="asalocal ana sayfa">arrow_back</a>
+      <button class="homelink msym" onclick="goBack()" title="Geri">arrow_back</button>
+      <a href="./" class="homelink msym" title="Ana sayfa" style="font-size:20px">home</a>
       <div><span class="t">asalocal</span><span class="s">Amsterdam · yerel gibi gez</span></div>
     </div>
     <div style="display:flex;align-items:center;gap:6px">
@@ -490,7 +494,8 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   <!-- PLAN -->
   <section class="view" id="v-cal">
     <h2 class="section-title" id="calTitle">Günlük akış</h2>
-    <p class="section-sub">Bir güne tıkla → o günün sayfası açılır: pinlediğin (❤️) mekanlardan seç, plan notu yaz, fotoğraf ekle. Hepsi tarayıcında saklanır. Koyu günler hafta sonu kaçamağı için. (Üyelik gelince veriler hesabına taşınacak.)</p>
+    <p class="section-sub">İlgi alanlarına göre sana özel bir taslak plan hazırlıyorum: her güne sabah–öğle–öğleden sonra–akşam için mekan önerileri. Beğenmediğini çıkar, favorilerinden ekle, plan notu yaz. Koyu günler hafta sonu.</p>
+    <div id="planCtl" class="planctl"></div>
     <div class="cal" id="cal"></div>
   </section>
 
@@ -862,18 +867,32 @@ function toggleFav(id){if(favSet.has(id))favSet.delete(id);else favSet.add(id);
  if(window.ASA){ASA.onFav(id,favSet.has(id));}}
 
 /* ===== NAV ===== */
+let viewHist=["pano"];
+function setActiveView(v){
+  document.querySelectorAll("#nav button").forEach(x=>x.classList.toggle("active",x.dataset.v===v));
+  document.querySelectorAll(".view").forEach(s=>s.classList.remove("active"));
+  const el=document.getElementById("v-"+v); if(el)el.classList.add("active");
+  window.scrollTo({top:0,behavior:"smooth"});
+  if(v==="map")setTimeout(initMap,50);
+  if(v==="cal")setTimeout(ensurePlan,10);
+}
 document.querySelectorAll("#nav button").forEach(b=>{
  b.onclick=()=>{
-   document.querySelectorAll("#nav button").forEach(x=>x.classList.remove("active"));
-   b.classList.add("active");
    const v=b.dataset.v;
-   document.querySelectorAll(".view").forEach(s=>s.classList.remove("active"));
-   document.getElementById("v-"+v).classList.add("active");
-   window.scrollTo({top:0,behavior:"smooth"});
-   if(v==="map")setTimeout(initMap,50);
+   if(viewHist[viewHist.length-1]!==v)viewHist.push(v);
+   setActiveView(v);
  };
 });
-function go(v){document.querySelector('#nav button[data-v="'+v+'"]').click();}
+function go(v){ if(viewHist[viewHist.length-1]!==v)viewHist.push(v); setActiveView(v); }
+function goBack(){
+  // 1) açık modal varsa önce onu kapat
+  const vm=document.getElementById("venueModal"); if(vm&&!vm.classList.contains("hide")){try{closeVenue();}catch(e){vm.classList.add("hide");} return;}
+  const dm=document.getElementById("dayModal"); if(dm&&!dm.classList.contains("hide")){try{closeDay();}catch(e){dm.classList.add("hide");} return;}
+  // 2) ekran geçmişinde bir adım geri
+  if(viewHist.length>1){ viewHist.pop(); setActiveView(viewHist[viewHist.length-1]); return; }
+  // 3) en başta isek ana sayfaya
+  location.href="./";
+}
 function isMember(){return !!(window.ASA&&window.ASA.session);}
 function gateCard(msg){return '<div class="gate"><div class="gate-i">🔒</div><div class="gate-t">'+(msg||"Devamı üyelere özel")+'</div><div class="gate-d">Ücretsiz üyelikle tüm sonuçları gör, favorilerini buluta kaydet, seviyeni yükselt.</div><button class="gate-b" onclick="go(\'member\')">Üye ol / Giriş yap</button></div>';}
 function refreshGated(){try{renderCards();}catch(e){}try{renderScenarios();}catch(e){}try{renderTrips();}catch(e){}try{var _d=document.getElementById("deOut");if(_d&&_d.innerHTML.trim()!=="")runDE();}catch(e){}}
@@ -1233,6 +1252,70 @@ function buildCalDays(){
 }
 let CAL=buildCalDays();
 function dayInfo(k){return CAL.days.find(x=>x.key===k)||{key:k,label:String(k),dow:"",weekend:false};}
+/* ===== KİŞİSEL PLAN ÜRETİCİ ===== */
+function catOf(v){
+ const t=((v.tags||[]).join(" ")+" "+(v.cats||[]).join(" ")+" "+(v.type||"")).toLowerCase();
+ if(/kahvaltı|kahvalti|brunch/.test(t))return"brunch";
+ if(/kahve|coffee|kafe|kavurucu/.test(t))return"coffee";
+ if(/şarap|sarap|wine|natürel|naturel/.test(t))return"wine";
+ if(/bira|bar|kokteyl|cocktail|gece|pub/.test(t))return"bar";
+ if(/park|doğa|doga|yürüyüş|yuruyus|bahçe|bahce/.test(t))return"park";
+ if(/müze|muze|kültür|kultur|sanat|galeri/.test(t))return"culture";
+ if(/mağaza|magaza|alışveriş|alisveris|konsept|dükkan|dukkan/.test(t))return"shop";
+ return"food";
+}
+function tripInterests(){ let t=null; try{t=JSON.parse(localStorage.getItem("asa_trip")||"null");}catch(e){} return (t&&t.vacation_types)||[]; }
+function interestCats(){
+ const its=tripInterests().map(s=>s.toLowerCase()); const set=new Set();
+ its.forEach(i=>{
+   if(/gastronomi/.test(i)){set.add("food");set.add("brunch");}
+   if(/kültür|kultur|sanat/.test(i))set.add("culture");
+   if(/gece/.test(i)){set.add("bar");set.add("wine");}
+   if(/doğa|doga|yürüyüş|yuruyus/.test(i))set.add("park");
+   if(/alışveriş|alisveris/.test(i))set.add("shop");
+   if(/rahat|dinlence/.test(i)){set.add("coffee");set.add("park");}
+   if(/romantik/.test(i)){set.add("wine");set.add("culture");}
+ });
+ return set;
+}
+const PLAN_SLOTS=[
+ {k:"Sabah",cats:["brunch","coffee"]},
+ {k:"Öğle",cats:["food"]},
+ {k:"Öğleden sonra",cats:["culture","park","shop","coffee"]},
+ {k:"Akşam",cats:["wine","bar","food"]}
+];
+function amsPool(){ return V.filter(v=>v.city==="Amsterdam"); }
+function autoGeneratePlan(force){
+ const pool=amsPool(), interests=interestCats(), used=new Set();
+ const score=v=>(isFav(v.id)?2:0)+(interests.has(catOf(v))?1:0);
+ CAL.days.forEach(D=>{
+   const key=D.key;
+   if(!force && (dayVenues[key]&&dayVenues[key].length)) return;
+   const picks=[];
+   PLAN_SLOTS.forEach(slot=>{
+     const cand=pool.filter(v=>!used.has(v.id)&&slot.cats.indexOf(catOf(v))>-1).sort((a,b)=>score(b)-score(a));
+     if(cand[0]){ used.add(cand[0].id); picks.push({slot:slot.k,v:cand[0]}); }
+   });
+   dayVenues[key]=picks.map(p=>p.v.id);
+   if(force || !(calPlans[key]&&calPlans[key].trim())){
+     calPlans[key]=picks.map(p=>p.slot+": "+p.v.name+(p.v.area?" ("+p.v.area+")":"")).join("\n");
+   }
+ });
+ saveLS("ams_dayven",dayVenues); saveLS("ams_plan",calPlans); renderPlanCtl(); renderCal();
+}
+function clearPlan(){
+ CAL.days.forEach(D=>{ delete dayVenues[D.key]; if(calPlans[D.key]&&/^(Sabah|Öğle|Öğleden|Akşam):/.test(calPlans[D.key]))delete calPlans[D.key]; });
+ saveLS("ams_dayven",dayVenues); saveLS("ams_plan",calPlans); renderPlanCtl(); renderCal();
+}
+function renderPlanCtl(){
+ const el=document.getElementById("planCtl"); if(!el)return;
+ const any=CAL.days.some(D=>(dayVenues[D.key]||[]).length);
+ const its=tripInterests();
+ el.innerHTML='<div class="planbtns"><button class="btn primary" onclick="autoGeneratePlan(true)"><span class="msym" style="font-size:16px;vertical-align:-3px">auto_awesome</span> İlgi alanlarıma göre plan oluştur</button>'+
+   (any?'<button class="btn" onclick="clearPlan()">Planı temizle</button>':'')+'</div>'+
+   '<div class="planhint">'+(its.length?("✦ İlgi alanların: "+its.join(", ")):"Henüz ilgi alanı seçmemişsin — genel öneriler kullanılıyor. Ana sayfada tür seçersen plan sana göre şekillenir.")+'</div>';
+}
+function ensurePlan(){ try{ CAL=buildCalDays(); if(!CAL.days.some(D=>(dayVenues[D.key]||[]).length)) autoGeneratePlan(false); else {renderPlanCtl();renderCal();} }catch(e){} }
 function renderCal(){
  const cal=document.getElementById("cal");cal.innerHTML="";
  const tt=document.getElementById("calTitle"); if(tt)tt.textContent=CAL.title;
