@@ -319,7 +319,8 @@ const DURMAP={"2–3 gün":3,"4–6 gün":5,"1 hafta":7,"2 hafta+":14};
 let db=null, session=null;
 let sel={country:null,city:null,active:false,duration:null,durationDays:null,startDate:null,endDate:null,approx:null,types:new Set()};
 try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
-try{ session=JSON.parse(localStorage.getItem("asa_session")||"null"); }catch(e){ session=null; }
+session=null;
+(async function bootAuth(){ if(!db)return; try{ const {data}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ const email=(data.session.user.email||"").toLowerCase(); const {data:m}=await db.from("members").select("display_name,blocked").eq("email",email).maybeSingle(); if(m&&m.blocked){ await db.auth.signOut(); return; } session={email,display_name:m?m.display_name:null}; try{renderAcct();}catch(e){} } }catch(e){} })();
 async function applyContent(){
  try{ if(!db)return;
    const {data}=await db.from("site_content").select("key,value,enabled"); if(!data)return;
@@ -399,29 +400,59 @@ function wire(){
 function renderAcct(){ const b=$("acctBtn"); if(session){ b.textContent="👤 "+((session.display_name)||session.email.split("@")[0]); b.classList.add("bg-secondary","text-on-secondary","border-secondary"); } else { b.textContent="Giriş"; b.classList.remove("bg-secondary","text-on-secondary","border-secondary"); } }
 function openAuth(){ const m=$("authModal"); m.style.display="flex"; m.classList.remove("hidden"); renderAuthBody(); }
 function closeAuth(){ const m=$("authModal"); m.style.display="none"; m.classList.add("hidden"); }
+let authMode="login";
+function amInp(id,type,ph){ return '<input id="'+id+'" type="'+type+'" placeholder="'+ph+'" class="w-full border-0 border-b border-primary/30 bg-transparent p-2 mb-3 font-body-md focus:ring-0 focus:border-secondary"/>'; }
 function renderAuthBody(){
   const box=$("authBody");
   if(!session){
-    box.innerHTML='<h3 class="font-headline-lg text-headline-lg text-primary mb-2">asalocal üyeliği</h3><p class="font-body-md text-body-md text-on-surface-variant mb-5">E-posta + ortak şifre ile gir; tüm sonuçlar açılır, favorilerin buluta kaydolur.</p>'
-      +'<input id="amEmail" type="email" placeholder="E-posta adresin" class="w-full border-0 border-b border-primary/30 bg-transparent p-2 mb-3 font-body-md focus:ring-0 focus:border-secondary"/>'
-      +'<input id="amPw" type="password" placeholder="Ortak şifre" class="w-full border-0 border-b border-primary/30 bg-transparent p-2 mb-3 font-body-md focus:ring-0 focus:border-secondary"/>'
-      +'<div id="amErr" class="text-secondary font-label-md min-h-[18px] mb-2"></div>'
-      +'<button id="amLogin" class="w-full bg-secondary text-on-secondary font-label-lg py-3 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors">Giriş yap</button>';
-    $("amLogin").onclick=doLogin; const p=$("amPw"); if(p)p.onkeydown=e=>{if(e.key==="Enter")doLogin();};
+    const su=(authMode==="signup");
+    let h='<h3 class="font-headline-lg text-headline-lg text-primary mb-1">asalocal üyeliği</h3>'
+      +'<div class="flex gap-2 my-4"><button id="atLogin" class="flex-1 py-2 rounded font-label-lg text-label-lg '+(su?"border border-primary/30 text-on-surface-variant":"bg-primary text-on-primary")+'">Giriş yap</button><button id="atSignup" class="flex-1 py-2 rounded font-label-lg text-label-lg '+(su?"bg-primary text-on-primary":"border border-primary/30 text-on-surface-variant")+'">Kayıt ol</button></div>'
+      +amInp("amEmail","email","E-posta adresin")
+      +amInp("amPw","password",su?"Şifre belirle (en az 6 karakter)":"Şifren");
+    if(su){
+      h+='<select id="amGender" class="w-full border-0 border-b border-primary/30 bg-transparent p-2 mb-3 font-body-md focus:ring-0 focus:border-secondary"><option value="">Cinsiyet seç (zorunlu)…</option><option>Kadın</option><option>Erkek</option><option>Belirtmek istemiyorum</option></select>'
+        +amInp("amCity","text","Yaşadığın şehir (zorunlu)");
+    }
+    h+='<div id="amErr" class="text-secondary font-label-md min-h-[18px] mb-2"></div>'
+      +'<button id="amAuth" class="w-full bg-secondary text-on-secondary font-label-lg py-3 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors">'+(su?"Kayıt ol":"Giriş yap")+'</button>';
+    box.innerHTML=h;
+    $("atLogin").onclick=()=>{authMode="login";renderAuthBody();};
+    $("atSignup").onclick=()=>{authMode="signup";renderAuthBody();};
+    $("amAuth").onclick=doAuth;
+    const p=$("amPw"); if(p)p.onkeydown=e=>{if(e.key==="Enter")doAuth();};
   } else {
     box.innerHTML='<div class="flex items-center gap-4 mb-4"><div class="w-14 h-14 rounded-full bg-secondary text-on-secondary flex items-center justify-center text-2xl">🧭</div><div><div class="font-headline-sm text-headline-sm text-primary">'+((session.display_name)||session.email.split("@")[0])+'</div><div class="font-label-md text-label-md text-on-surface-variant">'+session.email+'</div><div id="amTier" class="font-label-md text-label-md text-secondary mt-1">Üye</div></div></div>'
       +'<button id="amLogout" class="w-full border border-primary/30 text-primary font-label-lg py-3 rounded hover:bg-surface-container">Çıkış yap</button>';
-    $("amLogout").onclick=()=>{ session=null; try{localStorage.removeItem("asa_session");}catch(e){} renderAcct(); renderAuthBody(); };
+    $("amLogout").onclick=async()=>{ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; try{localStorage.removeItem("asa_session");}catch(e){} renderAcct(); renderAuthBody(); };
     if(db){ db.from("members").select("tier,points").eq("email",session.email).maybeSingle().then(({data})=>{ if(data&&$("amTier"))$("amTier").textContent=(tierFor(data.points||0).emoji)+" "+(data.tier||"Kaşif")+" · "+(data.points||0)+" puan"; }).catch(()=>{}); }
   }
 }
-async function doLogin(){
-  const email=($("amEmail").value||"").trim().toLowerCase(); const pw=$("amPw").value; const err=$("amErr");
+function amAuthErr(e){ const m=((e&&e.message)||"").toLowerCase(); if(m.indexOf("invalid login")>-1||m.indexOf("invalid credentials")>-1)return "E-posta veya şifre hatalı."; if(m.indexOf("already")>-1)return "Bu e-posta zaten kayıtlı. ‘Giriş yap’ ile devam et."; if(m.indexOf("password")>-1)return "Şifre en az 6 karakter olmalı."; return (e&&e.message)||"Bir hata oluştu."; }
+async function doAuth(){
+  const email=($("amEmail").value||"").trim().toLowerCase(); const pw=$("amPw").value; const err=$("amErr"); const su=(authMode==="signup");
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ err.textContent="Geçerli bir e-posta gir."; return; }
-  if(pw!==CFG.pw){ err.textContent="Şifre yanlış."; return; }
   if(!db){ err.textContent="Bağlantı yok, sayfayı yenile."; return; }
-  const b=$("amLogin"); b.disabled=true; b.textContent="Giriş yapılıyor…";
-  try{ await db.from("members").upsert({email},{onConflict:"email",ignoreDuplicates:true}); const {data}=await db.from("members").select("display_name").eq("email",email).maybeSingle(); session={email,display_name:data?data.display_name:null}; try{localStorage.setItem("asa_session",JSON.stringify(session));}catch(e){} renderAcct(); renderAuthBody(); }catch(e){ err.textContent="Sunucu hatası, tekrar dene."; b.disabled=false; b.textContent="Giriş yap"; }
+  const b=$("amAuth"); b.disabled=true; const orig=b.textContent; b.textContent="Lütfen bekle…"; err.textContent=""; err.classList.remove("text-primary");
+  try{
+    if(su){
+      if(!pw||pw.length<6){ err.textContent="Şifre en az 6 karakter olmalı."; b.disabled=false;b.textContent=orig; return; }
+      const gender=($("amGender")||{}).value; const city=($("amCity")||{}).value;
+      if(!gender){ err.textContent="Cinsiyet alanı zorunlu."; b.disabled=false;b.textContent=orig; return; }
+      if(!city||!city.trim()){ err.textContent="Şehir alanı zorunlu."; b.disabled=false;b.textContent=orig; return; }
+      const {data,error}=await db.auth.signUp({email,password:pw,options:{data:{gender,home_city:city.trim()}}});
+      if(error){ err.textContent=amAuthErr(error); b.disabled=false;b.textContent=orig; return; }
+      try{ await db.from("members").upsert({email,gender,home_city:city.trim(),display_name:email.split("@")[0]},{onConflict:"email"}); }catch(e){}
+      if(!(data&&data.session)){ err.textContent="Kayıt alındı. E-postana gelen doğrulama bağlantısına tıkla, sonra giriş yap."; err.classList.add("text-primary"); b.disabled=false;b.textContent=orig; return; }
+    } else {
+      const {error}=await db.auth.signInWithPassword({email,password:pw});
+      if(error){ err.textContent=amAuthErr(error); b.disabled=false;b.textContent=orig; return; }
+    }
+    try{ await db.from("members").upsert({email},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
+    const {data:m}=await db.from("members").select("display_name,blocked").eq("email",email).maybeSingle();
+    if(m&&m.blocked){ try{await db.auth.signOut();}catch(e){} err.textContent="Bu hesap engellendi."; b.disabled=false;b.textContent=orig; return; }
+    session={email,display_name:m?m.display_name:null}; renderAcct(); renderAuthBody();
+  }catch(e){ err.textContent="Sunucu hatası, tekrar dene."; b.disabled=false;b.textContent=orig; }
 }
 renderCountries(); renderCities(); renderTypes(); renderDests(); renderAcct(); wire(); updateGo();
 $("acctBtn").onclick=openAuth; $("authX").onclick=closeAuth; $("authModal").onclick=e=>{ if(e.target===$("authModal"))closeAuth(); };
