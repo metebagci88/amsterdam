@@ -1635,6 +1635,7 @@ const ASA = (function(){
     if(!db) return {ok:false,msg:"Bağlantı kurulamadı, sayfayı yenile."};
     try{
       await db.from("members").upsert({email},{onConflict:"email",ignoreDuplicates:true});
+      try{ const {data:mrow}=await db.from("members").select("blocked").eq("email",email).maybeSingle(); if(mrow&&mrow.blocked) return {ok:false,msg:"Bu hesap engellendi. Erişimin kısıtlı."}; }catch(e){}
       await syncOnLogin(email,false);
       return {ok:true};
     }catch(e){ return {ok:false,msg:"Sunucu hatası, tekrar dene."}; }
@@ -1643,6 +1644,7 @@ const ASA = (function(){
   async function syncOnLogin(email, silent){
     let m=null;
     try{ const {data}=await db.from("members").select("*").eq("email",email).maybeSingle(); m=data; }catch(e){}
+    if(m&&m.blocked){ session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); return; }
     if(!m){ m={email,display_name:null,tier:"Kaşif",points:0}; }
     memberMeta=m;
     try{ const {data}=await db.from("comments").select("id,photo_url").eq("email",email); postCount=(data||[]).length; photoCount=(data||[]).filter(x=>x.photo_url).length; }catch(e){}

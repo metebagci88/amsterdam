@@ -373,12 +373,63 @@ async function saveAd(isNew,id){
 async function delAd(id){ if(!confirm("Bu reklamı silmek istediğine emin misin?"))return; try{ await db.from("ads").delete().eq("id",id); }catch(e){} DATA.ads=DATA.ads.filter(a=>a.id!==id); closeModal(); renderAds(); }
 
 /* ---------- ÜYELER ---------- */
+let openMember=null, memberDetail={};
+function fmtDate(s){ try{ if(!s)return"—"; const d=new Date(s); return d.toLocaleDateString("tr-TR",{year:"numeric",month:"short",day:"numeric"}); }catch(e){ return "—"; } }
 function renderMembers(){
-  const body='<div class="panel"><h3 style="margin-bottom:10px">Üyeler ('+DATA.members.length+')</h3>'
-    +(DATA.members.length?'<div class="tablewrap"><table><thead><tr><th>E-posta</th><th>Ad</th><th>Seviye</th><th>Puan</th></tr></thead><tbody>'
-    +DATA.members.map(m=>'<tr><td>'+esc(m.email)+'</td><td>'+esc(m.display_name||"")+'</td><td>'+esc(m.tier||"")+'</td><td>'+esc(m.points!=null?m.points:"")+'</td></tr>').join("")
-    +'</tbody></table></div>':'<p class="muted">Henüz üye yok.</p>')+'</div>';
+  const ms=DATA.members;
+  const blk=ms.filter(m=>m.blocked).length;
+  let body='<div class="panel"><h3 style="margin-bottom:6px">Üyeler ('+ms.length+')</h3><p class="muted" style="margin-bottom:12px">'+blk+' bloke. Bir üyeye tıkla → detayları (kaydettikleri, yorum sayısı) aç. Bloke edilen üye giriş yapamaz.</p>';
+  if(!ms.length){ body+='<p class="muted">Henüz üye yok.</p></div>'; shell(body); return; }
+  body+='<div class="acc">'+ms.map(m=>{
+    const open=(openMember===m.email);
+    let inner='';
+    if(open){
+      const d=memberDetail[m.email];
+      if(!d){ inner='<div class="accbody"><div class="accrow"><span class="muted">Yükleniyor…</span></div></div>'; }
+      else{
+        const favNames=(d.favs||[]).map(id=>{const v=venueById(id);return v?v.name:id;});
+        inner='<div class="accbody">'
+          +'<div class="accrow"><span><b>Katılım</b></span><span>'+fmtDate(m.created_at)+'</span></div>'
+          +'<div class="accrow"><span><b>Kaydettikleri ('+(d.favs||[]).length+')</b></span><span style="max-width:60%;text-align:right">'+(favNames.length?esc(favNames.slice(0,12).join(", ")):'<span class="muted">yok</span>')+'</span></div>'
+          +'<div class="accrow"><span><b>Yorum / fotoğraf</b></span><span>'+(d.comments||0)+' yorum · '+(d.photos||0)+' foto</span></div>'
+          +'</div>';
+      }
+    }
+    return '<div class="accitem"><div class="acchead" onclick="toggleMember(\''+esc(m.email).replace(/'/g,"\\'")+'\')">'
+      +'<span>'+(open?"▾":"▸")+' <b>'+esc(m.display_name||m.email.split("@")[0])+'</b> <span class="muted">· '+esc(m.email)+'</span>'+(m.blocked?' <span class="pill off">bloke</span>':'')+'</span>'
+      +'<span style="white-space:nowrap"><span class="pill">'+esc(m.tier||"Kaşif")+' · '+(m.points!=null?m.points:0)+' puan</span> '
+        +'<button class="btn sm" onclick="event.stopPropagation();toggleBlock(\''+esc(m.email).replace(/'/g,"\\'")+'\')">'+(m.blocked?"Blokeyi kaldır":"Bloke et")+'</button> '
+        +'<button class="btn sm danger" onclick="event.stopPropagation();delMember(\''+esc(m.email).replace(/'/g,"\\'")+'\')">Sil</button></span>'
+      +'</div>'+inner+'</div>';
+  }).join("")+'</div></div>';
   shell(body);
+}
+async function toggleMember(email){
+  if(openMember===email){ openMember=null; renderMembers(); return; }
+  openMember=email; renderMembers();
+  if(!memberDetail[email]){
+    const d={favs:[],comments:0,photos:0};
+    try{ const r=await db.from("favorites").select("venue_id").eq("email",email); d.favs=(r.data||[]).map(x=>x.venue_id); }catch(e){}
+    try{ const r=await db.from("comments").select("id,photo_url").eq("email",email); d.comments=(r.data||[]).length; d.photos=(r.data||[]).filter(x=>x.photo_url).length; }catch(e){}
+    memberDetail[email]=d;
+    if(openMember===email) renderMembers();
+  }
+}
+async function toggleBlock(email){
+  const m=DATA.members.find(x=>x.email===email); if(!m)return;
+  const nb=!m.blocked;
+  try{ await db.from("members").update({blocked:nb,updated_at:new Date().toISOString()}).eq("email",email); }catch(e){ alert("Hata: "+(e.message||e)); return; }
+  m.blocked=nb; renderMembers();
+}
+async function delMember(email){
+  if(!confirm("Bu üyeliği ve üyenin favori/yorum verilerini kalıcı olarak silmek istediğine emin misin?\n\n"+email))return;
+  try{
+    await db.from("favorites").delete().eq("email",email);
+    await db.from("comments").delete().eq("email",email);
+    await db.from("members").delete().eq("email",email);
+  }catch(e){ alert("Hata: "+(e.message||e)); return; }
+  DATA.members=DATA.members.filter(x=>x.email!==email);
+  openMember=null; renderMembers();
 }
 
 /* ---------- modal ---------- */
