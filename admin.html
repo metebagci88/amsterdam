@@ -173,7 +173,13 @@ function editVenue(id){
     +'<div class="frow">'+f("hours","Çalışma saatleri",v.hours||"")+self("resv","Rezervasyon",v.resv||"unknown",["no","rec","req","unknown"])+self("conf","Güven",v.conf||"high",["high","med","low"])+'</div>'
     +'<div class="frow">'+f("lat","Enlem (lat)",v.lat==null?"":v.lat)+f("lng","Boylam (lng)",v.lng==null?"":v.lng)+f("src","Kaynak",v.src||"")+'</div>'
     +'<div class="frow">'+f("web","Web",v.web||"")+f("ig","Instagram",v.ig||"")+'</div>'
-    +'<div class="frow">'+f("photo_url","Foto URL (gerçek fotoğraf — boşsa kategori görseli kullanılır)",v.photo_url||"")+'</div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Fotoğraf (boşsa kategori görseli kullanılır)</label>'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        +'<input id="f_photo_url" value="'+esc(v.photo_url||"")+'" oninput="venuePhotoPrev()" placeholder="Foto URL (veya soldan yükle)" style="flex:1;min-width:220px">'
+        +'<label class="btn" style="cursor:pointer">Fotoğraf yükle<input type="file" accept="image/*" hidden onchange="venuePhotoUpload(event)"></label>'
+        +'<span id="f_upmsg" class="muted" style="font-size:12px"></span>'
+      +'</div>'
+      +'<div id="vPhotoPrev" style="margin-top:8px"></div></div>'
     +ta("tip","Yerli tüyosu (tip)",v.tip||"")
     +ta("description","Açıklama",v.description||"")
     +ta("note","Not",v.note||"")
@@ -181,6 +187,7 @@ function editVenue(id){
     +'<div class="err" id="verr"></div>'
     +'<div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button>'+(isNew?"":'<button class="btn danger" onclick="delVenue(\''+esc(v.id)+'\')">Sil</button>')+'<button class="btn primary" id="vsave">Kaydet</button></div>';
   openModal();
+  try{venuePhotoPrev();}catch(e){}
   $("vsave").onclick=()=>saveVenue(isNew);
 }
 async function saveVenue(isNew){
@@ -200,6 +207,8 @@ async function saveVenue(isNew){
   const i=DATA.venues.findIndex(x=>x.id===id); if(i>=0)DATA.venues[i]=Object.assign(DATA.venues[i],row); else DATA.venues.push(row);
   closeModal(); renderVenues();
 }
+function venuePhotoPrev(){ const el=$("vPhotoPrev"); if(!el)return; const u=($("f_photo_url").value||"").trim(); el.innerHTML=u?'<img src="'+esc(u)+'" style="max-height:140px;border-radius:6px;border:1px solid #ddd" onerror="this.parentNode.innerHTML=\'<span style=color:#a33;font-size:12px>Görsel yüklenemedi — link doğrudan bir görsel dosyası mı?</span>\'">':''; }
+async function venuePhotoUpload(ev){ const file=ev.target.files&&ev.target.files[0]; if(!file)return; const msg=$("f_upmsg"); if(msg)msg.textContent="Yükleniyor…"; try{ const url=await uploadToMedia(file,"venues"); $("f_photo_url").value=url; venuePhotoPrev(); if(msg)msg.textContent="✓ yüklendi"; }catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); } }
 async function toggleVenue(id){ const v=venueById(id); if(!v)return; const na=!v.active; try{ await db.from("venues").update({active:na,updated_at:new Date().toISOString()}).eq("id",id); v.active=na; }catch(e){} renderVenues(); }
 async function delVenue(id){ if(!confirm("Bu mekanı silmek istediğine emin misin?"))return; try{ await db.from("venues").delete().eq("id",id); }catch(e){} DATA.venues=DATA.venues.filter(v=>v.id!==id); closeModal(); renderVenues(); }
 
@@ -245,14 +254,100 @@ function renderComments(){
 async function delComment(id){ if(!confirm("Yorumu kaldır?"))return; try{await db.from("comments").delete().eq("id",id);}catch(e){} DATA.comments=DATA.comments.filter(c=>c.id!==id); renderComments(); }
 
 /* ---------- REKLAMLAR ---------- */
+const AD_SLOTS=["masthead","leaderboard","sidebar","inline","venue_card","decision","map_pin"];
+const AD_TYPES=["display","native_venue","native_decision","html"];
+const AD_FORMATS=["970x250","728x90","300x250","300x600","320x100","320x50"];
+const SLOT_INFO={masthead:"Ana sayfa üstü geniş banner (Pano)",leaderboard:"Şehir banner / Plan üstü",sidebar:"Mekanlar yan sütun",inline:"Liste içi",venue_card:"Mekanlar arasına sponsorlu mekan kartı",decision:"Karar motoru sponsorlu öneri",map_pin:"Haritada sponsorlu pin (lat/lng gerekir)"};
+function adById(id){ return DATA.ads.find(a=>a.id===id); }
 function renderAds(){
-  const body='<div class="panel"><h3 style="margin-bottom:10px">Reklam kampanyaları ('+DATA.ads.length+')</h3><p class="muted" style="margin-bottom:12px">Slot bazlı IAB birimleri. Aktif/pasif yapabilirsin (tam kreatif düzenleme sonraki aşamada).</p>'
-    +'<div class="tablewrap"><table><thead><tr><th>Slot</th><th>Boyut</th><th>Tür</th><th>Sponsor</th><th>Durum</th><th></th></tr></thead><tbody>'
-    +DATA.ads.map(a=>'<tr><td><b>'+esc(a.slot)+'</b></td><td>'+esc(a.format||"")+'</td><td>'+esc(a.creative_type||"")+'</td><td>'+esc(a.sponsor||"")+'</td><td>'+(a.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')+'</td><td><button class="btn sm" onclick="toggleAd('+a.id+')">'+(a.active?"Pasifle":"Aktifle")+'</button></td></tr>').join("")
-    +'</tbody></table></div></div>';
+  const body='<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Reklam kampanyaları ('+DATA.ads.length+')</h3><button class="btn primary" onclick="editAd(0)">+ Yeni reklam</button></div>'
+    +'<p class="muted" style="margin-bottom:12px">Görsel yükle veya URL yapıştır, slotu seç, canlı önizle, aktif/pasif yap. Değişiklikler siteye anında yansır.</p>'
+    +(DATA.ads.length?'<div class="tablewrap"><table><thead><tr><th>Önizleme</th><th>Slot</th><th>Boyut</th><th>Tür</th><th>Sponsor</th><th>Durum</th><th></th></tr></thead><tbody>'
+    +DATA.ads.map(a=>'<tr>'
+      +'<td>'+(a.image_url?'<img src="'+esc(a.image_url)+'" style="width:70px;height:40px;object-fit:cover;border-radius:4px;border:1px solid #ddd">':'<span class="muted">—</span>')+'</td>'
+      +'<td><b>'+esc(a.slot)+'</b></td><td>'+esc(a.format||"")+'</td><td>'+esc(a.creative_type||"")+'</td><td>'+esc(a.sponsor||"")+'</td>'
+      +'<td>'+(a.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')+'</td>'
+      +'<td style="white-space:nowrap"><button class="btn sm" onclick="editAd('+a.id+')">Düzenle</button> <button class="btn sm" onclick="toggleAd('+a.id+')">'+(a.active?"Pasifle":"Aktifle")+'</button></td></tr>').join("")
+    +'</tbody></table></div>':'<p class="muted">Henüz reklam yok. "+ Yeni reklam" ile ekle.</p>')+'</div>';
   shell(body);
 }
-async function toggleAd(id){ const a=DATA.ads.find(x=>x.id===id); if(!a)return; const na=!a.active; try{await db.from("ads").update({active:na}).eq("id",id);}catch(e){} a.active=na; renderAds(); }
+async function toggleAd(id){ const a=adById(id); if(!a)return; const na=!a.active; try{await db.from("ads").update({active:na}).eq("id",id);}catch(e){} a.active=na; renderAds(); }
+
+function editAd(id){
+  const a=id?adById(id):{id:0,slot:"masthead",creative_type:"display",format:"970x250",active:true,weight:1};
+  const isNew=!id;
+  const f=(k,l,val,type)=>'<div class="fld"><label>'+l+'</label><input id="a_'+k+'" '+(type?'type="'+type+'"':'')+' value="'+esc(val==null?"":val)+'" oninput="adPreview()"></div>';
+  const ta=(k,l,val)=>'<div class="fld" style="flex:1 1 100%"><label>'+l+'</label><textarea id="a_'+k+'" oninput="adPreview()">'+esc(val||"")+'</textarea></div>';
+  const chk=(k,l,val)=>'<div class="fld check"><input type="checkbox" id="a_'+k+'" '+(val?"checked":"")+'><label>'+l+'</label></div>';
+  const sel=(k,l,val,opts)=>'<div class="fld"><label>'+l+'</label><select id="a_'+k+'" onchange="adPreview()">'+opts.map(o=>'<option'+(val===o?" selected":"")+'>'+o+'</option>').join("")+'</select></div>';
+  $("sheet").innerHTML='<h2>'+(isNew?"Yeni reklam":"Reklamı düzenle")+'</h2>'
+    +'<div class="frow">'+sel("creative_type","Kreatif türü",a.creative_type||"display",AD_TYPES)+sel("slot","Slot (yer)",a.slot||"masthead",AD_SLOTS)+sel("format","Boyut (display)",a.format||"970x250",AD_FORMATS)+'</div>'
+    +'<div class="muted" id="slotHint" style="margin:-4px 0 10px;font-size:12px"></div>'
+    +'<div class="frow">'+f("sponsor","Sponsor / marka",a.sponsor||"")+f("scope_city","Şehir (boş = tümü)",a.scope_city||"")+f("weight","Ağırlık (sıra)",a.weight==null?1:a.weight,"number")+'</div>'
+    +'<div class="frow">'+f("title","Başlık",a.title||"")+'</div>'
+    +ta("body","Metin",a.body||"")
+    +'<div class="fld" style="flex:1 1 100%"><label>Görsel</label>'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        +'<input id="a_image_url" value="'+esc(a.image_url||"")+'" oninput="adPreview()" placeholder="Görsel URL (veya soldan yükle)" style="flex:1;min-width:220px">'
+        +'<label class="btn" style="cursor:pointer">Görsel yükle<input type="file" accept="image/*" hidden onchange="adUpload(event)"></label>'
+        +'<span id="a_upmsg" class="muted" style="font-size:12px"></span>'
+      +'</div></div>'
+    +'<div class="frow">'+f("cta_url","Tıklama linki (CTA URL)",a.cta_url||"")+'</div>'
+    +'<div class="frow">'+f("width","Genişlik (px, ops.)",a.width==null?"":a.width,"number")+f("height","Yükseklik (px, ops.)",a.height==null?"":a.height,"number")+'</div>'
+    +'<div class="frow">'+f("lat","Enlem (map_pin için)",a.lat==null?"":a.lat)+f("lng","Boylam (map_pin için)",a.lng==null?"":a.lng)+'</div>'
+    +'<div class="frow">'+chk("active","Aktif (yayında)",a.active!==false)+'</div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Canlı önizleme</label><div id="adPrev" style="background:#faf9f5;border:1px dashed #cfc9bd;border-radius:8px;padding:14px;min-height:70px;display:flex;align-items:center;justify-content:center"></div></div>'
+    +'<div class="err" id="aerr"></div>'
+    +'<div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button>'+(isNew?"":'<button class="btn danger" onclick="delAd('+a.id+')">Sil</button>')+'<button class="btn primary" id="asave">Kaydet</button></div>';
+  openModal();
+  $("asave").onclick=()=>saveAd(isNew,id);
+  adPreview();
+}
+function adPreview(){
+  const g=k=>{const e=$("a_"+k);return e?e.value:"";};
+  const hint=$("slotHint"); if(hint)hint.textContent=SLOT_INFO[g("slot")]||"";
+  const p=$("adPrev"); if(!p)return;
+  const img=g("image_url").trim(), title=esc(g("title")), body=esc(g("body")), sponsor=esc(g("sponsor")), ct=g("creative_type");
+  if(ct==="native_venue"||ct==="native_decision"){
+    p.innerHTML='<div style="text-align:left;max-width:360px;font-family:Georgia,serif"><span style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#a63936;font-weight:700">Sponsorlu · '+sponsor+'</span><div style="font-size:18px;font-weight:600;margin:4px 0">'+(title||"Başlık")+'</div><div style="font-size:13px;color:#555;font-family:sans-serif">'+(body||"")+'</div></div>';
+  } else if(img){
+    p.innerHTML='<img src="'+esc(img)+'" style="max-width:100%;max-height:220px;border-radius:4px" onerror="this.parentNode.innerHTML=\'<span style=color:#a33>Görsel yüklenemedi — link doğrudan bir görsel dosyası mı? (.jpg/.png)\'">';
+  } else {
+    p.innerHTML='<div style="text-align:center;color:#888"><b>'+(title||"Görsel yok")+'</b><div style="font-size:12px">'+(body||"Görsel URL gir ya da yükle")+'</div></div>';
+  }
+}
+async function adUpload(ev){
+  const file=ev.target.files&&ev.target.files[0]; if(!file)return;
+  const msg=$("a_upmsg"); if(msg)msg.textContent="Yükleniyor…";
+  try{
+    const url=await uploadToMedia(file,"ads");
+    $("a_image_url").value=url; adPreview();
+    if(msg)msg.textContent="✓ yüklendi";
+  }catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); }
+}
+async function uploadToMedia(file, prefix){
+  const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
+  const path=(prefix||"img")+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext;
+  const {error}=await db.storage.from("media").upload(path,file,{cacheControl:"3600",upsert:false,contentType:file.type||"image/jpeg"});
+  if(error)throw error;
+  const {data}=db.storage.from("media").getPublicUrl(path);
+  return data.publicUrl;
+}
+async function saveAd(isNew,id){
+  const g=k=>{const e=$("a_"+k);return e?e.value.trim():"";};
+  const gc=k=>{const e=$("a_"+k);return e?e.checked:false;};
+  const num=v=>v===""?null:(isNaN(+v)?null:+v);
+  const row={ slot:g("slot"), creative_type:g("creative_type"), format:g("format")||null, scope_city:g("scope_city")||null,
+    sponsor:g("sponsor")||null, title:g("title")||null, body:g("body")||null, image_url:g("image_url")||null, cta_url:g("cta_url")||null,
+    weight:num(g("weight"))||1, width:num(g("width")), height:num(g("height")), lat:num(g("lat")), lng:num(g("lng")), active:gc("active") };
+  const btn=$("asave"); btn.disabled=true; btn.textContent="Kaydediliyor…";
+  try{
+    if(isNew){ const {data,error}=await db.from("ads").insert(row).select().single(); if(error)throw error; DATA.ads.push(data); }
+    else { row.id=id; const {error}=await db.from("ads").update(row).eq("id",id); if(error)throw error; const i=DATA.ads.findIndex(x=>x.id===id); if(i>=0)DATA.ads[i]=Object.assign(DATA.ads[i],row); }
+  }catch(e){ $("aerr").textContent="Hata: "+(e.message||e); btn.disabled=false; btn.textContent="Kaydet"; return; }
+  closeModal(); renderAds();
+}
+async function delAd(id){ if(!confirm("Bu reklamı silmek istediğine emin misin?"))return; try{ await db.from("ads").delete().eq("id",id); }catch(e){} DATA.ads=DATA.ads.filter(a=>a.id!==id); closeModal(); renderAds(); }
 
 /* ---------- ÜYELER ---------- */
 function renderMembers(){
