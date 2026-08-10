@@ -173,6 +173,7 @@ function editVenue(id){
     +'<div class="frow">'+f("hours","Çalışma saatleri",v.hours||"")+self("resv","Rezervasyon",v.resv||"unknown",["no","rec","req","unknown"])+self("conf","Güven",v.conf||"high",["high","med","low"])+'</div>'
     +'<div class="frow">'+f("lat","Enlem (lat)",v.lat==null?"":v.lat)+f("lng","Boylam (lng)",v.lng==null?"":v.lng)+f("src","Kaynak",v.src||"")+'</div>'
     +'<div class="frow">'+f("web","Web",v.web||"")+f("ig","Instagram",v.ig||"")+'</div>'
+    +'<div class="frow">'+f("photo_url","Foto URL (gerçek fotoğraf — boşsa kategori görseli kullanılır)",v.photo_url||"")+'</div>'
     +ta("tip","Yerli tüyosu (tip)",v.tip||"")
     +ta("description","Açıklama",v.description||"")
     +ta("note","Not",v.note||"")
@@ -189,7 +190,7 @@ async function saveVenue(isNew){
   if(!id||!g("name").trim()){ $("verr").textContent="ID ve Ad zorunlu."; return; }
   const row={id, name:g("name").trim(), city:g("city").trim()||"Amsterdam", area:g("area").trim(), type:g("type").trim(),
     tags:arr(g("tags")), cats:arr(g("cats")), best:arr(g("best")), hours:g("hours").trim()||null,
-    resv:g("resv"), conf:g("conf"), src:g("src").trim()||null, web:g("web").trim()||null, ig:g("ig").trim()||null,
+    resv:g("resv"), conf:g("conf"), src:g("src").trim()||null, web:g("web").trim()||null, ig:g("ig").trim()||null, photo_url:g("photo_url").trim()||null,
     tip:g("tip").trim()||null, description:g("description").trim()||null, note:g("note").trim()||null,
     lat:g("lat")?parseFloat(g("lat")):null, lng:g("lng")?parseFloat(g("lng")):null,
     garden:gc("garden"), walk_in:gc("walk_in"), work:gc("work"), sponsored:gc("sponsored"), active:gc("active"),

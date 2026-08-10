@@ -1028,6 +1028,8 @@ const CATIMG={
  shop:"https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=520&q=65&auto=format&fit=crop"
 };
 function venueImg(v){
+ const real=(v.photo_url||v.photo||v.img||"").trim();
+ if(real)return real;
  const t=((v.tags||[]).join(" ")+" "+(v.cats||[]).join(" ")+" "+(v.type||"")).toLowerCase();
  if(/kahve|coffee|kafe|kavurucu/.test(t))return CATIMG.coffee;
  if(/şarap|sarap|wine|natürel|naturel/.test(t))return CATIMG.wine;
@@ -1541,6 +1543,21 @@ document.getElementById("checkList").innerHTML=CHECKS.map(c=>'<li>'+c+'</li>').j
 
 /* ===== INIT ===== */
 populateSelectors();populateRefSels();buildChips();renderScenarios();renderCards();renderCal();renderTrips();buildDE();
+
+/* ===== Admin'den gerçek foto URL'lerini (venues tablosu) app'e getir ===== */
+async function loadVenuePhotos(){
+ try{
+   if(!(window.supabase&&window.supabase.createClient))return;
+   const _db=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0");
+   const {data}=await _db.from("venues").select("id,photo_url");
+   if(!data||!data.length)return;
+   const map={}; data.forEach(r=>{if(r.photo_url)map[r.id]=r.photo_url;});
+   let changed=false;
+   V.forEach(v=>{ if(map[v.id]&&!v.photo_url){v.photo_url=map[v.id];changed=true;} });
+   if(changed){ try{renderCards();}catch(e){} try{if(typeof drawMarkers==="function"&&MAP&&MAP.map)drawMarkers();}catch(e){} }
+ }catch(e){}
+}
+loadVenuePhotos();
 
 /* ===== ÜYELİK (Aşama 2) ===== */
 const ASA = (function(){
