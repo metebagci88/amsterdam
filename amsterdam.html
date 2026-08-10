@@ -410,8 +410,8 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   <section class="view active" id="v-pano">
     <div id="adMasthead"></div>
     <div class="hero">
-      <h2>Bugün ne yapmak istiyorsun?</h2>
-      <p>Rembrandtpark’taki dairen merkez. Klasik turist değil, lokal yaşam modundasın: iyi kahve, güzel öğle yemeği, bisikletle keşif, akşam şarabı. Aşağıdan hızlı seç ya da “Karar” sekmesinden sana özel öneri al.</p>
+      <h2 data-ck="app.pano.h">Bugün ne yapmak istiyorsun?</h2>
+      <p data-ck="app.pano.p">Rembrandtpark’taki dairen merkez. Klasik turist değil, lokal yaşam modundasın: iyi kahve, güzel öğle yemeği, bisikletle keşif, akşam şarabı. Aşağıdan hızlı seç ya da “Karar” sekmesinden sana özel öneri al.</p>
       <span class="pill" id="heroLoc">📍 Referans konum: Rembrandtpark</span>
     </div>
     <div class="grid-cta" id="ctaGrid"></div>
@@ -423,7 +423,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 
   <!-- HARITA -->
   <section class="view" id="v-map">
-    <h2 class="section-title">Harita</h2>
+    <h2 class="section-title" data-ck="app.map.h">Harita</h2>
     <p class="section-sub">Noktaya dokun → mekan kartı + Google Maps linki. Sürükle & yakınlaştır. Renk = kaynak · kalp = favori · ★ = sen.</p>
     <div class="row">
       <select class="sel" id="mapCity">
@@ -461,7 +461,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 
   <!-- MEKANLAR -->
   <section class="view" id="v-list">
-    <h2 class="section-title">Mekan envanteri</h2>
+    <h2 class="section-title" data-ck="app.list.h">Mekan envanteri</h2>
     <div class="toolbar">
       <input class="search" id="q" placeholder="Ara: isim, mahalle, mutfak…" />
       <div class="row">
@@ -518,7 +518,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 
   <!-- KARAR -->
   <section class="view" id="v-de">
-    <h2 class="section-title">Karar motoru</h2>
+    <h2 class="section-title" data-ck="app.de.h">Karar motoru</h2>
     <p class="section-sub">Birkaç soru seç, bulunduğun referansa göre sana 5 öneri çıkarayım. (Tamamen dosya içinde çalışır — API/internet gerekmez.)</p>
     <div class="de-form" id="deForm"></div>
     <div class="de-out" id="deOut"></div>
@@ -563,7 +563,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   </section>
 
   <section class="view" id="v-member">
-    <h2 class="section-title">Üyelik</h2>
+    <h2 class="section-title" data-ck="app.member.h">Üyelik</h2>
     <p class="section-sub">E-posta + ortak şifre ile giriş yap; favorilerin buluta kaydolsun, profilin ve seviyen oluşsun. Seviyeler: 🧭 Kaşif · 🏙️ Şehirli · 🎨 Küratör · 💎 Insider.</p>
     <div id="memberBody"></div>
   </section>
@@ -1598,6 +1598,26 @@ async function mergeDbVenues(){
 mergeDbVenues();
 document.addEventListener("DOMContentLoaded",function(){ setTimeout(mergeDbVenues,300); });
 setTimeout(mergeDbVenues,2000);
+
+/* ===== Editoryal içerik (site_content) → data-ck elementleri ===== */
+async function applyContent(){
+ try{
+   if(!(window.supabase&&window.supabase.createClient))return;
+   if(!_dbVenues)_dbVenues=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0");
+   const {data}=await _dbVenues.from("site_content").select("key,value,enabled");
+   if(!data)return;
+   const map={}; data.forEach(r=>map[r.key]=r);
+   document.querySelectorAll("[data-ck]").forEach(el=>{
+     const r=map[el.getAttribute("data-ck")]; if(!r)return;
+     if(r.enabled===false){ el.style.display="none"; return; }
+     el.style.display="";
+     if(r.value!=null&&String(r.value).trim()!=="") el.textContent=r.value;
+   });
+ }catch(e){}
+}
+applyContent();
+document.addEventListener("DOMContentLoaded",function(){ setTimeout(applyContent,350); });
+setTimeout(applyContent,2100);
 
 /* ===== ÜYELİK (Aşama 2) ===== */
 const ASA = (function(){

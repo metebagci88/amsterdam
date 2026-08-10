@@ -203,8 +203,8 @@
   <!-- Hero -->
   <section class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 mb-24 items-center pt-10">
     <div class="lg:col-span-5 flex flex-col gap-6">
-      <h1 class="font-headline-xl text-headline-lg-mobile md:text-headline-xl text-primary tracking-tight leading-tight">Özenle seçilmiş<br/>şehir keşfi,<br/><span class="italic font-light text-secondary">bilinçli</span> gezginler için.</h1>
-      <p class="font-body-lg text-body-lg text-on-surface-variant max-w-md">Google haritalarında binlerce pin var, ama hangisi gerçekten iyi? asalocal, şehirde yaşayan yerlilerin önerileriyle doluyor — turist gibi değil, bir yerli gibi plan yaparsın.</p>
+      <h1 data-ck="home.hero.title" class="font-headline-xl text-headline-lg-mobile md:text-headline-xl text-primary tracking-tight leading-tight">Özenle seçilmiş<br/>şehir keşfi,<br/><span class="italic font-light text-secondary">bilinçli</span> gezginler için.</h1>
+      <p data-ck="home.hero.desc" class="font-body-lg text-body-lg text-on-surface-variant max-w-md">Google haritalarında binlerce pin var, ama hangisi gerçekten iyi? asalocal, şehirde yaşayan yerlilerin önerileriyle doluyor — turist gibi değil, bir yerli gibi plan yaparsın.</p>
     </div>
     <div class="lg:col-span-7 h-[400px] md:h-[600px] relative w-full border-t-2 border-secondary/20 pt-4">
       <img class="w-full h-full object-cover grayscale-[10%] sepia-[5%]" src="https://images.unsplash.com/photo-1534351590666-13e3e96b5017?w=1100&q=75&auto=format&fit=crop" alt="Amsterdam"/>
@@ -250,7 +250,7 @@
           <div class="flex flex-wrap gap-2" id="typeChips"></div>
         </div>
         <div class="pt-6 lg:pt-0 lg:col-span-4 flex flex-col items-end gap-2 mt-4">
-          <button id="goBtn" type="button" disabled class="bg-secondary text-on-secondary font-label-lg text-label-lg py-3 px-12 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors duration-300 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">Keşfet</button>
+          <button id="goBtn" data-ck="home.cta" type="button" disabled class="bg-secondary text-on-secondary font-label-lg text-label-lg py-3 px-12 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors duration-300 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">Keşfet</button>
           <span id="goNote" class="font-label-md text-label-md text-on-surface-variant"></span>
           <span id="dInfo" class="font-label-md text-label-md text-on-surface-variant"></span>
         </div>
@@ -320,6 +320,16 @@ let db=null, session=null;
 let sel={country:null,city:null,active:false,duration:null,durationDays:null,startDate:null,endDate:null,approx:null,types:new Set()};
 try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
 try{ session=JSON.parse(localStorage.getItem("asa_session")||"null"); }catch(e){ session=null; }
+async function applyContent(){
+ try{ if(!db)return;
+   const {data}=await db.from("site_content").select("key,value,enabled"); if(!data)return;
+   const map={}; data.forEach(r=>map[r.key]=r);
+   document.querySelectorAll("[data-ck]").forEach(el=>{ const r=map[el.getAttribute("data-ck")]; if(!r)return;
+     if(r.enabled===false){ el.style.display="none"; return; } el.style.display="";
+     if(r.value!=null&&String(r.value).trim()!=="") el.textContent=r.value; });
+ }catch(e){}
+}
+try{ applyContent(); setTimeout(applyContent,1500); }catch(e){}
 const $=id=>document.getElementById(id);
 const CHIP='px-3 py-1 bg-surface border border-outline-variant text-label-md font-label-md rounded-full cursor-pointer hover:border-secondary hover:text-secondary transition-colors';
 const CHIPON='px-3 py-1 bg-secondary text-on-secondary border border-secondary text-label-md font-label-md rounded-full cursor-pointer transition-colors';

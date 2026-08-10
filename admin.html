@@ -80,7 +80,18 @@ let db=null; try{ db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
 const $=id=>document.getElementById(id);
 const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 const arr=s=>(s||"").split(",").map(x=>x.trim()).filter(Boolean);
-let DATA={venues:[],cities:[],members:[],comments:[],ads:[],trips:0};
+let DATA={venues:[],cities:[],members:[],comments:[],ads:[],trips:0,content:[]};
+const CONTENT_DEFAULTS={
+ "home.hero.title":"Özenle seçilmiş şehir keşfi, bilinçli gezginler için.",
+ "home.hero.desc":"Google haritalarında binlerce pin var, ama hangisi gerçekten iyi? asalocal, şehirde yaşayan yerlilerin önerileriyle doluyor — turist gibi değil, bir yerli gibi plan yaparsın.",
+ "home.cta":"Keşfet",
+ "app.pano.h":"Bugün ne yapmak istiyorsun?",
+ "app.pano.p":"Rembrandtpark'taki dairen merkez. Klasik turist değil, lokal yaşam modundasın…",
+ "app.list.h":"Mekan envanteri",
+ "app.map.h":"Harita",
+ "app.de.h":"Karar motoru",
+ "app.member.h":"Üyelik"
+};
 let seg="ozet";
 
 function isAuthed(){ try{return sessionStorage.getItem("asa_admin")==="1";}catch(e){return false;} }
@@ -98,6 +109,7 @@ async function loadAll(){
   try{ const {data}=await db.from("comments").select("*").order("created_at",{ascending:false}); DATA.comments=data||[]; }catch(e){}
   try{ const {data}=await db.from("ads").select("*").order("id"); DATA.ads=data||[]; }catch(e){}
   try{ const {count}=await db.from("trips").select("*",{count:"exact",head:true}); DATA.trips=count||0; }catch(e){}
+  try{ const {data}=await db.from("site_content").select("*").order("key"); DATA.content=data||[]; }catch(e){}
 }
 
 function shell(body){
@@ -105,7 +117,7 @@ function shell(body){
    '<div class="topbar"><div><div class="b"><b>asa</b>local · Yönetim</div><div class="s">Merkezi kontrol paneli</div></div><button class="logout" id="lo">Çıkış</button></div>'
    +'<div class="wrap"><div class="nav" id="nav"></div><div id="body"></div></div>';
   $("lo").onclick=()=>{ try{sessionStorage.removeItem("asa_admin");}catch(e){} renderLogin(); };
-  const segs=[["ozet","Özet"],["venues","Mekanlar"],["cities","Şehirler"],["tags","Etiketler"],["comments","Moderasyon"],["ads","Reklamlar"],["members","Üyeler"]];
+  const segs=[["ozet","Özet"],["venues","Mekanlar"],["cities","Şehirler"],["tags","Etiketler"],["content","İçerik"],["comments","Moderasyon"],["ads","Reklamlar"],["members","Üyeler"]];
   $("nav").innerHTML=segs.map(s=>'<button class="'+(seg===s[0]?"on":"")+'" onclick="go(\''+s[0]+'\')">'+s[1]+'</button>').join("");
   $("body").innerHTML=body;
 }
@@ -116,6 +128,7 @@ function render(){
   if(seg==="venues") return renderVenues();
   if(seg==="cities") return renderCities();
   if(seg==="tags") return renderTags();
+  if(seg==="content") return renderContent();
   if(seg==="comments") return renderComments();
   if(seg==="ads") return renderAds();
   if(seg==="members") return renderMembers();
@@ -275,6 +288,39 @@ function renderComments(){
   shell(body);
 }
 async function delComment(id){ if(!confirm("Yorumu kaldır?"))return; try{await db.from("comments").delete().eq("id",id);}catch(e){} DATA.comments=DATA.comments.filter(c=>c.id!==id); renderComments(); }
+
+/* ---------- İÇERİK (editoryal metinler) ---------- */
+function contentRow(key){ return DATA.content.find(c=>c.key===key); }
+function renderContent(){
+  const keys=Object.keys(CONTENT_DEFAULTS);
+  let body='<div class="panel"><h3 style="margin-bottom:6px">Site metinleri</h3><p class="muted" style="margin-bottom:14px">Başlık/metin/buton adlarını buradan değiştir. Boş bırakırsan varsayılan metin kullanılır. Kapatırsan o öğe sitede gizlenir. Değişiklik siteye anında yansır (Ctrl+Shift+R).</p>';
+  body+=keys.map(k=>{
+    const r=contentRow(k)||{}; const label=(r.label||k); const val=r.value||""; const en=(r.enabled!==false);
+    const def=CONTENT_DEFAULTS[k]||"";
+    return '<div class="cblock" style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px"><b>'+esc(label)+'</b><span class="muted" style="font-size:11px">'+esc(k)+'</span></div>'
+      +'<textarea id="c_'+k+'" style="width:100%;min-height:52px" placeholder="Varsayılan: '+esc(def)+'">'+esc(val)+'</textarea>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">'
+        +'<label class="check" style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="ce_'+k+'" '+(en?"checked":"")+'> Sitede göster</label>'
+        +'<button class="btn sm primary" onclick="saveContent(\''+k+'\')">Kaydet</button>'
+      +'</div>'
+      +'<div class="muted" id="cmsg_'+k+'" style="font-size:12px;min-height:14px;margin-top:4px"></div>'
+    +'</div>';
+  }).join("");
+  body+='</div>';
+  shell(body);
+}
+async function saveContent(key){
+  const val=($("c_"+key).value||"").trim();
+  const en=$("ce_"+key).checked;
+  const label=(contentRow(key)||{}).label||key;
+  const row={key, label, value:val||null, enabled:en, updated_at:new Date().toISOString()};
+  const msg=$("cmsg_"+key); if(msg)msg.textContent="Kaydediliyor…";
+  try{ const {error}=await db.from("site_content").upsert(row,{onConflict:"key"}); if(error)throw error; }
+  catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); return; }
+  const i=DATA.content.findIndex(c=>c.key===key); if(i>=0)DATA.content[i]=Object.assign(DATA.content[i],row); else DATA.content.push(row);
+  if(msg)msg.textContent="✓ kaydedildi — sitede Ctrl+Shift+R ile görürsün";
+}
 
 /* ---------- REKLAMLAR ---------- */
 const AD_SLOTS=["masthead","leaderboard","sidebar","inline","venue_card","decision","map_pin"];
