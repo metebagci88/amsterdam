@@ -1544,20 +1544,55 @@ document.getElementById("checkList").innerHTML=CHECKS.map(c=>'<li>'+c+'</li>').j
 /* ===== INIT ===== */
 populateSelectors();populateRefSels();buildChips();renderScenarios();renderCards();renderCal();renderTrips();buildDE();
 
-/* ===== Admin'den gerçek foto URL'lerini (venues tablosu) app'e getir ===== */
-async function loadVenuePhotos(){
+/* ===== Admin (venues tablosu) → uygulama birleştirme =====
+   Uygulama gömülü V listesini kullanır; buradan Supabase'deki güncel mekanları
+   çekip birleştiriyoruz: mevcut mekanların alanlarını güncelle (photo_url dâhil),
+   yeni eklenen mekanları ekle, admin'de pasif yapılanları gizle. */
+function mapDbVenue(r){
+ return {
+   id:r.id, name:r.name, city:r.city||"Amsterdam", area:r.area||"", type:r.type||"",
+   tags:Array.isArray(r.tags)?r.tags:[], cats:Array.isArray(r.cats)?r.cats:[], best:Array.isArray(r.best)?r.best:[],
+   hours:r.hours||"", resv:r.resv||"unknown", conf:r.conf||"high", src:r.src||"user",
+   web:r.web||"", ig:r.ig||"", photo_url:r.photo_url||"",
+   tip:r.tip||"", desc:r.description||r.desc||"", note:r.note||"",
+   lat:(r.lat==null?null:+r.lat), lng:(r.lng==null?null:+r.lng),
+   garden:!!r.garden, walkIn:!!r.walk_in, work:!!r.work, sponsored:!!r.sponsored,
+   fav:false, active:(r.active!==false)
+ };
+}
+async function mergeDbVenues(){
  try{
    if(!(window.supabase&&window.supabase.createClient))return;
    const _db=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0");
-   const {data}=await _db.from("venues").select("id,photo_url");
+   const {data}=await _db.from("venues").select("*");
    if(!data||!data.length)return;
-   const map={}; data.forEach(r=>{if(r.photo_url)map[r.id]=r.photo_url;});
    let changed=false;
-   V.forEach(v=>{ if(map[v.id]&&!v.photo_url){v.photo_url=map[v.id];changed=true;} });
-   if(changed){ try{renderCards();}catch(e){} try{if(typeof drawMarkers==="function"&&MAP&&MAP.map)drawMarkers();}catch(e){} }
+   data.forEach(r=>{
+     if(!r||!r.id)return;
+     const i=V.findIndex(x=>x.id===r.id);
+     if(i>=0){
+       // mevcut mekan: admin'de doldurulmuş alanları uygula (boşları ezme)
+       const src=mapDbVenue(r);
+       ["photo_url","name","area","type","hours","web","ig","tip","desc","note"].forEach(k=>{ if(src[k]!==""&&src[k]!=null) V[i][k]=src[k]; });
+       if(Array.isArray(r.tags)&&r.tags.length)V[i].tags=r.tags;
+       if(Array.isArray(r.cats)&&r.cats.length)V[i].cats=r.cats;
+       if(r.active===false)V[i]._hidden=true; else delete V[i]._hidden;
+       changed=true;
+     } else if(r.active!==false){
+       // yeni mekan: uygulamaya ekle
+       V.push(mapDbVenue(r)); changed=true;
+     }
+   });
+   // pasif yapılanları listeden çıkar
+   for(let j=V.length-1;j>=0;j--){ if(V[j]._hidden){V.splice(j,1);changed=true;} }
+   if(changed){
+     try{populateSelectors();}catch(e){}
+     try{renderCards();}catch(e){}
+     try{if(typeof drawMarkers==="function"&&MAP&&MAP.map)drawMarkers();}catch(e){}
+   }
  }catch(e){}
 }
-loadVenuePhotos();
+mergeDbVenues();
 
 /* ===== ÜYELİK (Aşama 2) ===== */
 const ASA = (function(){
