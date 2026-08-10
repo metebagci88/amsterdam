@@ -191,7 +191,7 @@
 <body class="bg-surface text-on-surface font-body-md antialiased flex flex-col min-h-screen">
 <header class="bg-surface flex justify-between items-center px-margin-mobile md:px-margin-desktop h-20 w-full max-w-container-max mx-auto top-0 border-b border-primary/20 z-40">
   <div class="flex flex-col">
-    <a class="font-headline-xl text-headline-lg-mobile md:text-headline-xl text-primary tracking-tight" href="/amsterdam/">asalocal</a>
+    <a class="font-headline-xl text-headline-lg-mobile md:text-headline-xl text-primary tracking-tight" href="/">asalocal</a>
     <span class="font-label-md text-label-md text-on-surface-variant italic">as a local · yerel gibi</span>
   </div>
   <div class="flex items-center gap-4">
@@ -383,7 +383,7 @@ async function saveTrip(navigate){
   const trip={country:c?c.name:null,city:sel.city,duration:sel.duration,duration_days:sel.durationDays,start_date:sel.startDate,end_date:sel.endDate,approx_period:sel.approx,vacation_types:[...sel.types]};
   try{ localStorage.setItem("asa_trip",JSON.stringify(trip)); }catch(e){}
   if(db){ try{ await db.from("trips").insert([{email:session?session.email:null,country:trip.country,city:trip.city,duration:trip.duration,duration_days:trip.duration_days,start_date:trip.start_date,end_date:trip.end_date,approx_period:trip.approx_period,vacation_types:trip.vacation_types}]); }catch(e){} }
-  if(navigate){ location.href="amsterdam.html"; }
+  if(navigate){ location.href="/amsterdam/"; }
 }
 function wire(){
   $("countrySel").onchange=e=>{ sel.country=e.target.value||null; sel.city=null; sel.active=false; renderCities(); updateGo(); };
