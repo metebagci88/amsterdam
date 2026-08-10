@@ -376,7 +376,10 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 /* Venue modal hero */
 .vsheet{max-width:680px}
 .vhero{height:240px;background:#e7e4db center/cover no-repeat;border-radius:16px 16px 0 0;margin:-20px -18px 18px}
-.vhead h3{font-size:28px;font-family:"Fraunces",serif;letter-spacing:-.01em}
+.vhead h3{font-size:28px;font-family:"Fraunces",serif;letter-spacing:-.01em;color:var(--title);margin-top:2px}
+.vhead .kicker{margin-bottom:4px}
+.vdesc{font-size:14.5px;line-height:1.55;color:var(--ink);margin:8px 0 4px}
+.vacts{margin-top:14px}
 /* Gate */
 .gate{border:1px solid var(--line2);border-radius:var(--r);background:var(--bg2)}
 .gate-b{background:var(--accent2)}
@@ -1426,9 +1429,14 @@ function runDE(){
    const v=o[1];const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
    return '<div class="de-res"><div class="deimg" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="debody"><div class="role">'+o[0]+'</div>'+
      '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
-     '<div class="area">🏷️ '+(v.type||'')+(v.hours?' · ⏰ ~'+v.hours:'')+' · 📍 '+v.area+' · ≈'+km.toFixed(1)+' km · 🚲'+bikeMin(km)+' dk · <span class="'+r.c+'">'+r.t+'</span></div>'+
+     '<div class="kicker" style="color:var(--ink2);margin:2px 0 4px">'+(v.type||'').toUpperCase()+'</div>'+
+     '<div class="cloc"><span class="msym">location_on</span>'+v.area+' · <span class="'+r.c+'">'+r.t+'</span></div>'+
+     '<div class="area" style="margin:6px 0">'+
+       '<span class="mi"><span class="msym">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>'+
+       (v.hours?'<span class="mi"><span class="msym">schedule</span>'+v.hours+'</span>':'')+
+     '</div>'+
      '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
-     (v.tip?'<div class="tip">💡 '+v.tip+'</div>':'')+
+     (v.tip?'<div class="cnote"><span class="msym">chat_bubble</span><span>'+v.tip+'</span></div>':'')+
      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div></div></div>';
  }).join("")+((!_m&&_items.length>1)?gateCard((_items.length-1)+' alternatif daha üyelere özel'):"");
  document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
@@ -1663,13 +1671,21 @@ const VEN=(function(){
 
   function renderHead(v){
     const s=sess();
-    let h='<div class="vhero" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="vhead"><h3>'+esc(v.name)+'</h3>'
-      +'<div class="vmeta">🏷️ '+esc(v.type||'')+(v.hours?' · ⏰ ~'+esc(v.hours):'')+' · 📍 '+esc(v.area)+'</div>'
-      +(v.tip?'<div class="vtip">💡 '+esc(v.tip)+'</div>':'')
+    const km=distKm(v);const noteTxt=v.tip||v.note||'';
+    let h='<div class="vhero" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="vhead">'
+      +'<div class="kicker">'+esc((v.type||'').toUpperCase())+'</div>'
+      +'<h3>'+esc(v.name)+'</h3>'
+      +(v.desc?'<div class="vdesc">'+esc(v.desc)+'</div>':'')
+      +'<div class="cloc"><span class="msym">location_on</span>'+esc(v.area||'')+'</div>'
+      +'<div class="area" style="margin-bottom:6px">'
+        +((km<100)?'<span class="mi"><span class="msym">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>':'')
+        +(v.hours?'<span class="mi"><span class="msym">schedule</span>'+esc(v.hours)+'</span>':'')
+      +'</div>'
+      +(noteTxt?'<div class="cnote"><span class="msym">chat_bubble</span><span>'+esc(noteTxt)+'</span></div>':'')
       +'<div class="vacts">'
+      +'<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')"><span class="msym" style="font-size:16px;vertical-align:-3px">place</span> Google</button>'
       +'<button class="btn" id="vFav" onclick="VEN.fav()">'+(isFav(v.id)?"❤️ Kayıtlı":"🤍 Kaydet")+'</button>'
-      +'<button class="btn" onclick="winopen(\''+gmaps(v)+'\')">📍 Google</button>'
-      +'<button class="btn" onclick="VEN.close();showOnMap(\''+v.id+'\')">🗺️ Haritada</button>'
+      +'<button class="btn" onclick="VEN.close();showOnMap(\''+v.id+'\')">Haritada</button>'
       +'</div></div>';
     h+='<div class="vcomposer">';
     if(s){
