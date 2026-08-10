@@ -468,11 +468,15 @@ async function toggleBlock(email){
   m.blocked=nb; renderMembers();
 }
 async function delMember(email){
-  if(!confirm("Bu üyeliği ve üyenin favori/yorum verilerini kalıcı olarak silmek istediğine emin misin?\n\n"+email))return;
+  if(!confirm("Bu üyeyi KALICI olarak sil?\n\nGiriş hesabı (auth) + favori + yorum verileri de silinecek; bu e-posta ile yeniden kayıt olunabilir.\n\n"+email))return;
   try{
-    await db.from("favorites").delete().eq("email",email);
-    await db.from("comments").delete().eq("email",email);
-    await db.from("members").delete().eq("email",email);
+    const res=await fetch(CFG.url+"/functions/v1/admin-delete-user",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","apikey":CFG.key,"Authorization":"Bearer "+CFG.key},
+      body:JSON.stringify({email:email,admin_password:CFG.pw})
+    });
+    const j=await res.json().catch(()=>({}));
+    if(!res.ok||j.error){ alert("Silme hatası: "+(j.error||("HTTP "+res.status))); return; }
   }catch(e){ alert("Hata: "+(e.message||e)); return; }
   DATA.members=DATA.members.filter(x=>x.email!==email);
   openMember=null; renderMembers();
