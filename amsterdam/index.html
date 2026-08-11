@@ -1889,21 +1889,21 @@ const VEN=(function(){
   function renderHead(v){
     const s=sess();
     const km=distKm(v);const noteTxt=v.tip||v.note||'';
-    let h='<div class="vhero" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="vhead">'
-      +'<div class="kicker">'+esc((v.type||'').toUpperCase())+'</div>'
-      +'<h3>'+esc(v.name)+'</h3>'
-      +(v.desc?'<div class="vdesc">'+esc(v.desc)+'</div>':'')
-      +'<div class="cloc"><span class="msym">location_on</span>'+esc(v.area||'')+'</div>'
-      +'<div class="area" style="margin-bottom:6px">'
-        +((km<100)?'<span class="mi"><span class="msym">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>':'')
-        +(v.hours?'<span class="mi"><span class="msym">schedule</span>'+esc(v.hours)+'</span>':'')
+    let h='<div class="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-surface-container mb-5"><img class="w-full h-full object-cover" src="'+venueImg(v)+'"></div>'
+      +'<div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">'+esc((v.type||'').toUpperCase())+'</div>'
+      +'<h3 class="font-headline-lg text-[28px] leading-tight text-primary mb-2">'+esc(v.name)+'</h3>'
+      +(v.desc?'<p class="font-body-lg text-body-lg text-on-surface/90 mb-4">'+esc(v.desc)+'</p>':'')
+      +'<div class="flex items-center gap-1.5 text-on-surface-variant text-[14px] mb-2"><span class="msym text-[18px]">location_on</span><span>'+esc(v.area||'')+'</span></div>'
+      +'<div class="flex items-center gap-4 text-on-surface-variant text-[14px] mb-3">'
+        +((km<100)?'<span class="inline-flex items-center gap-1"><span class="msym text-[18px]">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>':'')
+        +(v.hours?'<span class="inline-flex items-center gap-1"><span class="msym text-[18px]">schedule</span>'+esc(v.hours)+'</span>':'')
       +'</div>'
-      +(noteTxt?'<div class="cnote"><span class="msym">chat_bubble</span><span>'+esc(noteTxt)+'</span></div>':'')
-      +'<div class="vacts">'
-      +'<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')"><span class="msym" style="font-size:16px;vertical-align:-3px">place</span> Google</button>'
-      +'<button class="btn" id="vFav" onclick="VEN.fav()">'+(isFav(v.id)?"❤️ Kayıtlı":"🤍 Kaydet")+'</button>'
-      +'<button class="btn" onclick="VEN.close();showOnMap(\''+v.id+'\')">Haritada</button>'
-      +'</div></div>';
+      +(noteTxt?'<div class="bg-surface-container-low rounded-sm p-3 flex items-start gap-2.5 text-on-surface-variant text-[14px] leading-relaxed mb-4"><span class="msym text-[18px] text-primary mt-0.5 shrink-0">chat_bubble</span><span>'+esc(noteTxt)+'</span></div>':'')
+      +'<div class="flex flex-wrap gap-2 mb-5">'
+      +'<button class="inline-flex items-center gap-1 rounded-full bg-primary text-on-primary font-button text-button px-4 py-2.5 hover:opacity-90 transition-opacity" onclick="winopen(\''+gmaps(v)+'\')"><span class="msym text-[16px]">place</span> Google</button>'
+      +'<button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2.5 hover:bg-surface-container transition-colors" id="vFav" onclick="VEN.fav()">'+(isFav(v.id)?"❤️ Kayıtlı":"🤍 Kaydet")+'</button>'
+      +'<button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2.5 hover:bg-surface-container transition-colors" onclick="VEN.close();showOnMap(\''+v.id+'\')">Haritada</button>'
+      +'</div>';
     h+='<div class="vcomposer">';
     if(s){
       h+='<textarea id="vBody" placeholder="Bu mekan hakkında yorumun… yerli tüyosu, ne yedin/içtin, ne zaman gidilir?"></textarea>'
