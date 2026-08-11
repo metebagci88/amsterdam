@@ -432,7 +432,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
       <p data-ck="app.pano.p">Rembrandtpark’taki dairen merkez. Klasik turist değil, lokal yaşam modundasın: iyi kahve, güzel öğle yemeği, bisikletle keşif, akşam şarabı. Aşağıdan hızlı seç ya da “Karar” sekmesinden sana özel öneri al.</p>
       <span class="pill" id="heroLoc">📍 Referans konum: Rembrandtpark</span>
     </div>
-    <div class="grid-cta" id="ctaGrid"></div>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8" id="ctaGrid"></div>
     <div id="adCityBanner"></div>
     <h2 class="section-title">Günlük senaryo rotaları</h2>
     <p class="section-sub">Her biri 3–6 duraklı. “Haritada rota” ile Google Maps’te sırayla açılır.</p>
@@ -930,8 +930,9 @@ const CTAS=[
  {e:"🎯",l:"Bana özel öner",d:"Karar motoru",act:()=>go("de")}
 ];
 const cg=document.getElementById("ctaGrid");
-CTAS.forEach(c=>{const d=document.createElement("button");d.className="cta";
- d.innerHTML='<div class="e">'+c.e+'</div><div class="l">'+c.l+'</div><div class="d">'+c.d+'</div>';
+CTAS.forEach(c=>{const d=document.createElement("button");
+ d.className="flex flex-col items-start text-left gap-0.5 p-4 rounded-lg bg-surface-container-low hover:bg-surface-container border border-outline-variant/40 transition-colors";
+ d.innerHTML='<div class="text-[24px] mb-1">'+c.e+'</div><div class="font-headline-md text-[15px] leading-tight text-primary">'+c.l+'</div><div class="text-on-surface-variant text-[12.5px] mt-0.5">'+c.d+'</div>';
  d.onclick=c.act;cg.appendChild(d);});
 
 /* ===== SCENARIOS ===== */
