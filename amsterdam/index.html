@@ -519,6 +519,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   <section class="view" id="v-cal">
     <h2 class="section-title" id="calTitle">Günlük akış</h2>
     <p class="section-sub">İlgi alanlarına göre sana özel bir taslak plan hazırlıyorum: her güne sabah–öğle–öğleden sonra–akşam için mekan önerileri. Beğenmediğini çıkar, favorilerinden ekle, plan notu yaz. Koyu günler hafta sonu.</p>
+    <div id="planSetup" class="mb-6"></div>
     <div id="planCtl"></div>
     <div id="cal"></div>
   </section>
@@ -1346,7 +1347,101 @@ function renderPlanCtl(){
    (any?'<button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-5 py-2.5 hover:bg-surface-container transition-colors" onclick="clearPlan()">Planı temizle</button>':'')+'</div>'+
    '<div class="text-on-surface-variant text-[13px] mb-5">'+(its.length?("✦ İlgi alanların: "+its.join(", ")):"Henüz ilgi alanı seçmemişsin — genel öneriler kullanılıyor. Ana sayfada tür seçersen plan sana göre şekillenir.")+'</div>';
 }
-function ensurePlan(){ try{ CAL=buildCalDays(); if(!CAL.days.some(D=>(dayVenues[D.key]||[]).length)) autoGeneratePlan(false); else {renderPlanCtl();renderCal();} }catch(e){} }
+function ensurePlan(){ try{renderPlanSetup();}catch(e){} try{ CAL=buildCalDays(); if(!CAL.days.some(D=>(dayVenues[D.key]||[]).length)) autoGeneratePlan(false); else {renderPlanCtl();renderCal();} }catch(e){} }
+
+/* ===== PLAN KURULUM — girdi ekranı + ilgi % (kural motoruna BAĞLI DEĞİL) ===== */
+var PSET=(function(){
+ const CATS=[{key:"culture_art",label:"Kültür & Sanat",v:20},{key:"gastronomy",label:"Gastronomi",v:20},{key:"coffee_brunch",label:"Kahve & Brunch",v:10},{key:"local_discovery",label:"Lokal Keşif",v:15},{key:"history_architecture",label:"Tarih & Mimari",v:10},{key:"nature_parks",label:"Doğa & Parklar",v:8},{key:"nightlife",label:"Gece Hayatı",v:5},{key:"shopping",label:"Alışveriş",v:5},{key:"events",label:"Etkinlikler",v:2},{key:"rest_freetime",label:"Dinlenme & Serbest Zaman",v:5,buffer:true}];
+ const DIET=["Vejetaryen","Vegan","Glutensiz","Helal","Laktozsuz","Fındık alerjisi"];
+ const NB=(typeof AREA_CENTERS!=="undefined")?Object.keys(AREA_CENTERS):[];
+ const INP='w-full bg-surface border border-outline-variant rounded-lg px-3 py-2.5 text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary';
+ const LBL='block text-[12px] text-on-surface-variant mb-1 font-medium';
+ const SEC='font-kicker text-kicker text-on-surface-variant uppercase mt-5 mb-2';
+ let s=null, warn="";
+ function trip(){ try{return JSON.parse(localStorage.getItem("asa_trip")||"{}")||{};}catch(e){return {};} }
+ function prefs(){ try{return JSON.parse(localStorage.getItem("asa_plan_prefs")||"{}")||{};}catch(e){return {};} }
+ function invList(){ return (typeof V!=="undefined"?V:[]).filter(v=>v&&v.city==="Amsterdam"&&v.active!==false).map(v=>({id:v.id,name:v.name})); }
+ function nameOf(id){ const v=(typeof V!=="undefined")?V.find(x=>x.id===id):null; return v?v.name:id; }
+ function load(){ const t=trip(),p=prefs(); s={ startDate:t.start_date||"", endDate:t.end_date||"", arrival:p.arrival||"14:00", departure:p.departure||"11:00", dayStart:p.dayStart||"09:00", dayEnd:p.dayEnd||"23:00", tempo:p.tempo||"Dengeli", transport:p.transport||{walk:true,bike:true,transit:false}, dietary:p.dietary||[], mustSee:p.mustSee||[], avoid:p.avoid||[], reservations:p.reservations||[], otherNote:p.otherNote||"", auto:(p.auto!==false), resDraft:{id:"",date:"",start:"",end:""}, open:!p.saved, cats:CATS.map(c=>({...c,v:(p.interests&&p.interests[c.key]!=null)?p.interests[c.key]:c.v,locked:false})) }; }
+ const sum=()=>s.cats.reduce((a,c)=>a+c.v,0);
+ function distribute(ci){ const lk=s.cats.reduce((a,c)=>a+(c.locked?c.v:0),0); const fx=(ci!=null)?s.cats[ci].v:0; const oth=s.cats.map((c,i)=>({c,i})).filter(o=>!o.c.locked&&o.i!==ci); if(!oth.length)return false; let rem=100-lk-fx; if(rem<0){ if(ci!=null){ s.cats[ci].v=Math.max(0,100-lk); rem=100-lk-s.cats[ci].v; } else return false; } const pv=oth.reduce((a,o)=>a+o.c.v,0); if(pv<=0)oth.forEach(o=>o.c.v=Math.floor(rem/oth.length)); else oth.forEach(o=>o.c.v=Math.max(0,Math.round(rem*o.c.v/pv))); let dr=100-sum(); oth.sort((a,b)=>b.c.v-a.c.v); oth[0].c.v=Math.max(0,oth[0].c.v+dr); return true; }
+ function iStatus(){ const t=sum(),allL=s.cats.every(c=>c.locked),ok=(t===100); let m,cl; if(warn){m=warn;cl="warn";} else if(allL){ if(t===100){m="Tüm oranlar sabit. Oto dengeleme için bir kilidi aç.";cl="ok";} else {m="Hepsi kilitli, toplam %"+t+". Bir kilidi aç.";cl="warn";} } else if(s.auto){ if(t===100){m="Dağılım %100 ✓";cl="ok";} else if(t<100){m="Kilitler nedeniyle %"+(100-t)+" eksik.";cl="warn";} else {m="Kilitler %"+(t-100)+" fazla.";cl="warn";} } else { if(t===100){m="Dağılım %100 ✓";cl="ok";} else if(t<100){m="%"+(100-t)+" daha dağıtmalısın";cl="warn";} else {m="%"+(t-100)+" azaltmalısın";cl="warn";} } return {t,ok,m,cl}; }
+ function accOk(){ return (typeof userLoc!=="undefined") && userLoc!=null; }
+ function timeOk(x){ return /^\d{2}:\d{2}$/.test(x||""); }
+ function cta(){ const st=iStatus(); if(!st.ok) return {ok:false,m:"İlgi dağılımını %100 yapmalısın."}; if(!accOk()) return {ok:false,m:"Planı oluşturmak için konaklama noktanı seçmelisin (mahalle ya da haritadan pin)."}; if(!(s.startDate&&s.endDate&&s.startDate<=s.endDate)) return {ok:false,m:"Başlangıç tarihi bitiş tarihinden sonra olamaz."}; if(!timeOk(s.arrival)) return {ok:false,m:"Şehre varış saatini gir."}; if(!timeOk(s.departure)) return {ok:false,m:"Şehirden ayrılış saatini gir."}; if(!(timeOk(s.dayStart)&&timeOk(s.dayEnd)&&s.dayStart<s.dayEnd)) return {ok:false,m:"Günlük başlangıç saati bitişten önce olmalı."}; if(!(s.transport.walk||s.transport.bike||s.transport.transit)) return {ok:false,m:"En az bir ulaşım biçimi seçmelisin."}; return {ok:true,m:"Tüm alanlar tamam ✓"}; }
+ // ---- handlers ----
+ const API={};
+ API.slide=(i,v)=>{ s.cats[i].v=v; let ok=true; if(s.auto)ok=distribute(i); render(); if(!ok){warn="Diğer kategoriler kilitli — dengeleme yapılamıyor.";render();setTimeout(()=>{warn="";render();},2200);} };
+ API.lock=(i)=>{ s.cats[i].locked=!s.cats[i].locked; render(); };
+ API.autoToggle=()=>{ s.auto=!s.auto; if(s.auto&&sum()!==100){ const ok=distribute(null); if(!ok){warn="Tüm oranlar kilitli — bir kilidi aç.";setTimeout(()=>{warn="";render();},2400);} } render(); };
+ API.tempo=(t)=>{ s.tempo=t; render(); };
+ API.tr=(k)=>{ s.transport[k]=!s.transport[k]; render(); };
+ API.diet=(t)=>{ const i=s.dietary.indexOf(t); if(i<0)s.dietary.push(t); else s.dietary.splice(i,1); render(); };
+ API.pick=(list,id)=>{ if(!id)return; const other=(list==="mustSee")?"avoid":"mustSee"; s[other]=s[other].filter(x=>x!==id); if(!s[list].includes(id))s[list].push(id); render(); };
+ API.unpick=(list,id)=>{ s[list]=s[list].filter(x=>x!==id); render(); };
+ API.setDate=(k,v)=>{ s[k]=v; const t=trip(); t[k==="startDate"?"start_date":"end_date"]=v; try{localStorage.setItem("asa_trip",JSON.stringify(t));}catch(e){} try{CAL=buildCalDays();}catch(e){} render(); try{if(document.getElementById("cal"))renderCal();}catch(e){} };
+ API.setTime=(k,v)=>{ s[k]=v; render(); };
+ API.setDraft=(k,v)=>{ s.resDraft[k]=v; };
+ API.addRes=()=>{ const d=s.resDraft; if(!d.id||!d.date||!d.start){warn="Rezervasyon için mekân, tarih ve başlangıç saati gerekli.";render();setTimeout(()=>{warn="";render();},2400);return;} if(s.startDate&&s.endDate&&(d.date<s.startDate||d.date>s.endDate)){warn="Rezervasyon tarihi seyahat tarihleri içinde olmalı.";render();setTimeout(()=>{warn="";render();},2600);return;} if(d.end&&d.end<=d.start){warn="Rezervasyon bitiş saati başlangıçtan sonra olmalı.";render();setTimeout(()=>{warn="";render();},2600);return;} s.reservations.push({...d}); s.resDraft={id:"",date:"",start:"",end:""}; render(); };
+ API.delRes=(i)=>{ s.reservations.splice(i,1); render(); };
+ API.setNote=(v)=>{ s.otherNote=v; }; // güvenli: innerHTML'e girmez, sadece state
+ API.pin=()=>{ try{ setActiveView("map"); MAP.pickMode=true; var pb=document.getElementById("pickBtn"); if(pb)pb.classList.add("on"); if(MAP.map)MAP.map.getContainer().style.cursor="crosshair"; }catch(e){} };
+ API.nb=(v)=>{ if(!v)return; try{ const c=AREA_CENTERS[v]; if(c)setRef(c[0],c[1],v); }catch(e){} render(); };
+ API.edit=()=>{ s.open=true; render(); };
+ API.submit=()=>{ const c=cta(); if(!c.ok)return; savePrefs(); try{CAL=buildCalDays();}catch(e){} try{autoGeneratePlan(true);}catch(e){} s.open=false; render(); try{renderCal();}catch(e){} const el=document.getElementById("planCtl"); if(el)el.scrollIntoView({behavior:"smooth",block:"start"}); };
+ function savePrefs(){ const interests={}; s.cats.forEach(c=>interests[c.key]=c.v); const p={interests,tempo:s.tempo,transport:s.transport,arrival:s.arrival,departure:s.departure,dayStart:s.dayStart,dayEnd:s.dayEnd,dietary:s.dietary,mustSee:s.mustSee,avoid:s.avoid,reservations:s.reservations,otherNote:s.otherNote,auto:s.auto,saved:true,updated_at:new Date().toISOString()}; try{localStorage.setItem("asa_plan_prefs",JSON.stringify(p));}catch(e){} const t=trip(); t.start_date=s.startDate; t.end_date=s.endDate; t.plan_prefs=Object.assign({},p,{accommodation:(typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng}:null}); try{localStorage.setItem("asa_trip",JSON.stringify(t));}catch(e){} }
+ // ---- render ----
+ function chip(on,txt,onclick,extra){ return '<button type="button" class="rounded-full border px-3 py-2 text-[12.5px] min-h-[38px] inline-flex items-center transition-colors '+(on?"bg-primary text-on-primary border-primary":"bg-surface border-outline-variant text-on-surface hover:bg-surface-container")+'" '+(extra||"")+' onclick="'+onclick+'">'+txt+'</button>'; }
+ function invOpt(sel){ return '<option value="">— mekân seç —</option>'+invList().map(x=>'<option value="'+esc(x.id)+'"'+(sel===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join(""); }
+ function pickBlock(list,label,hint){ const chips=s[list].map(id=>'<span class="inline-flex items-center gap-1.5 bg-surface border border-outline-variant rounded-full pl-3 pr-1.5 py-1 text-[12px]">'+esc(nameOf(id))+'<button type="button" class="text-secondary px-1" aria-label="kaldır" onclick="PSET.unpick(\''+list+'\',\''+esc(id)+'\')">✕</button></span>').join(""); return '<div class="mb-3"><label class="'+LBL+'">'+label+'</label><select class="'+INP+'" aria-label="'+label+'" onchange="PSET.pick(\''+list+'\',this.value);this.selectedIndex=0">'+invOpt("")+'</select>'+(hint?'<div class="text-[10.5px] text-on-surface-variant mt-1">'+hint+'</div>':'')+(chips?'<div class="flex flex-wrap gap-2 mt-2">'+chips+'</div>':'')+'</div>'; }
+ function formHTML(){
+   const acc=accOk();
+   const tp=x=>chip(s.tempo===x,x,"PSET.tempo('"+x+"')",'aria-pressed="'+(s.tempo===x)+'" role="radio"');
+   const tr=(k,l)=>chip(s.transport[k],l,"PSET.tr('"+k+"')",'aria-pressed="'+s.transport[k]+'"');
+   const rows=s.cats.map((c,i)=>'<div class="grid items-center gap-2 py-2" style="grid-template-columns:34px 1fr 46px">'+
+     '<button type="button" class="w-[34px] h-[34px] rounded-lg border '+(c.locked?"border-secondary text-secondary":"border-outline-variant text-on-surface-variant")+' bg-surface" aria-pressed="'+c.locked+'" aria-label="'+esc(c.label)+' oranını '+(c.locked?"kilidini aç":"kilitle")+'" onclick="PSET.lock('+i+')">'+(c.locked?"🔒":"🔓")+'</button>'+
+     '<div><label class="sr-only" for="ps-rng'+i+'">'+esc(c.label)+' yüzdesi</label><div class="text-[13px] font-medium text-on-surface">'+esc(c.label)+(c.buffer?' <span class="text-[9px] text-secondary border border-secondary rounded-full px-1.5 py-0.5 align-middle">BUFFER</span>':'')+'</div>'+
+     '<input id="ps-rng'+i+'" type="range" min="0" max="100" step="1" value="'+c.v+'" '+(c.locked?"disabled":"")+' aria-label="'+esc(c.label)+' yüzdesi" aria-valuetext="%'+c.v+'" class="w-full" oninput="PSET.slide('+i+',+this.value)"></div>'+
+     '<div class="text-[13px] font-semibold text-right" style="font-variant-numeric:tabular-nums">%'+c.v+'</div></div>').join("");
+   const st=iStatus(), c=cta(); const zeros=s.cats.filter(x=>x.v===0).map(x=>esc(x.label));
+   const diet=DIET.map(t=>chip(s.dietary.includes(t),t,"PSET.diet('"+t+"')",'aria-pressed="'+s.dietary.includes(t)+'"')).join("");
+   const rl=s.reservations.map((r,i)=>'<span class="inline-flex items-center gap-1.5 bg-surface border border-outline-variant rounded-full pl-3 pr-1.5 py-1 text-[12px]">'+esc(nameOf(r.id))+' · '+esc(r.date)+' '+esc(r.start)+(r.end?"–"+esc(r.end):"")+' 🔒<button type="button" class="text-secondary px-1" aria-label="kaldır" onclick="PSET.delRes('+i+')">✕</button></span>').join("");
+   return '<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-4">'+
+     '<div class="flex items-center justify-between mb-2"><div class="font-headline-md text-[17px] text-primary">Plan kurulumu</div><button type="button" class="text-secondary text-[12px]" onclick="PSET.close()">Küçült ▲</button></div>'+
+     '<div class="'+SEC+'">Kurulum (zorunlu)</div>'+
+     '<div class="mb-3"><label class="'+LBL+'">Konaklama (ana merkez)</label><div class="flex flex-wrap gap-2 items-center"><button type="button" class="rounded-full border '+(acc?"border-primary bg-primary text-on-primary":"border-outline-variant bg-surface text-on-surface")+' px-3 py-2 text-[12.5px] min-h-[38px]" onclick="PSET.pin()">📍 Haritadan pin</button><select class="'+INP+'" style="max-width:220px" aria-label="Mahalle seç" onchange="PSET.nb(this.value)"><option value="">Mahalle seç…</option>'+NB.map(n=>'<option>'+esc(n)+'</option>').join("")+'</select></div><div class="text-[11px] '+(acc?"text-on-surface-variant":"text-secondary")+' mt-1">'+(acc?"✓ Konaklama noktan seçildi.":"Haritadan pin bırak ya da mahalle seç — koordinat belirlenmeden geçerli sayılmaz.")+'</div></div>'+
+     '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Başlangıç tarihi</label><input type="date" class="'+INP+'" value="'+esc(s.startDate)+'" onchange="PSET.setDate(\'startDate\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Bitiş tarihi</label><input type="date" class="'+INP+'" value="'+esc(s.endDate)+'" onchange="PSET.setDate(\'endDate\',this.value)"></div></div>'+
+     '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Şehre varış saati</label><input type="time" class="'+INP+'" value="'+esc(s.arrival)+'" onchange="PSET.setTime(\'arrival\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Ayrılış saati</label><input type="time" class="'+INP+'" value="'+esc(s.departure)+'" onchange="PSET.setTime(\'departure\',this.value)"></div></div>'+
+     '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Gün başlangıç</label><input type="time" class="'+INP+'" value="'+esc(s.dayStart)+'" onchange="PSET.setTime(\'dayStart\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Gün bitiş</label><input type="time" class="'+INP+'" value="'+esc(s.dayEnd)+'" onchange="PSET.setTime(\'dayEnd\',this.value)"></div></div>'+
+     '<div class="mb-3"><label class="'+LBL+'">Tempo</label><div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Tempo">'+tp("Rahat")+tp("Dengeli")+tp("Yoğun")+'</div></div>'+
+     '<div class="mb-1"><label class="'+LBL+'">Ulaşım (en az bir)</label><div class="flex flex-wrap gap-2" role="group" aria-label="Ulaşım">'+tr("walk","Yürüyüş")+tr("bike","Bisiklet")+tr("transit","Toplu taşıma")+'</div></div>'+
+     '<div class="'+SEC+'">İlgi dağılımın (toplam %100)</div>'+
+     '<div class="text-[11.5px] text-on-surface-variant bg-surface-container rounded-lg p-2.5 mb-3">Yüzdeler <b>mekân sayısını değil</b>, planlanabilir aktivite süresini temsil eder. “Dinlenme” bir mekân değil; o oran kadar zaman <b>bilinçli boş</b> bırakılır.</div>'+
+     '<div class="flex items-center justify-between mb-2"><span class="text-[13px] font-medium" id="ps-autolbl">Otomatik dengeleme</span><button type="button" role="switch" aria-checked="'+s.auto+'" aria-labelledby="ps-autolbl" class="w-[46px] h-[26px] rounded-full relative '+(s.auto?"bg-primary-container":"bg-outline-variant")+'" onclick="PSET.autoToggle()"><span class="absolute top-[3px] w-5 h-5 rounded-full bg-surface transition-all" style="left:'+(s.auto?"23px":"3px")+'"></span></button></div>'+
+     rows+
+     '<div class="flex items-center justify-between mt-3 mb-1"><span class="text-[12px] text-on-surface-variant">Toplam</span><span class="font-headline-md text-[20px] '+(st.ok?"text-primary":"")+'" style="'+(st.ok?"":"color:#a6601f")+'">%'+st.t+'</span></div>'+
+     '<div class="h-2 rounded-full bg-surface-container overflow-hidden mb-2"><div class="h-full" style="width:'+Math.min(100,st.t)+'%;background:'+(st.t===100?"#4f6b3f":"#a6601f")+'"></div></div>'+
+     '<div class="text-[12.5px] font-medium mb-1" style="color:'+(st.cl==="ok"?"#4f6b3f":"#a6601f")+'">'+esc(st.m)+'</div>'+
+     (zeros.length?'<div class="text-[11px] text-on-surface-variant mb-2">Plan dışı (%0): '+zeros.join(", ")+'</div>':'')+
+     '<details class="mt-3 border border-outline-variant/50 rounded-xl px-3"><summary class="text-[13px] font-medium py-3 cursor-pointer">Tercihlerini detaylandır (isteğe bağlı)</summary>'+
+       '<div class="mb-3"><label class="'+LBL+'">Beslenme / alerji (çoklu)</label><div class="flex flex-wrap gap-2">'+diet+'</div></div>'+
+       pickBlock("mustSee","Mutlaka görmek istediklerim","Envanterden seç → must_see_ids olarak saklanır.")+
+       pickBlock("avoid","Gitmek istemediklerim","Envanterden seç → avoid_ids olarak saklanır (must-see ile çakışamaz).")+
+       '<div class="mb-2"><label class="'+LBL+'">Mevcut rezervasyonlar</label><div class="bg-surface-container rounded-lg p-3 flex flex-col gap-2"><select class="'+INP+'" aria-label="Rezervasyon mekânı" onchange="PSET.setDraft(\'id\',this.value)">'+invOpt(s.resDraft.id)+'</select><div class="grid grid-cols-2 gap-2"><input type="date" class="'+INP+'" aria-label="Rezervasyon tarihi" value="'+esc(s.resDraft.date)+'" onchange="PSET.setDraft(\'date\',this.value)"><input type="time" class="'+INP+'" aria-label="Başlangıç saati" value="'+esc(s.resDraft.start)+'" onchange="PSET.setDraft(\'start\',this.value)"></div><input type="time" class="'+INP+'" aria-label="Bitiş saati (opsiyonel)" value="'+esc(s.resDraft.end)+'" onchange="PSET.setDraft(\'end\',this.value)"><button type="button" class="rounded-lg bg-primary text-on-primary font-button text-button py-2.5" onclick="PSET.addRes()">+ Rezervasyon ekle</button></div><div class="text-[10.5px] text-on-surface-variant mt-1">Rezervasyonlu durak otomatik <b>kilitli/sabit</b> kabul edilir. Tarih seyahat aralığında olmalı.</div>'+(rl?'<div class="flex flex-wrap gap-2 mt-2">'+rl+'</div>':'')+'</div>'+
+       '<div class="mb-1"><label class="'+LBL+'">Diğer not (serbest)</label><textarea id="ps-note" class="'+INP+'" style="min-height:60px" placeholder="Motorun karar veremeyeceği özel bir durum…" oninput="PSET.setNote(this.value)"></textarea><div class="text-[10.5px] text-on-surface-variant mt-1">⚠️ Bu metin plan motorunun kararına <b>katılmaz</b>; yalnızca not olarak saklanır.</div></div>'+
+     '</details>'+
+     '<div class="text-[12px] font-medium mt-4 mb-1" style="color:'+(c.ok?"#4f6b3f":"#a6601f")+'">'+esc(c.m)+'</div>'+
+     '<button type="button" class="w-full rounded-full font-button text-button py-3.5 '+(c.ok?"bg-primary text-on-primary hover:opacity-90":"bg-outline-variant text-on-surface-variant cursor-not-allowed")+'" '+(c.ok?"":"disabled")+' onclick="PSET.submit()">Planımı oluştur</button>'+
+   '</div>';
+ }
+ function summaryHTML(){ const p=prefs(); const top=Object.entries(p.interests||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>{const c=CATS.find(k=>k.key===x[0]);return (c?c.label:x[0])+" %"+x[1];}).join(" · "); return '<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-4 flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-headline-md text-[15px] text-primary">Plan tercihlerin kayıtlı</div><div class="text-[12px] text-on-surface-variant truncate">'+esc(top||"—")+'</div></div><button type="button" class="shrink-0 rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container" onclick="PSET.edit()">Düzenle</button></div>'; }
+ API.close=()=>{ s.open=false; render(); };
+ function render(){ const el=document.getElementById("planSetup"); if(!el)return; if(!s)load(); el.innerHTML = s.open ? formHTML() : summaryHTML(); if(s.open){ const nt=document.getElementById("ps-note"); if(nt) nt.value=s.otherNote||""; } }
+ API.render=render; API._reload=()=>{load();render();};
+ return API;
+})();
+if(typeof window!=="undefined") window.PSET=PSET;
+function renderPlanSetup(){ try{ PSET.render(); }catch(e){} }
 let planSelDay=null, dayFilter="all";
 const SLOT_EMO={"Sabah":"☀️","Öğle":"🍽️","Öğleden sonra":"🎨","Akşam":"🌙"};
 function renderCal(){
