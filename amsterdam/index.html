@@ -408,15 +408,18 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 </head>
 <body>
 <header class="app">
-  <div class="hbar">
-    <div class="brand" style="display:flex;align-items:center;gap:10px">
-      <button class="homelink msym" onclick="goBack()" title="Geri">arrow_back</button>
-      <a href="/" class="homelink msym" title="Ana sayfa" style="font-size:20px">home</a>
-      <div><span class="t">asalocal</span><span class="s">Amsterdam · yerel gibi gez</span></div>
+  <div class="flex items-center justify-between gap-3 max-w-[1120px] mx-auto px-5 py-3">
+    <div class="flex items-center gap-2 min-w-0">
+      <button class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" onclick="goBack()" title="Geri"><span class="msym text-[20px]">arrow_back</span></button>
+      <a href="/" class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" title="Ana sayfa"><span class="msym text-[20px]">home</span></a>
+      <div class="min-w-0 ml-1 leading-tight">
+        <div class="font-headline-lg text-[19px] text-primary whitespace-nowrap">as a local club</div>
+        <div class="text-[9.5px] tracking-[0.14em] uppercase text-on-surface-variant">Amsterdam · yerel gibi gez</div>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:6px">
-      <button class="icobtn" id="locBtn" title="Konumumu kullan"><span class="msym">my_location</span></button>
-      <button class="icobtn" onclick="go('member')" title="Üye"><span class="msym">account_circle</span></button>
+    <div class="flex items-center gap-1 shrink-0">
+      <button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors" id="locBtn" title="Konumumu kullan"><span class="msym text-[22px]">my_location</span></button>
+      <button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors" onclick="go('member')" title="Üye"><span class="msym text-[22px]">account_circle</span></button>
     </div>
   </div>
   <div id="tripBanner" class="tripbanner hide"></div>
@@ -505,7 +508,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
         <select class="asasel" id="refList" title="Neredesin?"></select>
         <span class="text-[12px] text-on-surface-variant">← “bana yakınlık” bu referansa göre</span>
       </div>
-      <div class="flex overflow-x-auto hide-scrollbar gap-2 pb-1" id="chips"></div>
+      <div class="flex flex-wrap gap-2" id="chips"></div>
     </div>
     <div class="text-on-surface-variant text-[13px] mb-5" id="count"></div>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-10" id="cards"></div>
@@ -1481,18 +1484,16 @@ const DE_Q=[
 let deSel={time:"Öğleden sonra",mode:"Kahve",resv:"Fark etmez",garden:"Fark etmez"};
 function buildDE(){
  const f=document.getElementById("deForm");f.innerHTML="";
- const OFF="deopt rounded-full border px-4 py-2 text-body-sm transition-colors bg-surface border-outline-variant text-on-surface hover:bg-surface-container";
- const ON="deopt rounded-full border px-4 py-2 text-body-sm transition-colors bg-primary text-on-primary border-primary";
  DE_Q.forEach(q=>{
-   const d=document.createElement("div");d.className="mb-5";d.innerHTML='<div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">'+q.l+'</div>';
-   const o=document.createElement("div");o.className="flex flex-wrap gap-2";
+   const d=document.createElement("div");d.className="de-q";d.innerHTML='<div class="ql">'+q.l+'</div>';
+   const o=document.createElement("div");o.className="opts";
    q.opts.forEach(opt=>{const b=document.createElement("button");
-     b.className=(deSel[q.id]===opt?ON:OFF);b.textContent=opt;
-     b.onclick=()=>{deSel[q.id]=opt;o.querySelectorAll(".deopt").forEach(x=>x.className=OFF);b.className=ON;};
+     b.className="opt"+(deSel[q.id]===opt?" sel":"");b.textContent=opt;
+     b.onclick=()=>{deSel[q.id]=opt;o.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");};
      o.appendChild(b);});
    d.appendChild(o);f.appendChild(d);
  });
- const go=document.createElement("button");go.className="inline-flex items-center gap-1 rounded-full bg-secondary text-on-secondary font-button text-button px-6 py-3 mt-2 hover:opacity-90 transition-opacity";go.textContent="🎯 Öner";go.onclick=runDE;f.appendChild(go);
+ const go=document.createElement("button");go.className="de-go";go.textContent="🎯 Öner";go.onclick=runDE;f.appendChild(go);
 }
 function deScore(v){
  let s=0;const m=deSel.mode,t=deSel.time;
@@ -1540,26 +1541,17 @@ function runDE(){
    ["Rezervasyonsuz alternatif",walk?walk.v:null],["Daha lokal alternatif",lokal?lokal.v:null]];
  let _items=out.filter(o=>o[1]);const _m=isMember();document.getElementById("deOut").innerHTML=(_m?_items:_items.slice(0,1)).map(o=>{
    const v=o[1];const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
-   const abtn='rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors';
-   return '<div class="flex flex-col sm:flex-row gap-4 bg-surface-container-low rounded-xl p-4 mb-4">'+
-     '<div class="w-full sm:w-40 aspect-[16/10] sm:aspect-auto sm:h-auto shrink-0 rounded-lg overflow-hidden bg-surface-container"><img class="w-full h-full object-cover" src="'+venueImg(v)+'"></div>'+
-     '<div class="flex-1 min-w-0">'+
-     '<div class="font-kicker text-kicker text-secondary uppercase mb-1">'+o[0]+'</div>'+
-     '<h4 class="font-headline-md text-[18px] leading-tight text-primary mb-0.5">'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
-     '<div class="text-on-surface-variant text-[11px] uppercase tracking-wider mb-1">'+(v.type||'').toUpperCase()+'</div>'+
-     '<div class="flex items-center gap-1 text-on-surface-variant text-[13px] mb-1"><span class="msym text-[16px]">location_on</span>'+v.area+' · <span class="'+r.c+'">'+r.t+'</span></div>'+
-     '<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-on-surface-variant text-[13px] mb-2">'+
-       '<span class="inline-flex items-center gap-1"><span class="msym text-[16px]">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>'+
-       (v.hours?'<span class="inline-flex items-center gap-1"><span class="msym text-[16px]">schedule</span>'+v.hours+'</span>':'')+
+   return '<div class="de-res"><div class="deimg" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="debody"><div class="role">'+o[0]+'</div>'+
+     '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
+     '<div class="kicker" style="color:var(--ink2);margin:2px 0 4px">'+(v.type||'').toUpperCase()+'</div>'+
+     '<div class="cloc"><span class="msym">location_on</span>'+v.area+' · <span class="'+r.c+'">'+r.t+'</span></div>'+
+     '<div class="area" style="margin:6px 0">'+
+       '<span class="mi"><span class="msym">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>'+
+       (v.hours?'<span class="mi"><span class="msym">schedule</span>'+v.hours+'</span>':'')+
      '</div>'+
-     '<p class="font-body-sm text-body-sm text-on-surface/90 mb-2">'+v.desc+'</p>'+
-     (v.tip?'<div class="bg-surface-container rounded-sm p-2.5 flex items-start gap-2 text-on-surface-variant text-[13px] mb-3"><span class="msym text-[16px] text-primary mt-0.5 shrink-0">chat_bubble</span><span>'+v.tip+'</span></div>':'')+
-     '<div class="flex flex-wrap gap-2">'+
-       '<button class="inline-flex items-center gap-1 rounded-full bg-primary text-on-primary font-button text-button px-4 py-2 hover:opacity-90 transition-opacity" onclick="winopen(\''+gmaps(v)+'\')">📍 Google</button>'+
-       '<button class="'+abtn+'" onclick="showOnMap(\''+v.id+'\')">🗺️ Harita</button>'+
-       '<button class="'+abtn+'" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button>'+
-       '<button class="'+abtn+'" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button>'+
-     '</div></div></div>';
+     '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
+     (v.tip?'<div class="cnote"><span class="msym">chat_bubble</span><span>'+v.tip+'</span></div>':'')+
+     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div></div></div>';
  }).join("")+((!_m&&_items.length>1)?gateCard((_items.length-1)+' alternatif daha üyelere özel'):"");
  document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
 }
@@ -1810,9 +1802,9 @@ const ASA = (function(){
       return;
     }
     box.innerHTML =
-      '<div class="segnav">'+SEGS.map(s=>'<button class="segpill'+(curSeg===s[0]?" on":"")+'" onclick="ASA.seg(\''+s[0]+'\')">'+s[1]+'</button>').join("")+'</div>'
+      '<div class="flex gap-2 overflow-x-auto hide-scrollbar py-2 mb-5 border-b border-outline-variant">'+SEGS.map(s=>'<button class="px-4 py-2 rounded-full whitespace-nowrap font-button text-button transition-colors '+(curSeg===s[0]?"bg-secondary text-on-secondary":"border border-outline-variant text-on-surface-variant hover:bg-surface-container")+'" onclick="ASA.seg(\''+s[0]+'\')">'+s[1]+'</button>').join("")+'</div>'
       +'<div id="segBody"></div>'
-      +'<button class="btn" id="asaLogout" style="margin-top:16px">Çıkış yap</button>';
+      +'<button class="mt-6 rounded-full border border-outline-variant text-on-surface font-button text-button px-5 py-2.5 hover:bg-surface-container transition-colors" id="asaLogout">Çıkış yap</button>';
     el("asaLogout").onclick=()=>logout();
     renderSeg();
   }
@@ -1829,10 +1821,31 @@ const ASA = (function(){
   function passportHtml(){
     const t=tierFor(favSet.size);
     const name=session.display_name||session.email.split("@")[0];
-    const since=(memberMeta&&memberMeta.created_at)?new Date(memberMeta.created_at).toLocaleDateString("tr-TR"):"—";
-    return '<div class="passport"><div class="pp-top"><div class="pp-badge">'+t.emoji+'</div><div class="pp-id"><div class="pp-name">'+esc(name)+'</div><div class="pp-mail">'+esc(session.email)+'</div></div><div class="pp-logo">asa<b>local</b></div></div>'
-      +'<div class="pp-row"><div><span>Seviye</span><b>'+t.name+'</b></div><div><span>Puan</span><b>'+favSet.size+'</b></div><div><span>Üye olma</span><b>'+since+'</b></div></div></div>'
-      +'<div class="seg-card"><div class="seg-h">Profil bilgilerin</div><div class="mrow2"><input id="asaName" type="text" placeholder="Görünen adın" value="'+(session.display_name||"").replace(/"/g,"&quot;")+'"><button class="btn" id="asaNameBtn">Kaydet</button></div><p class="asahint" style="margin-top:8px">Görünen adın yorumlarında ve zevk gruplarında görünür.</p></div>';
+    const since=(memberMeta&&memberMeta.created_at)?new Date(memberMeta.created_at).getFullYear():"—";
+    const IN='w-full bg-transparent border-b border-outline-variant py-2 text-body-lg text-on-surface focus:outline-none focus:border-primary transition-colors';
+    return ''
+      +'<section class="bg-primary-container text-on-primary rounded-xl p-lg flex flex-col gap-lg shadow-lg relative overflow-hidden">'
+        +'<div class="absolute -top-24 -right-24 w-64 h-64 bg-primary-fixed-dim/20 rounded-full blur-3xl pointer-events-none"></div>'
+        +'<div class="flex items-center gap-md relative z-10">'
+          +'<div class="w-16 h-16 rounded-full border-2 border-inverse-primary/40 bg-primary/40 flex items-center justify-center text-[30px] shrink-0">'+t.emoji+'</div>'
+          +'<div class="min-w-0"><h1 class="font-headline-md text-headline-md text-on-primary truncate">'+esc(name)+'</h1>'
+            +'<p class="font-kicker text-kicker text-primary-fixed uppercase mt-1">'+esc(t.name)+' Üye</p></div>'
+        +'</div>'
+        +'<div class="grid grid-cols-3 gap-sm pt-md border-t border-inverse-primary/25 relative z-10">'
+          +'<div class="flex flex-col items-center text-center"><span class="text-body-sm text-inverse-primary/80">Seviye</span><span class="font-headline-md text-headline-md mt-1 text-on-primary">'+esc(t.name)+'</span></div>'
+          +'<div class="flex flex-col items-center text-center border-l border-r border-inverse-primary/25"><span class="text-body-sm text-inverse-primary/80">Puan</span><span class="font-headline-md text-headline-md mt-1 text-on-primary">'+favSet.size+'</span></div>'
+          +'<div class="flex flex-col items-center text-center"><span class="text-body-sm text-inverse-primary/80">Katılım</span><span class="font-headline-md text-headline-md mt-1 text-on-primary">'+since+'</span></div>'
+        +'</div>'
+      +'</section>'
+      +'<section class="bg-surface-container p-lg rounded-xl mt-6">'
+        +'<h2 class="font-headline-md text-headline-md text-on-surface mb-md">Kişisel Bilgiler</h2>'
+        +'<div class="flex flex-col gap-md">'
+          +'<div class="flex flex-col gap-xs"><label class="font-kicker text-kicker text-on-surface-variant uppercase">Görünen Ad</label><input id="asaName" class="'+IN+'" type="text" value="'+(session.display_name||"").replace(/"/g,"&quot;")+'" placeholder="Görünen adın"></div>'
+          +'<div class="flex flex-col gap-xs"><label class="font-kicker text-kicker text-on-surface-variant uppercase">E-posta</label><input class="'+IN+' opacity-70" type="email" value="'+esc(session.email)+'" disabled></div>'
+          +'<button id="asaNameBtn" class="mt-lg w-full bg-primary text-on-primary font-button text-button py-3 rounded-lg hover:opacity-90 transition-opacity" type="button">Değişiklikleri Kaydet</button>'
+          +'<p class="text-body-sm text-on-surface-variant">Görünen adın yorumlarında ve zevk gruplarında görünür.</p>'
+        +'</div>'
+      +'</section>';
   }
   function pointsHtml(){
     const points=favSet.size; const t=tierFor(points); const nt=nextTier(points);
