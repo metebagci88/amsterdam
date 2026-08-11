@@ -1476,16 +1476,18 @@ const DE_Q=[
 let deSel={time:"Öğleden sonra",mode:"Kahve",resv:"Fark etmez",garden:"Fark etmez"};
 function buildDE(){
  const f=document.getElementById("deForm");f.innerHTML="";
+ const OFF="deopt rounded-full border px-4 py-2 text-body-sm transition-colors bg-surface border-outline-variant text-on-surface hover:bg-surface-container";
+ const ON="deopt rounded-full border px-4 py-2 text-body-sm transition-colors bg-primary text-on-primary border-primary";
  DE_Q.forEach(q=>{
-   const d=document.createElement("div");d.className="de-q";d.innerHTML='<div class="ql">'+q.l+'</div>';
-   const o=document.createElement("div");o.className="opts";
+   const d=document.createElement("div");d.className="mb-5";d.innerHTML='<div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">'+q.l+'</div>';
+   const o=document.createElement("div");o.className="flex flex-wrap gap-2";
    q.opts.forEach(opt=>{const b=document.createElement("button");
-     b.className="opt"+(deSel[q.id]===opt?" sel":"");b.textContent=opt;
-     b.onclick=()=>{deSel[q.id]=opt;o.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");};
+     b.className=(deSel[q.id]===opt?ON:OFF);b.textContent=opt;
+     b.onclick=()=>{deSel[q.id]=opt;o.querySelectorAll(".deopt").forEach(x=>x.className=OFF);b.className=ON;};
      o.appendChild(b);});
    d.appendChild(o);f.appendChild(d);
  });
- const go=document.createElement("button");go.className="de-go";go.textContent="🎯 Öner";go.onclick=runDE;f.appendChild(go);
+ const go=document.createElement("button");go.className="inline-flex items-center gap-1 rounded-full bg-secondary text-on-secondary font-button text-button px-6 py-3 mt-2 hover:opacity-90 transition-opacity";go.textContent="🎯 Öner";go.onclick=runDE;f.appendChild(go);
 }
 function deScore(v){
  let s=0;const m=deSel.mode,t=deSel.time;
@@ -1533,17 +1535,26 @@ function runDE(){
    ["Rezervasyonsuz alternatif",walk?walk.v:null],["Daha lokal alternatif",lokal?lokal.v:null]];
  let _items=out.filter(o=>o[1]);const _m=isMember();document.getElementById("deOut").innerHTML=(_m?_items:_items.slice(0,1)).map(o=>{
    const v=o[1];const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
-   return '<div class="de-res"><div class="deimg" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="debody"><div class="role">'+o[0]+'</div>'+
-     '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
-     '<div class="kicker" style="color:var(--ink2);margin:2px 0 4px">'+(v.type||'').toUpperCase()+'</div>'+
-     '<div class="cloc"><span class="msym">location_on</span>'+v.area+' · <span class="'+r.c+'">'+r.t+'</span></div>'+
-     '<div class="area" style="margin:6px 0">'+
-       '<span class="mi"><span class="msym">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>'+
-       (v.hours?'<span class="mi"><span class="msym">schedule</span>'+v.hours+'</span>':'')+
+   const abtn='rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors';
+   return '<div class="flex flex-col sm:flex-row gap-4 bg-surface-container-low rounded-xl p-4 mb-4">'+
+     '<div class="w-full sm:w-40 aspect-[16/10] sm:aspect-auto sm:h-auto shrink-0 rounded-lg overflow-hidden bg-surface-container"><img class="w-full h-full object-cover" src="'+venueImg(v)+'"></div>'+
+     '<div class="flex-1 min-w-0">'+
+     '<div class="font-kicker text-kicker text-secondary uppercase mb-1">'+o[0]+'</div>'+
+     '<h4 class="font-headline-md text-[18px] leading-tight text-primary mb-0.5">'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
+     '<div class="text-on-surface-variant text-[11px] uppercase tracking-wider mb-1">'+(v.type||'').toUpperCase()+'</div>'+
+     '<div class="flex items-center gap-1 text-on-surface-variant text-[13px] mb-1"><span class="msym text-[16px]">location_on</span>'+v.area+' · <span class="'+r.c+'">'+r.t+'</span></div>'+
+     '<div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-on-surface-variant text-[13px] mb-2">'+
+       '<span class="inline-flex items-center gap-1"><span class="msym text-[16px]">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>'+
+       (v.hours?'<span class="inline-flex items-center gap-1"><span class="msym text-[16px]">schedule</span>'+v.hours+'</span>':'')+
      '</div>'+
-     '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
-     (v.tip?'<div class="cnote"><span class="msym">chat_bubble</span><span>'+v.tip+'</span></div>':'')+
-     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div></div></div>';
+     '<p class="font-body-sm text-body-sm text-on-surface/90 mb-2">'+v.desc+'</p>'+
+     (v.tip?'<div class="bg-surface-container rounded-sm p-2.5 flex items-start gap-2 text-on-surface-variant text-[13px] mb-3"><span class="msym text-[16px] text-primary mt-0.5 shrink-0">chat_bubble</span><span>'+v.tip+'</span></div>':'')+
+     '<div class="flex flex-wrap gap-2">'+
+       '<button class="inline-flex items-center gap-1 rounded-full bg-primary text-on-primary font-button text-button px-4 py-2 hover:opacity-90 transition-opacity" onclick="winopen(\''+gmaps(v)+'\')">📍 Google</button>'+
+       '<button class="'+abtn+'" onclick="showOnMap(\''+v.id+'\')">🗺️ Harita</button>'+
+       '<button class="'+abtn+'" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button>'+
+       '<button class="'+abtn+'" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button>'+
+     '</div></div></div>';
  }).join("")+((!_m&&_items.length>1)?gateCard((_items.length-1)+' alternatif daha üyelere özel'):"");
  document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
 }
