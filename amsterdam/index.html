@@ -413,7 +413,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
       <button class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" onclick="goBack()" title="Geri"><span class="msym text-[20px]">arrow_back</span></button>
       <a href="/" class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" title="Ana sayfa"><span class="msym text-[20px]">home</span></a>
       <div class="min-w-0 ml-1 leading-tight">
-        <div class="font-headline-lg text-[19px] text-primary whitespace-nowrap">as a local club</div>
+        <div class="font-headline-lg text-[19px] text-primary whitespace-nowrap">AsaLocal Club</div>
         <div class="text-[9.5px] tracking-[0.14em] uppercase text-on-surface-variant">Amsterdam · yerel gibi gez</div>
       </div>
     </div>
@@ -520,7 +520,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     <h2 class="section-title" id="calTitle">Günlük akış</h2>
     <p class="section-sub">İlgi alanlarına göre sana özel bir taslak plan hazırlıyorum: her güne sabah–öğle–öğleden sonra–akşam için mekan önerileri. Beğenmediğini çıkar, favorilerinden ekle, plan notu yaz. Koyu günler hafta sonu.</p>
     <div id="planCtl"></div>
-    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3" id="cal"></div>
+    <div id="cal"></div>
   </section>
 
   <!-- HAFTA SONU -->
@@ -1256,6 +1256,7 @@ try{calPhotos=JSON.parse(localStorage.getItem("ams_calphoto")||"{}");}catch(e){}
 let dayVenues={},dayCur=null;
 try{dayVenues=JSON.parse(localStorage.getItem("ams_dayven")||"{}");}catch(e){}
 function escT(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function saveLS(k,o){try{localStorage.setItem(k,JSON.stringify(o));}catch(e){alert("Depolama dolu olabilir (özellikle fotoğraflar). Bazı fotoğrafları silip tekrar dene.");}}
 function addPhoto(d,ev){const f=ev.target.files&&ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const mx=800;let w=img.width,h2=img.height;if(w>mx){h2=Math.round(h2*mx/w);w=mx;}const cv=document.createElement("canvas");cv.width=w;cv.height=h2;cv.getContext("2d").drawImage(img,0,0,w,h2);const data=cv.toDataURL("image/jpeg",0.7);(calPhotos[d]=calPhotos[d]||[]).push(data);saveLS("ams_calphoto",calPhotos);refreshDayUI();};img.src=rd.result;};rd.readAsDataURL(f);}
 function delPhoto(d,i){if(calPhotos[d]){calPhotos[d].splice(i,1);if(!calPhotos[d].length)delete calPhotos[d];saveLS("ams_calphoto",calPhotos);refreshDayUI();}}
@@ -1346,22 +1347,50 @@ function renderPlanCtl(){
    '<div class="text-on-surface-variant text-[13px] mb-5">'+(its.length?("✦ İlgi alanların: "+its.join(", ")):"Henüz ilgi alanı seçmemişsin — genel öneriler kullanılıyor. Ana sayfada tür seçersen plan sana göre şekillenir.")+'</div>';
 }
 function ensurePlan(){ try{ CAL=buildCalDays(); if(!CAL.days.some(D=>(dayVenues[D.key]||[]).length)) autoGeneratePlan(false); else {renderPlanCtl();renderCal();} }catch(e){} }
+let planSelDay=null, dayFilter="all";
+const SLOT_EMO={"Sabah":"☀️","Öğle":"🍽️","Öğleden sonra":"🎨","Akşam":"🌙"};
 function renderCal(){
- const cal=document.getElementById("cal");cal.innerHTML="";
+ const cal=document.getElementById("cal");if(!cal)return;
  const tt=document.getElementById("calTitle"); if(tt)tt.textContent=CAL.title;
+ if(!planSelDay||!CAL.days.some(D=>D.key===planSelDay)) planSelDay=CAL.days[0]?CAL.days[0].key:null;
+ let h='<div class="flex gap-2 overflow-x-auto hide-scrollbar pb-2 mb-6">';
  CAL.days.forEach(D=>{
-   const key=D.key;
-   const planVal=(calPlans[key]!=null?calPlans[key]:"");
-   const nSel=(dayVenues[key]||[]).length,nPh=(calPhotos[key]||[]).length,hasNote=!!(calNotes[key]&&calNotes[key].trim());
-   const el=document.createElement("div");el.className="cursor-pointer rounded-lg p-3 border transition-colors "+(D.weekend?"bg-primary-container/40 border-primary-container":"bg-surface-container-low border-outline-variant/40 hover:bg-surface-container");
-   el.innerHTML='<div class="text-[11px] uppercase tracking-wider text-on-surface-variant">'+D.dow+'</div>'+
-     '<div class="font-headline-md text-[15px] leading-tight text-primary mb-1">'+D.label+'</div>'+
-     '<div class="text-on-surface-variant text-[12px] line-clamp-2 min-h-[2.4em]">'+escT(planVal).replace(/\n/g," ").slice(0,90)+'</div>'+
-     '<div class="text-on-surface-variant text-[11px] mt-1">'+(nSel?'📍 '+nSel+' mekan':'')+(nPh?((nSel?' · ':'')+'📷 '+nPh):'')+(hasNote?' · 📝 not':'')+'</div>'+
-     '<button class="text-secondary text-[12px] mt-2 hover:underline">Aç / düzenle →</button>';
-   el.addEventListener("click",()=>openDay(key));
-   cal.appendChild(el);
+   const on=(D.key===planSelDay);
+   const cls=on?"bg-primary text-on-primary border-primary":(D.weekend?"bg-primary-container/30 border-outline-variant/40 text-on-surface hover:bg-surface-container":"bg-surface-container-low border-outline-variant/40 text-on-surface hover:bg-surface-container");
+   h+='<button onclick="selectPlanDay(\''+D.key+'\')" class="shrink-0 flex flex-col items-center justify-center w-16 py-2.5 rounded-xl border transition-colors '+cls+'">'
+     +'<span class="text-[10px] uppercase tracking-wide '+(on?"text-on-primary/80":"text-on-surface-variant")+'">'+(D.dow||'·')+'</span>'
+     +'<span class="font-headline-md text-[18px] leading-none mt-0.5">'+String(D.label).split(" ")[0]+'</span></button>';
  });
+ h+='</div><div id="dayFlow"></div>';
+ cal.innerHTML=h;
+ renderDayFlow(planSelDay);
+}
+function selectPlanDay(k){planSelDay=k;renderCal();}
+function renderDayFlow(d){
+ const box=document.getElementById("dayFlow"); if(!box||!d)return;
+ const D=dayInfo(d); const sel=(dayVenues[d]||[]);
+ let h='<div class="flex items-center justify-between gap-3 mb-4"><h3 class="font-headline-lg text-[22px] text-primary">'+esc(D.label)+(D.dow?' · '+D.dow:'')+'</h3>'
+   +'<button onclick="openDay(\''+d+'\')" class="shrink-0 inline-flex items-center gap-1 rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors"><span class="msym text-[16px]">edit</span> Aç / düzenle</button></div>';
+ if(!sel.length){
+   h+='<div class="bg-surface-container-low rounded-xl p-6 text-center"><p class="text-on-surface-variant mb-3">Bu güne henüz plan yok.</p><button onclick="autoGeneratePlan(true)" class="inline-flex items-center gap-1 rounded-full bg-secondary text-on-secondary font-button text-button px-5 py-2.5 hover:opacity-90 transition-opacity"><span class="msym text-[16px]">auto_awesome</span> Otomatik plan oluştur</button></div>';
+   box.innerHTML=h; return;
+ }
+ h+='<div class="relative pl-6 flex flex-col gap-4">';
+ sel.forEach((id,i)=>{const v=byId(id);if(!v)return;
+   const slot=(i<PLAN_SLOTS.length)?PLAN_SLOTS[i].k:("Durak "+(i+1));
+   h+='<div class="relative">'
+     +'<div class="absolute -left-[22px] top-1.5 w-3 h-3 rounded-full bg-secondary ring-4 ring-surface"></div>'
+     +(i<sel.length-1?'<div class="absolute -left-[17px] top-5 -bottom-4 w-px bg-outline-variant"></div>':'')
+     +'<div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/40">'
+       +'<div class="font-kicker text-kicker text-secondary uppercase mb-1">'+(SLOT_EMO[slot]||"📍")+' '+esc(slot)+'</div>'
+       +'<div class="font-headline-md text-[17px] leading-tight text-primary">'+esc(v.name)+' '+(isFav(v.id)?"❤️":"")+'</div>'
+       +'<div class="text-on-surface-variant text-[13px] mt-0.5">'+esc(v.type||'')+(v.hours?' · ⏰ '+esc(v.hours):'')+(v.area?' · '+esc(v.area):'')+'</div>'
+       +'<div class="flex flex-wrap gap-2 mt-3"><button class="rounded-full bg-primary text-on-primary text-[12px] font-button px-3 py-1.5 hover:opacity-90" onclick="winopen(\''+gmaps(v)+'\')">📍 Google</button><button class="rounded-full border border-outline-variant text-on-surface text-[12px] font-button px-3 py-1.5 hover:bg-surface-container" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div>'
+     +'</div></div>';
+ });
+ h+='</div>';
+ if(sel.length>1) h+='<button class="mt-4 inline-flex items-center gap-1 rounded-full bg-primary text-on-primary font-button text-button px-4 py-2.5 hover:opacity-90 transition-opacity" onclick="dayRoute(\''+d+'\')">🗺️ Tüm rotayı Google\'da aç</button>';
+ box.innerHTML=h;
 }
 function openDay(d){renderDay(d);const m=document.getElementById("dayModal");m.classList.remove("hide");window.scrollTo({top:0});}
 function closeDay(){const m=document.getElementById("dayModal");if(m)m.classList.add("hide");renderCal();}
@@ -1369,34 +1398,70 @@ function refreshDayUI(){const m=document.getElementById("dayModal");if(m&&!m.cla
 function addDayVenue(d,id){dayVenues[d]=dayVenues[d]||[];if(dayVenues[d].indexOf(id)<0)dayVenues[d].push(id);saveLS("ams_dayven",dayVenues);renderDay(d);}
 function removeDayVenue(d,id){if(dayVenues[d]){dayVenues[d]=dayVenues[d].filter(x=>x!==id);if(!dayVenues[d].length)delete dayVenues[d];saveLS("ams_dayven",dayVenues);renderDay(d);}}
 function dayRoute(d){const list=(dayVenues[d]||[]).map(byId).filter(Boolean);if(list.length)winopen(gmapsRoute(list));}
+const DAY_FILTERS=[["all","Tümü"],["coffee","☕ Kahve"],["brunch","🥐 Kahvaltı"],["food","🍽️ Yemek"],["wine","🍷 Şarap/Bar"],["culture","🎨 Kültür"],["park","🌳 Park"],["shop","🛍️ Mağaza"]];
+function setDayFilter(d,f){dayFilter=f;renderDayFilter(d);}
+function renderDayFilter(d){
+ const fr=document.getElementById("dayFilterRow"); if(!fr)return;
+ fr.innerHTML=DAY_FILTERS.map(c=>'<button class="rounded-full border px-3 py-1.5 text-[13px] transition-colors '+(dayFilter===c[0]?"bg-primary text-on-primary border-primary":"bg-surface border-outline-variant text-on-surface hover:bg-surface-container")+'" onclick="setDayFilter(\''+d+'\',\''+c[0]+'\')">'+c[1]+'</button>').join("");
+ renderDaySuggest(d);
+}
+function renderDaySuggest(d){
+ const box=document.getElementById("daySuggest"); if(!box)return;
+ const sel=new Set(dayVenues[d]||[]);
+ let pool=V.filter(v=>v.city==="Amsterdam"&&!sel.has(v.id));
+ if(dayFilter!=="all") pool=pool.filter(v=>catOf(v)===dayFilter);
+ pool.sort((a,b)=>((isFav(b.id)?1:0)-(isFav(a.id)?1:0)));
+ pool=pool.slice(0,8);
+ if(!pool.length){box.innerHTML='<div class="text-on-surface-variant text-[13px] py-2">Bu filtrede eklenecek başka mekan yok.</div>';return;}
+ box.innerHTML=pool.map(v=>'<div class="flex items-center gap-3 bg-surface rounded-lg p-2.5 border border-outline-variant/40">'
+   +'<div class="flex-1 min-w-0"><div class="font-medium text-on-surface text-[14px] truncate">'+esc(v.name)+' '+(isFav(v.id)?"❤️":"")+'</div><div class="text-on-surface-variant text-[12px] truncate">'+esc(v.type||'')+(v.area?' · '+esc(v.area):'')+'</div></div>'
+   +'<button class="shrink-0 rounded-full bg-secondary text-on-secondary text-[13px] font-button px-3 py-1.5 hover:opacity-90" onclick="addDayVenue(\''+d+'\',\''+v.id+'\')">+ Ekle</button></div>').join("");
+}
+function dayDragAfter(container,y){
+ const els=[...container.querySelectorAll(".dayitem")].filter(e=>e!==window.__dragEl);
+ return els.reduce((c,ch)=>{const b=ch.getBoundingClientRect();const off=y-b.top-b.height/2;return (off<0&&off>c.offset)?{offset:off,element:ch}:c;},{offset:-Infinity}).element;
+}
+function commitDayOrder(d){const list=document.getElementById("dayList");if(!list)return;dayVenues[d]=[...list.querySelectorAll(".dayitem")].map(x=>x.getAttribute("data-id"));saveLS("ams_dayven",dayVenues);}
+function wireDayDrag(d){
+ const list=document.getElementById("dayList"); if(!list)return;
+ list.querySelectorAll(".dayitem").forEach(it=>{
+   it.addEventListener("dragstart",()=>{window.__dragEl=it;setTimeout(()=>it.classList.add("opacity-40"),0);});
+   it.addEventListener("dragend",()=>{it.classList.remove("opacity-40");window.__dragEl=null;commitDayOrder(d);});
+ });
+ list.addEventListener("dragover",e=>{e.preventDefault();const el=window.__dragEl;if(!el)return;const after=dayDragAfter(list,e.clientY);if(after==null)list.appendChild(el);else list.insertBefore(el,after);});
+}
 function renderDay(d){
  dayCur=d;
  const D=dayInfo(d);
  const sel=(dayVenues[d]||[]);
- const favs=V.filter(v=>v.city==="Amsterdam"&&isFav(v.id)&&sel.indexOf(v.id)<0);
  const planVal=(calPlans[d]!=null?calPlans[d]:"");
  const phs=(calPhotos[d]||[]);
- let x='<h3 class="dh">'+D.label+(D.dow?' · '+D.dow:'')+'</h3>';
- x+='<div class="day-sec"><div class="h">📍 Bugünün mekanları ('+sel.length+')</div>';
+ let x='<h3 class="font-headline-lg text-[24px] text-primary mb-1">'+esc(D.label)+(D.dow?' · '+esc(D.dow):'')+'</h3>';
+ x+='<p class="text-on-surface-variant text-[13px] mb-5">Sürükleyerek sırala, filtreleyip ekle. Bir plan, sana göre esner.</p>';
+ x+='<div class="mb-6"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-3">📍 Günün akışı ('+sel.length+')</div>';
  if(sel.length){
-   sel.forEach(id=>{const v=byId(id);if(!v)return;
-     x+='<div class="venchip"><div class="vx"><b>'+v.name+'</b> '+(isFav(v.id)?"❤️":"")+'<br><span>'+(v.type||'')+(v.hours?' · ⏰ ~'+v.hours:'')+' · '+v.area+'</span></div>'+
-        '<button onclick="showOnMap(\''+id+'\')" title="Haritada gör">🗺️</button>'+
-        '<button class="rm" onclick="removeDayVenue('+d+',\''+id+'\')" title="Çıkar">✕</button></div>';
+   x+='<div id="dayList" class="flex flex-col gap-2">';
+   sel.forEach((id,idx)=>{const v=byId(id);if(!v)return;
+     x+='<div class="dayitem flex items-center gap-3 bg-surface-container-low rounded-lg p-3 border border-outline-variant/40" draggable="true" data-id="'+id+'">'
+       +'<span class="msym text-on-surface-variant cursor-grab text-[20px] select-none">drag_indicator</span>'
+       +'<div class="flex-1 min-w-0"><div class="font-medium text-on-surface text-[14px] truncate">'+esc(v.name)+' '+(isFav(v.id)?"❤️":"")+'</div><div class="text-on-surface-variant text-[12px] truncate">'+esc(v.type||'')+(v.hours?' · ⏰ '+esc(v.hours):'')+(v.area?' · '+esc(v.area):'')+'</div></div>'
+       +'<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:text-secondary" onclick="showOnMap(\''+id+'\')" title="Haritada"><span class="msym text-[18px]">map</span></button>'
+       +'<button class="w-8 h-8 flex items-center justify-center text-on-surface-variant hover:text-error" onclick="removeDayVenue(\''+d+'\',\''+id+'\')" title="Çıkar"><span class="msym text-[18px]">close</span></button>'
+       +'</div>';
    });
-   if(sel.length>1)x+='<button class="btn primary" style="margin-top:6px;max-width:250px" onclick="dayRoute('+d+')">🗺️ Seçili mekanlarla rota (Google)</button>';
- } else { x+='<div class="hint">Henüz mekan seçmedin. Aşağıdan pinlediklerinden ekle.</div>'; }
+   x+='</div>';
+   if(sel.length>1)x+='<button class="mt-3 inline-flex items-center gap-1 rounded-full bg-primary text-on-primary font-button text-button px-4 py-2.5 hover:opacity-90" onclick="dayRoute(\''+d+'\')">🗺️ Rota (Google)</button>';
+ } else { x+='<div class="text-on-surface-variant text-[13px]">Henüz mekan yok. Aşağıdan filtreleyip ekle.</div>'; }
  x+='</div>';
- x+='<div class="day-sec"><div class="h">➕ Pinlediklerinden ekle</div>';
- if(favs.length){favs.forEach(v=>{
-   x+='<div class="pickrow"><div class="px"><b>'+v.name+'</b><br><span>'+(v.type||'')+(v.hours?' · ⏰ ~'+v.hours:'')+' · '+v.area+'</span></div>'+
-      '<button onclick="addDayVenue('+d+',\''+v.id+'\')">+ Ekle</button></div>';
- });} else { x+='<div class="hint">Eklenecek pinli mekan yok. Mekanlar sekmesinde ❤️ ile mekan pinle, burada çıksın.</div>'; }
- x+='</div>';
- x+='<div class="day-sec"><div class="h">📝 Plan notu (serbest)</div><textarea id="dayPlan" placeholder="Bugünün akışı, saatler, fikirler…">'+escT(planVal)+'</textarea></div>';
- x+='<div class="day-sec"><div class="h">🗒️ Kişisel not</div><textarea id="dayNote" placeholder="Rezervasyon, hatırlatma…">'+escT(calNotes[d]||"")+'</textarea></div>';
- x+='<div class="day-sec"><div class="h">📷 Fotoğraflar</div><div class="photos">'+phs.map((src,i)=>'<span class="ph"><img src="'+src+'"><button title="Sil" onclick="delPhoto('+d+','+i+')">✕</button></span>').join("")+'</div><label class="addphoto" style="margin-top:8px">📷 Fotoğraf ekle<input type="file" accept="image/*" style="display:none" id="dayPhotoInput"></label></div>';
+ x+='<div class="mb-6"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-3">➕ Mekan ekle</div>';
+ x+='<div id="dayFilterRow" class="flex flex-wrap gap-2 mb-3"></div>';
+ x+='<div id="daySuggest" class="flex flex-col gap-2"></div></div>';
+ x+='<div class="mb-4"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">📝 Plan notu</div><textarea id="dayPlan" class="w-full bg-surface-container rounded-lg p-3 text-body-sm text-on-surface min-h-20 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Bugünün akışı, saatler, fikirler…">'+escT(planVal)+'</textarea></div>';
+ x+='<div class="mb-4"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">🗒️ Kişisel not</div><textarea id="dayNote" class="w-full bg-surface-container rounded-lg p-3 text-body-sm text-on-surface min-h-16 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Rezervasyon, hatırlatma…">'+escT(calNotes[d]||"")+'</textarea></div>';
+ x+='<div class="mb-2"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">📷 Fotoğraflar</div><div class="flex flex-wrap gap-2">'+phs.map((src,i)=>'<span class="relative w-20 h-20 rounded-lg overflow-hidden"><img class="w-full h-full object-cover" src="'+src+'"><button class="absolute top-1 right-1 w-5 h-5 rounded-full bg-surface/90 text-on-surface text-[12px] flex items-center justify-center" title="Sil" onclick="delPhoto(\''+d+'\','+i+')">✕</button></span>').join("")+'</div><label class="inline-flex items-center gap-1 mt-2 rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 cursor-pointer hover:bg-surface-container"><span class="msym text-[16px]">photo_camera</span> Fotoğraf ekle<input type="file" accept="image/*" class="hidden" id="dayPhotoInput"></label></div>';
  document.getElementById("dayBody").innerHTML=x;
+ renderDayFilter(d);
+ wireDayDrag(d);
  const pt=document.getElementById("dayPlan");if(pt)pt.addEventListener("input",()=>{calPlans[d]=pt.value;saveLS("ams_plan",calPlans);});
  const nt=document.getElementById("dayNote");if(nt)nt.addEventListener("input",()=>{calNotes[d]=nt.value;saveLS("ams_cal",calNotes);});
  const pi=document.getElementById("dayPhotoInput");if(pi)pi.addEventListener("change",ev=>addPhoto(d,ev));
@@ -1763,6 +1828,17 @@ const ASA = (function(){
     try{ await db.from("members").update({display_name:name,updated_at:new Date().toISOString()}).eq("email",session.email); }catch(e){}
     session.display_name=name; if(member)member.display_name=name; saveSession(); render();
   }
+  async function saveProfile(){
+    if(!session||!db) return;
+    const name=((el("asaName")||{}).value||"").trim().slice(0,40);
+    const gender=((el("asaGender2")||{}).value||"")||null;
+    const city=(((el("asaCity2")||{}).value||"").trim())||null;
+    const btn=el("asaNameBtn"); if(btn){btn.disabled=true;btn.textContent="Kaydediliyor…";}
+    try{ await db.from("members").update({display_name:name,gender:gender,home_city:city,updated_at:new Date().toISOString()}).eq("email",session.email); }catch(e){}
+    if(memberMeta){memberMeta.display_name=name;memberMeta.gender=gender;memberMeta.home_city=city;}
+    session.display_name=name; if(member)member.display_name=name; saveSession();
+    if(btn){btn.disabled=false;btn.textContent="Kaydedildi ✓";setTimeout(function(){var b2=el("asaNameBtn");if(b2)b2.textContent="Değişiklikleri Kaydet";},1600);}
+  }
 
   async function logout(){ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); try{refreshGated();}catch(e){} }
 
@@ -1812,7 +1888,7 @@ const ASA = (function(){
   function seg(s){ curSeg=s; render(); }
   function renderSeg(){
     const b=el("segBody"); if(!b) return;
-    if(curSeg==="passport"){ b.innerHTML=passportHtml(); const nb=el("asaNameBtn"); if(nb)nb.onclick=()=>saveName(el("asaName").value); }
+    if(curSeg==="passport"){ b.innerHTML=passportHtml(); const nb=el("asaNameBtn"); if(nb)nb.onclick=()=>saveProfile(); }
     else if(curSeg==="points"){ b.innerHTML=pointsHtml(); }
     else if(curSeg==="likes"){ b.innerHTML=likesHtml(); }
     else if(curSeg==="posts"){ b.innerHTML=postsHtml(); loadPosts(); }
@@ -1842,8 +1918,10 @@ const ASA = (function(){
         +'<div class="flex flex-col gap-md">'
           +'<div class="flex flex-col gap-xs"><label class="font-kicker text-kicker text-on-surface-variant uppercase">Görünen Ad</label><input id="asaName" class="'+IN+'" type="text" value="'+(session.display_name||"").replace(/"/g,"&quot;")+'" placeholder="Görünen adın"></div>'
           +'<div class="flex flex-col gap-xs"><label class="font-kicker text-kicker text-on-surface-variant uppercase">E-posta</label><input class="'+IN+' opacity-70" type="email" value="'+esc(session.email)+'" disabled></div>'
+          +'<div class="flex flex-col gap-xs"><label class="font-kicker text-kicker text-on-surface-variant uppercase">Cinsiyet</label><select id="asaGender2" class="'+IN+' appearance-none pr-9" style="background-image:url(\'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2376786f%22 stroke-width=%222%22%3E%3Cpath d=%22M6 9l6 6 6-6%22/%3E%3C/svg%3E\');background-repeat:no-repeat;background-position:right 4px center">'+['','Kadın','Erkek','Belirtmek istemiyorum'].map(function(g){return '<option value="'+g+'"'+(((memberMeta&&memberMeta.gender)||"")===g?' selected':'')+'>'+(g||'Seçilmedi')+'</option>';}).join('')+'</select></div>'
+          +'<div class="flex flex-col gap-xs"><label class="font-kicker text-kicker text-on-surface-variant uppercase">Yaşadığın Şehir</label><input id="asaCity2" class="'+IN+'" type="text" value="'+(((memberMeta&&memberMeta.home_city)||"")+"").replace(/"/g,"&quot;")+'" placeholder="Şehir"></div>'
           +'<button id="asaNameBtn" class="mt-lg w-full bg-primary text-on-primary font-button text-button py-3 rounded-lg hover:opacity-90 transition-opacity" type="button">Değişiklikleri Kaydet</button>'
-          +'<p class="text-body-sm text-on-surface-variant">Görünen adın yorumlarında ve zevk gruplarında görünür.</p>'
+          +'<p class="text-body-sm text-on-surface-variant">Bu bilgiler sana daha uygun öneriler ve zevk grupları için kullanılır.</p>'
         +'</div>'
       +'</section>';
   }
