@@ -436,22 +436,22 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     <div id="adCityBanner"></div>
     <h2 class="section-title">Günlük senaryo rotaları</h2>
     <p class="section-sub">Her biri 3–6 duraklı. “Haritada rota” ile Google Maps’te sırayla açılır.</p>
-    <div class="scenarios" id="scnGrid"></div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5" id="scnGrid"></div>
   </section>
 
   <!-- HARITA -->
   <section class="view" id="v-map">
     <h2 class="section-title" data-ck="app.map.h">Harita</h2>
     <p class="section-sub">Noktaya dokun → mekan kartı + Google Maps linki. Sürükle & yakınlaştır. Renk = kaynak · kalp = favori · ★ = sen.</p>
-    <div class="row">
-      <select class="sel" id="mapCity">
+    <div class="flex flex-wrap gap-2">
+      <select class="asasel" id="mapCity">
         <option value="Amsterdam">Amsterdam</option>
         <option value="Antwerp">Antwerp (hafta sonu)</option>
         <option value="Brussels">Brüksel (hafta sonu)</option>
         <option value="Bruges">Brugge (günübirlik)</option>
       </select>
-      <select class="sel" id="mapCat"><option value="">Tüm kategoriler</option></select>
-      <select class="sel" id="mapSrc">
+      <select class="asasel" id="mapCat"><option value="">Tüm kategoriler</option></select>
+      <select class="asasel" id="mapSrc">
         <option value="">Tüm kaynaklar</option>
         <option value="user">Benim listem</option>
         <option value="deck">Önceki araştırmam</option>
@@ -459,10 +459,10 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
         <option value="audio">Ses kaydı</option>
       </select>
     </div>
-    <div class="row" style="margin-top:8px">
-      <select class="sel refsel" id="refMap" title="Neredesin?"></select>
-      <button class="sel" id="pickBtn">📌 Konumu haritadan seç</button>
-      <button class="sel" id="openGoogle">🧭 Google Haritalar’da aç</button>
+    <div class="flex flex-wrap gap-2 mt-2">
+      <select class="asasel" id="refMap" title="Neredesin?"></select>
+      <button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors" id="pickBtn">📌 Konumu haritadan seç</button>
+      <button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors" id="openGoogle">🧭 Google Haritalar’da aç</button>
     </div>
     <div class="legend">
       <span><i class="dot" style="background:var(--fav)"></i>Favori</span>
@@ -516,8 +516,8 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   <section class="view" id="v-cal">
     <h2 class="section-title" id="calTitle">Günlük akış</h2>
     <p class="section-sub">İlgi alanlarına göre sana özel bir taslak plan hazırlıyorum: her güne sabah–öğle–öğleden sonra–akşam için mekan önerileri. Beğenmediğini çıkar, favorilerinden ekle, plan notu yaz. Koyu günler hafta sonu.</p>
-    <div id="planCtl" class="planctl"></div>
-    <div class="cal" id="cal"></div>
+    <div id="planCtl"></div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3" id="cal"></div>
   </section>
 
   <!-- HAFTA SONU -->
@@ -955,19 +955,23 @@ const SCN=[
  {id:"lokal",t:"Az turistik lokal Amsterdam günü",m:"Gerçek mahalle hissi",stops:["whitelabel","oficina","ceuvel","barcentraal"]}
 ];
 function stopHtml(v,i){if(!v)return"";
- return '<div class="stop"><div class="n">'+(i+1)+'</div><div class="x">'+
-  '<b>'+v.name+'</b> '+(isFav(v.id)?"❤️":"")+'<div class="sub">'+v.area+' · '+v.cats.slice(0,2).join(", ")+'</div>'+
-  '<button class="linklike" onclick="winopen(\''+gmaps(v)+'\')">Maps’te aç →</button></div></div>';}
+ return '<div class="flex gap-3 items-start">'+
+  '<div class="w-6 h-6 rounded-full bg-secondary text-on-secondary text-[12px] font-semibold flex items-center justify-center shrink-0 mt-0.5">'+(i+1)+'</div>'+
+  '<div class="flex-1 min-w-0">'+
+   '<div class="text-on-surface font-medium text-[14px]">'+v.name+' '+(isFav(v.id)?"❤️":"")+'</div>'+
+   '<div class="text-on-surface-variant text-[12.5px]">'+v.area+' · '+v.cats.slice(0,2).join(", ")+'</div>'+
+   '<button class="text-secondary text-[13px] hover:underline mt-0.5" onclick="winopen(\''+gmaps(v)+'\')">Maps’te aç →</button>'+
+  '</div></div>';}
 function renderScenarios(){
  const g=document.getElementById("scnGrid");g.innerHTML="";
  const _m=isMember();
  SCN.forEach((s,si)=>{
    if(!_m&&si>=1)return;
    const vs=s.stops.map(byId).filter(Boolean);
-   const el=document.createElement("div");el.className="scn";
-   el.innerHTML='<h3>'+s.t+'</h3><div class="meta">'+s.m+' · '+vs.length+' durak</div>'+
-     '<div class="route">'+vs.map((v,i)=>stopHtml(v,i)).join("")+'</div>'+
-     '<button class="route-btn" onclick="winopen(\''+gmapsRoute(vs)+'\')">🗺️ Haritada rota</button>';
+   const el=document.createElement("div");el.className="bg-surface-container-low rounded-xl p-5 border border-outline-variant/40";
+   el.innerHTML='<h3 class="font-headline-md text-[18px] leading-tight text-primary mb-1">'+s.t+'</h3><div class="text-on-surface-variant text-[13px] mb-4">'+s.m+' · '+vs.length+' durak</div>'+
+     '<div class="flex flex-col gap-3 mb-4">'+vs.map((v,i)=>stopHtml(v,i)).join("")+'</div>'+
+     '<button class="inline-flex items-center gap-1 rounded-full bg-primary text-on-primary font-button text-button px-4 py-2.5 hover:opacity-90 transition-opacity" onclick="winopen(\''+gmapsRoute(vs)+'\')">🗺️ Haritada rota</button>';
    g.appendChild(el);
  });
  if(!_m&&SCN.length>1){const gg=document.createElement("div");gg.style.gridColumn="1/-1";gg.innerHTML=gateCard((SCN.length-1)+' rota daha üyelere özel');g.appendChild(gg);}
@@ -1334,9 +1338,9 @@ function renderPlanCtl(){
  const el=document.getElementById("planCtl"); if(!el)return;
  const any=CAL.days.some(D=>(dayVenues[D.key]||[]).length);
  const its=tripInterests();
- el.innerHTML='<div class="planbtns"><button class="btn primary" onclick="autoGeneratePlan(true)"><span class="msym" style="font-size:16px;vertical-align:-3px">auto_awesome</span> İlgi alanlarıma göre plan oluştur</button>'+
-   (any?'<button class="btn" onclick="clearPlan()">Planı temizle</button>':'')+'</div>'+
-   '<div class="planhint">'+(its.length?("✦ İlgi alanların: "+its.join(", ")):"Henüz ilgi alanı seçmemişsin — genel öneriler kullanılıyor. Ana sayfada tür seçersen plan sana göre şekillenir.")+'</div>';
+ el.innerHTML='<div class="flex flex-wrap gap-2 mb-3"><button class="inline-flex items-center gap-1 rounded-full bg-secondary text-on-secondary font-button text-button px-5 py-2.5 hover:opacity-90 transition-opacity" onclick="autoGeneratePlan(true)"><span class="msym text-[16px]">auto_awesome</span> İlgi alanlarıma göre plan oluştur</button>'+
+   (any?'<button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-5 py-2.5 hover:bg-surface-container transition-colors" onclick="clearPlan()">Planı temizle</button>':'')+'</div>'+
+   '<div class="text-on-surface-variant text-[13px] mb-5">'+(its.length?("✦ İlgi alanların: "+its.join(", ")):"Henüz ilgi alanı seçmemişsin — genel öneriler kullanılıyor. Ana sayfada tür seçersen plan sana göre şekillenir.")+'</div>';
 }
 function ensurePlan(){ try{ CAL=buildCalDays(); if(!CAL.days.some(D=>(dayVenues[D.key]||[]).length)) autoGeneratePlan(false); else {renderPlanCtl();renderCal();} }catch(e){} }
 function renderCal(){
@@ -1346,11 +1350,12 @@ function renderCal(){
    const key=D.key;
    const planVal=(calPlans[key]!=null?calPlans[key]:"");
    const nSel=(dayVenues[key]||[]).length,nPh=(calPhotos[key]||[]).length,hasNote=!!(calNotes[key]&&calNotes[key].trim());
-   const el=document.createElement("div");el.className="day"+(D.weekend?" weekend":"");
-   el.innerHTML='<div class="dn">'+D.dow+'</div><div class="dd">'+D.label+'</div>'+
-     '<div class="plan">'+escT(planVal).replace(/\n/g," ").slice(0,90)+'</div>'+
-     '<div class="daymeta">'+(nSel?'📍 '+nSel+' mekan':'')+(nPh?((nSel?' · ':'')+'📷 '+nPh):'')+(hasNote?' · 📝 not':'')+'</div>'+
-     '<button class="dayopen">Aç / düzenle →</button>';
+   const el=document.createElement("div");el.className="cursor-pointer rounded-lg p-3 border transition-colors "+(D.weekend?"bg-primary-container/40 border-primary-container":"bg-surface-container-low border-outline-variant/40 hover:bg-surface-container");
+   el.innerHTML='<div class="text-[11px] uppercase tracking-wider text-on-surface-variant">'+D.dow+'</div>'+
+     '<div class="font-headline-md text-[15px] leading-tight text-primary mb-1">'+D.label+'</div>'+
+     '<div class="text-on-surface-variant text-[12px] line-clamp-2 min-h-[2.4em]">'+escT(planVal).replace(/\n/g," ").slice(0,90)+'</div>'+
+     '<div class="text-on-surface-variant text-[11px] mt-1">'+(nSel?'📍 '+nSel+' mekan':'')+(nPh?((nSel?' · ':'')+'📷 '+nPh):'')+(hasNote?' · 📝 not':'')+'</div>'+
+     '<button class="text-secondary text-[12px] mt-2 hover:underline">Aç / düzenle →</button>';
    el.addEventListener("click",()=>openDay(key));
    cal.appendChild(el);
  });
@@ -1777,17 +1782,20 @@ const ASA = (function(){
     const box=el("memberBody"); if(!box) return;
     if(!session){
       const su=(authMode==="signup");
-      let h='<div class="mcard">'
-        +'<div class="authtabs"><button class="authtab'+(su?"":" on")+'" onclick="ASA.setAuthMode(\'login\')">Giriş yap</button><button class="authtab'+(su?" on":"")+'" onclick="ASA.setAuthMode(\'signup\')">Kayıt ol</button></div>'
-        +'<div class="mrow"><input id="asaEmail" type="email" placeholder="E-posta adresin" autocomplete="email"></div>'
-        +'<div class="mrow"><input id="asaPw" type="password" placeholder="'+(su?"Şifre belirle (en az 6 karakter)":"Şifren")+'" autocomplete="'+(su?"new-password":"current-password")+'"></div>';
+      const INP='w-full bg-surface border border-outline-variant rounded-lg px-4 py-3 mb-3 text-body-lg text-on-surface placeholder:text-on-surface-variant focus:ring-2 focus:ring-primary focus:outline-none';
+      const TAB_ON='flex-1 rounded-full py-2 text-button font-button bg-surface text-primary shadow-sm transition-colors';
+      const TAB_OFF='flex-1 rounded-full py-2 text-button font-button text-on-surface-variant transition-colors';
+      let h='<div class="max-w-md mx-auto bg-surface-container-low rounded-xl p-6 border border-outline-variant/40">'
+        +'<div class="flex gap-1 p-1 bg-surface-container rounded-full mb-5"><button class="'+(su?TAB_OFF:TAB_ON)+'" onclick="ASA.setAuthMode(\'login\')">Giriş yap</button><button class="'+(su?TAB_ON:TAB_OFF)+'" onclick="ASA.setAuthMode(\'signup\')">Kayıt ol</button></div>'
+        +'<input id="asaEmail" type="email" placeholder="E-posta adresin" autocomplete="email" class="'+INP+'">'
+        +'<input id="asaPw" type="password" placeholder="'+(su?"Şifre belirle (en az 6 karakter)":"Şifren")+'" autocomplete="'+(su?"new-password":"current-password")+'" class="'+INP+'">';
       if(su){
-        h+='<div class="mrow"><select id="asaGender"><option value="">Cinsiyet seç (zorunlu)…</option><option>Kadın</option><option>Erkek</option><option>Belirtmek istemiyorum</option></select></div>'
-          +'<div class="mrow"><input id="asaCity" type="text" placeholder="Yaşadığın şehir (zorunlu)" autocomplete="address-level2"></div>';
+        h+='<select id="asaGender" class="'+INP+' appearance-none pr-9" style="background-image:url(\'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2376786f%22 stroke-width=%222%22%3E%3Cpath d=%22M6 9l6 6 6-6%22/%3E%3C/svg%3E\');background-repeat:no-repeat;background-position:right 12px center"><option value="">Cinsiyet seç (zorunlu)…</option><option>Kadın</option><option>Erkek</option><option>Belirtmek istemiyorum</option></select>'
+          +'<input id="asaCity" type="text" placeholder="Yaşadığın şehir (zorunlu)" autocomplete="address-level2" class="'+INP+'">';
       }
-      h+='<div id="asaErr" class="asaerr"></div>'
-        +'<button class="btn primary" id="asaAuthBtn" style="width:100%">'+(su?"Kayıt ol":"Giriş yap")+'</button>'
-        +'<p class="asahint">'+(su?"Kendi şifreni belirliyorsun; cinsiyet ve şehir zorunlu. Girince favorilerin buluta kaydolur, tüm cihazlarında görünür.":"E-posta ve şifrenle giriş yap. Hesabın yoksa ‘Kayıt ol’ sekmesine geç.")+'</p>'
+      h+='<div id="asaErr" class="text-error text-[13px] mb-2 empty:mb-0"></div>'
+        +'<button class="w-full rounded-full bg-primary text-on-primary font-button text-button py-3 hover:opacity-90 transition-opacity" id="asaAuthBtn">'+(su?"Kayıt ol":"Giriş yap")+'</button>'
+        +'<p class="text-on-surface-variant text-[12.5px] leading-relaxed mt-3">'+(su?"Kendi şifreni belirliyorsun; cinsiyet ve şehir zorunlu. Girince favorilerin buluta kaydolur, tüm cihazlarında görünür.":"E-posta ve şifrenle giriş yap. Hesabın yoksa ‘Kayıt ol’ sekmesine geç.")+'</p>'
         +'</div>';
       box.innerHTML=h;
       const b=el("asaAuthBtn");
