@@ -414,7 +414,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
       <a href="/" class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" title="Ana sayfa"><span class="msym text-[20px]">home</span></a>
       <div class="min-w-0 ml-1 leading-tight">
         <div class="font-headline-lg text-[19px] text-primary whitespace-nowrap">AsaLocal Club</div>
-        <div class="text-[9.5px] tracking-[0.14em] uppercase text-on-surface-variant">Amsterdam · yerel gibi gez</div>
+        <div id="hdrSub" class="text-[9.5px] tracking-[0.14em] uppercase text-on-surface-variant">Amsterdam · yerel gibi gez</div>
       </div>
     </div>
     <div class="flex items-center gap-1 shrink-0">
@@ -616,7 +616,14 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ===== referans noktaları ===== */
-const HOME={lat:52.3680,lng:4.8470,name:"Rembrandtpark"};
+const CITY=(()=>{try{var p=new URLSearchParams(location.search).get('city');if(p)return p;var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';}catch(e){}return 'Amsterdam';})();
+const CITYCONF={
+ "Amsterdam":{home:{lat:52.3680,lng:4.8470,name:"Rembrandtpark"},view:[52.370,4.895,12],sub:"Amsterdam \u00b7 yerel gibi gez",blurb:"Klasik turist de\u011fil, lokal ya\u015fam modundas\u0131n: iyi kahve, g\u00fczel \u00f6\u011fle yeme\u011fi, bisikletle ke\u015fif, ak\u015fam \u015farab\u0131."},
+ "Kopenhag":{home:{lat:55.6805,lng:12.5615,name:"Indre By (merkez)"},view:[55.6805,12.5615,13],sub:"Kopenhag \u00b7 yerel gibi gez",blurb:"\u0130skandinav tasar\u0131m\u0131, \u00fc\u00e7\u00fcnc\u00fc dalga kahve, efsane f\u0131r\u0131nlar ve liman kenar\u0131: Kopenhag'\u0131 turist de\u011fil, yerel gibi ke\u015ffet."}
+};
+const CC=CITYCONF[CITY]||CITYCONF["Amsterdam"];
+const HOME=CC.home;
+function AC(){ if(CITY==='Amsterdam')return AREA_CENTERS; var m={}; (typeof V!=='undefined'?V:[]).forEach(function(v){ if(!v||v.city!==CITY||v.lat==null)return; (m[v.area]=m[v.area]||[]).push([v.lat,v.lng]); }); var out={}; Object.keys(m).forEach(function(a){var p=m[a];out[a]=[p.reduce(function(t,x){return t+x[0];},0)/p.length,p.reduce(function(t,x){return t+x[1];},0)/p.length];}); return out; }
 let userLoc=null;
 
 const AREA_CENTERS={
@@ -930,7 +937,7 @@ const CITIES=[
 
 /* ===== HELPERS ===== */
 function coordsOf(v){if(v.lat!=null&&v.lng!=null)return{lat:v.lat,lng:v.lng,approx:false};
- const c=AREA_CENTERS[areaKey(v.area)];return{lat:c[0],lng:c[1],approx:true};}
+ const c=AREA_CENTERS[areaKey(v.area)]||[HOME.lat,HOME.lng];return{lat:c[0],lng:c[1],approx:true};}
 function haversine(a,b,c,d){const R=6371,t=x=>x*Math.PI/180;const dLa=t(c-a),dLo=t(d-b);
  const h=Math.sin(dLa/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
 function refPoint(){return userLoc||HOME;}
@@ -1032,6 +1039,7 @@ function stopHtml(v,i){if(!v)return"";
    '<button class="text-secondary text-[13px] hover:underline mt-0.5" onclick="winopen(\''+gmaps(v)+'\')">Maps’te aç →</button>'+
   '</div></div>';}
 function renderScenarios(){
+ if(typeof CITY!=='undefined'&&CITY!=='Amsterdam'){var g0=document.getElementById("scnGrid");if(g0)g0.innerHTML="";return;}
  const g=document.getElementById("scnGrid");g.innerHTML="";
  const _m=isMember();
  SCN.forEach((s,si)=>{
@@ -1078,17 +1086,17 @@ function matchChip(v,k){
    case"work":return isWork(v);
    case"walkin":return v.resv==="no"||v.walkIn===true;
    case"resv":return v.resv==="req"||v.resv==="rec";
-   case"near":return v.city==="Amsterdam"&&distKmFromHome(v)<=2.6;
+   case"near":return v.city===CITY&&distKmFromHome(v)<=2.6;
    case"noord":return(v.area||"").toLowerCase().includes("noord");
    case"bagel":return hasTag(v,"bagel")||hasTag(v,"take-away");
    default:return hasTag(v,k);
  }
 }
 function populateSelectors(){
- const areas=[...new Set(V.filter(v=>v.city==="Amsterdam").map(v=>v.area))].sort();
+ const areas=[...new Set(V.filter(v=>v.city===CITY).map(v=>v.area))].sort();
  const fa=document.getElementById("fArea");
  areas.forEach(a=>{const o=document.createElement("option");o.value=a;o.textContent=a;fa.appendChild(o);});
- const cats=[...new Set(V.flatMap(v=>v.cats))].sort();
+ const cats=[...new Set(V.filter(v=>v.city===CITY).flatMap(v=>v.cats))].sort();
  const mc=document.getElementById("mapCat");
  cats.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;mc.appendChild(o);});
 }
@@ -1099,7 +1107,7 @@ function currentList(){
  const area=document.getElementById("fArea").value;
  const src=document.getElementById("fSrc").value;
  let list=V.filter(v=>{
-   if(city&&v.city!==city)return false;
+   if(v.city!==CITY)return false;
    if(area&&v.area!==area)return false;
    if(src&&v.src!==src)return false;
    if(q){const blob=(v.name+" "+v.area+" "+v.cats.join(" ")+" "+v.best.join(" ")+" "+v.desc).toLowerCase();if(!blob.includes(q))return false;}
@@ -1184,8 +1192,8 @@ function applyFilters(){renderCards();}
 
 /* ===== SELF-CONTAINED SVG MAP ===== */
 /* ===== LEAFLET / OpenStreetMap MAP ===== */
-const CITY_VIEW={Amsterdam:[52.370,4.895,12],Antwerp:[51.215,4.410,13],Brussels:[50.845,4.360,13],Bruges:[51.208,3.224,14]};
-const MAP={city:"Amsterdam",map:null,layer:null,userMarker:null,ready:false,pickMode:false};
+const CITY_VIEW={Amsterdam:[52.370,4.895,12],Antwerp:[51.215,4.410,13],Brussels:[50.845,4.360,13],Bruges:[51.208,3.224,14]};if(!CITY_VIEW[CITY])CITY_VIEW[CITY]=CC.view;
+const MAP={city:CITY,map:null,layer:null,userMarker:null,ready:false,pickMode:false};
 function hexColor(v){if(isFav(v.id))return"#c25a52";return v.src==="user"?"#5b7a96":v.src==="deck"?"#5a9a93":v.src==="extra"?"#7d9a5a":"#8a6fa3";}
 function initMap(){
  if(typeof L==="undefined"){setTimeout(initMap,250);return;}
@@ -1193,14 +1201,14 @@ function initMap(){
    MAP.map=L.map("lmap",{zoomControl:true,scrollWheelZoom:true});
    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(MAP.map);
    MAP.layer=L.layerGroup().addTo(MAP.map);
-   const v=CITY_VIEW.Amsterdam;MAP.map.setView([v[0],v[1]],v[2]);
+   const v=CITY_VIEW[CITY]||CITY_VIEW.Amsterdam;MAP.map.setView([v[0],v[1]],v[2]);
    document.getElementById("mapCity").addEventListener("change",e=>{MAP.city=e.target.value;const c=CITY_VIEW[MAP.city]||CITY_VIEW.Amsterdam;MAP.map.setView([c[0],c[1]],c[2]);drawMarkers();});
    document.getElementById("mapCat").addEventListener("change",drawMarkers);
    document.getElementById("mapSrc").addEventListener("change",drawMarkers);
    const pb=document.getElementById("pickBtn");
    pb.onclick=()=>{MAP.pickMode=!MAP.pickMode;pb.classList.toggle("on",MAP.pickMode);MAP.map.getContainer().style.cursor=MAP.pickMode?"crosshair":"";};
    MAP.map.on("click",e=>{if(MAP.pickMode){setRef(e.latlng.lat,e.latlng.lng,"Haritada seçtiğin yer");MAP.pickMode=false;document.getElementById("pickBtn").classList.remove("on");MAP.map.getContainer().style.cursor="";}});
-   document.getElementById("openGoogle").onclick=()=>{if(MAP.city==="Amsterdam"){const r=refPoint();winopen("https://www.google.com/maps/@"+r.lat+","+r.lng+",14z");}else winopen("https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(MAP.city));};
+   document.getElementById("openGoogle").onclick=()=>{if(MAP.city===CITY){const r=refPoint();winopen("https://www.google.com/maps/@"+r.lat+","+r.lng+",14z");}else winopen("https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(MAP.city));};
    MAP.ready=true;
  }
  drawMarkers();
@@ -1217,13 +1225,13 @@ function popupHtml(v){const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv
    (v.web?'<button class="btn" onclick="winopen(\''+v.web+'\')">🌐 Web</button>':"")+
    (v.ig?'<button class="btn ghost" onclick="winopen(\''+v.ig+'\')">📷 IG</button>':"")+
   '</div></div>';}
-function showOnMap(id){const v=byId(id);if(!v)return;closeDay();go("map");setTimeout(()=>{initMap();setTimeout(()=>{try{MAP.city="Amsterdam";var mc=document.getElementById("mapCity");if(mc)mc.value="Amsterdam";drawMarkers();const c=coordsOf(v);MAP.map.setView([c.lat,c.lng],16);L.popup({maxWidth:270}).setLatLng([c.lat,c.lng]).setContent(popupHtml(v)).openOn(MAP.map);MAP.map.invalidateSize();}catch(e){}},450);},60);}
+function showOnMap(id){const v=byId(id);if(!v)return;closeDay();go("map");setTimeout(()=>{initMap();setTimeout(()=>{try{MAP.city=CITY;var mc=document.getElementById("mapCity");if(mc)mc.value=CITY;drawMarkers();const c=coordsOf(v);MAP.map.setView([c.lat,c.lng],16);L.popup({maxWidth:270}).setLatLng([c.lat,c.lng]).setContent(popupHtml(v)).openOn(MAP.map);MAP.map.invalidateSize();}catch(e){}},450);},60);}
 function drawMarkers(){
  if(!MAP.map)return;MAP.layer.clearLayers();
  const cat=document.getElementById("mapCat").value;
  const src=document.getElementById("mapSrc").value;
- if(MAP.city==="Amsterdam"){
-   V.filter(v=>v.city==="Amsterdam").forEach(v=>{
+ if(MAP.city===CITY){
+   V.filter(v=>v.city===CITY).forEach(v=>{
      if(cat&&!v.cats.includes(cat))return;
      if(src&&v.src!==src)return;
      const c=coordsOf(v);const fav=isFav(v.id);
@@ -1275,7 +1283,7 @@ function flashLoc(msg){const btn=document.getElementById("locBtn");btn.textConte
 function syncRefSel(val){document.querySelectorAll(".refsel").forEach(s=>{s.value=val;});}
 function populateRefSels(){
  const opts='<option value="home">📍 Rembrandtpark (varsayılan)</option>'+
-   Object.keys(AREA_CENTERS).map(a=>'<option value="'+a+'">📍 '+a+'</option>').join("")+
+   Object.keys(AC()).map(a=>'<option value="'+a+'">📍 '+a+'</option>').join("")+
    '<option value="gps">📍 GPS dene (https/Firefox)</option>';
  document.querySelectorAll(".refsel").forEach(s=>{
    s.innerHTML=opts;
@@ -1283,7 +1291,7 @@ function populateRefSels(){
      const val=s.value;syncRefSel(val);
      if(val==="home")clearRef();
      else if(val==="gps")getLoc();
-     else{const c=AREA_CENTERS[val];setRef(c[0],c[1],val);}
+     else{const c=AC()[val];if(c)setRef(c[0],c[1],val);}
    });
  });
 }
@@ -1381,7 +1389,7 @@ const PLAN_SLOTS=[
  {k:"Öğleden sonra",cats:["culture","park","shop","coffee"]},
  {k:"Akşam",cats:["wine","bar","food"]}
 ];
-function amsPool(){ return V.filter(v=>v.city==="Amsterdam"); }
+function amsPool(){ return V.filter(v=>v.city===CITY); }
 function autoGeneratePlan(force){
  const pool=amsPool(), interests=interestCats(), used=new Set();
  const score=v=>(isFav(v.id)?2:0)+(interests.has(catOf(v))?1:0);
@@ -1418,14 +1426,14 @@ function ensurePlan(){ try{renderPlanSetup();}catch(e){} try{ CAL=buildCalDays()
 var PSET=(function(){
  const CATS=[{key:"culture_art",label:"Kültür & Sanat",v:20},{key:"gastronomy",label:"Gastronomi",v:20},{key:"coffee_brunch",label:"Kahve & Brunch",v:10},{key:"local_discovery",label:"Lokal Keşif",v:15},{key:"history_architecture",label:"Tarih & Mimari",v:10},{key:"nature_parks",label:"Doğa & Parklar",v:8},{key:"nightlife",label:"Gece Hayatı",v:5},{key:"shopping",label:"Alışveriş",v:5},{key:"events",label:"Etkinlikler",v:2},{key:"rest_freetime",label:"Dinlenme & Serbest Zaman",v:5,buffer:true}];
  const DIET=["Vejetaryen","Vegan","Glutensiz","Helal","Laktozsuz","Fındık alerjisi"];
- const NB=(typeof AREA_CENTERS!=="undefined")?Object.keys(AREA_CENTERS):[];
+ const NB=Object.keys(AC());
  const INP='w-full bg-surface border border-outline-variant rounded-lg px-3 py-2.5 text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary';
  const LBL='block text-[12px] text-on-surface-variant mb-1 font-medium';
  const SEC='font-kicker text-kicker text-on-surface-variant uppercase mt-5 mb-2';
  let s=null, warn="";
  function trip(){ try{return JSON.parse(localStorage.getItem("asa_trip")||"{}")||{};}catch(e){return {};} }
  function prefs(){ try{return JSON.parse(localStorage.getItem("asa_plan_prefs")||"{}")||{};}catch(e){return {};} }
- function invList(){ return (typeof V!=="undefined"?V:[]).filter(v=>v&&v.city==="Amsterdam"&&v.active!==false).map(v=>({id:v.id,name:v.name})); }
+ function invList(){ return (typeof V!=="undefined"?V:[]).filter(v=>v&&v.city===CITY&&v.active!==false).map(v=>({id:v.id,name:v.name})); }
  function nameOf(id){ const v=(typeof V!=="undefined")?V.find(x=>x.id===id):null; return v?v.name:id; }
  function load(){ const t=trip(),p=prefs(); s={ startDate:t.start_date||"", endDate:t.end_date||"", arrival:p.arrival||"14:00", departure:p.departure||"11:00", dayStart:p.dayStart||"09:00", dayEnd:p.dayEnd||"23:00", tempo:p.tempo||"Dengeli", transport:p.transport||{walk:true,bike:true,transit:false}, dietary:p.dietary||[], mustSee:p.mustSee||[], avoid:p.avoid||[], reservations:p.reservations||[], otherNote:p.otherNote||"", auto:(p.auto!==false), resDraft:{id:"",date:"",start:"",end:""}, open:!p.saved, cats:CATS.map(c=>({...c,v:(p.interests&&p.interests[c.key]!=null)?p.interests[c.key]:c.v,locked:false})) }; }
  const sum=()=>s.cats.reduce((a,c)=>a+c.v,0);
@@ -1451,7 +1459,7 @@ var PSET=(function(){
  API.delRes=(i)=>{ s.reservations.splice(i,1); render(); };
  API.setNote=(v)=>{ s.otherNote=v; }; // güvenli: innerHTML'e girmez, sadece state
  API.pin=()=>{ try{ setActiveView("map"); MAP.pickMode=true; var pb=document.getElementById("pickBtn"); if(pb)pb.classList.add("on"); if(MAP.map)MAP.map.getContainer().style.cursor="crosshair"; }catch(e){} };
- API.nb=(v)=>{ if(!v)return; try{ const c=AREA_CENTERS[v]; if(c)setRef(c[0],c[1],v); }catch(e){} render(); };
+ API.nb=(v)=>{ if(!v)return; try{ const c=AC()[v]; if(c)setRef(c[0],c[1],v); }catch(e){} render(); };
  API.edit=()=>{ s.open=true; render(); };
  API.getPrefs=()=>({ base:(typeof userLoc!=="undefined"?userLoc:null), startDate:s.startDate, endDate:s.endDate, arrival:s.arrival, departure:s.departure, dayStart:s.dayStart, dayEnd:s.dayEnd, tempo:s.tempo, transport:s.transport, interests:(function(){var o={};s.cats.forEach(c=>o[c.key]=c.v);return o;})(), must_see_ids:s.mustSee.slice(), avoid_ids:s.avoid.slice(), reservations:s.reservations.slice() });
  API.submit=()=>{ const c=cta(); if(!c.ok)return; savePrefs(); try{CAL=buildCalDays();}catch(e){} var ok=false; try{ ok=runEngine(); }catch(e){} if(!ok){ try{autoGeneratePlan(true);}catch(e){} } s.open=false; render(); try{renderCal();}catch(e){} const el=document.getElementById("planCtl"); if(el)el.scrollIntoView({behavior:"smooth",block:"start"}); };
@@ -1547,7 +1555,7 @@ var ENGINE=(function(){
   var pool=inv.filter(function(v){return v.active!==false&&v.availability_status!=="unavailable"&&!avoid[v.id]&&v.lat!=null;});
   var must={};(prefs.must_see_ids||[]).forEach(function(id){must[id]=1;});
   var resByDay={},reservedIds={};(prefs.reservations||[]).forEach(function(r){(resByDay[r.date]=resByDay[r.date]||[]).push(r);reservedIds[r.id]=1;});
-  var NB=(typeof AREA_CENTERS!=="undefined")?AREA_CENTERS:{};var nbNear=Object.keys(NB).sort(function(a,b){return haversine(base.lat,base.lng,NB[a][0],NB[a][1])-haversine(base.lat,base.lng,NB[b][0],NB[b][1]);});
+  var NB=AC();var nbNear=Object.keys(NB).sort(function(a,b){return haversine(base.lat,base.lng,NB[a][0],NB[a][1])-haversine(base.lat,base.lng,NB[b][0],NB[b][1]);});
   function strongFar(nb){return pool.some(function(v){return v.neighborhood_key===nb&&v.anchor_strength>=0.7;});}
   var far=nbNear.slice().reverse().filter(strongFar);var nbOrder=[];for(var i=0;i<D.length;i++){nbOrder.push(i%2===0?nbNear[i%nbNear.length]:(far.length?far[(i>>1)%far.length]:nbNear[i%nbNear.length]));}
   function score(v,prev,win,uNb,uSub){var cat=v.primary_allocation_category;var rem=target[cat]-achieved[cat];var wq=(rem>0?1:0.15)*((interests[cat]||0)/100);var wf=(v.time_windows||[]).indexOf(win)>-1?1:0;var db=haversine(base.lat,base.lng,v.lat,v.lng);var px=1/(1+(prev?hv(prev,v):db));var dv=(uNb[v.neighborhood_key]?-0.5:0)+(uSub[v.sub_category]?-0.4:0);var sc=W.interest*wq+W.editorial*(v.editorial_score||0)+W.local*(v.local_score||0)*(prefs.localPref||1)+W.window*wf+W.proximity*px+W.diversity*dv-W.reliability*(1-(v.reliability||0.5));if(must[v.id])sc+=5;return sc;}
@@ -1571,7 +1579,7 @@ var ENGINE=(function(){
  function _reason(v,win,theme,tr){var b=[];if((v.time_windows||[]).indexOf(win)>-1)b.push(win+" için uygun");if(v.neighborhood_key===theme)b.push("bugünün ana bölgesi "+theme);b.push("önceki duraktan ~"+tr+" dk");if(v.anchor_strength>=0.7)b.push("güçlü cazibe");return b.join(" · ");}
  return {plan:plan};
 })();
-function runEngine(){ try{ var prefs=PSET.getPrefs(); if(!prefs||!prefs.base) return false; var inv=(typeof V!=="undefined"?V:[]).filter(function(v){return v&&v.city==="Amsterdam"&&v.active!==false;}).map(enrichVenue); var res=ENGINE.plan(prefs,inv); if(!res||!res.itinerary) return false; window.planResult={}; res.itinerary.forEach(function(d){ dayVenues[d.key]=d.stops.map(function(x){return x.id;}); window.planResult[d.key]={theme:d.theme,window:d.window,stops:d.stops}; }); window.planEngineMeta=res; try{saveLS("ams_dayven",dayVenues);}catch(e){} return true; }catch(e){ return false; } }
+function runEngine(){ try{ var prefs=PSET.getPrefs(); if(!prefs||!prefs.base) return false; var inv=(typeof V!=="undefined"?V:[]).filter(function(v){return v&&v.city===CITY&&v.active!==false;}).map(enrichVenue); var res=ENGINE.plan(prefs,inv); if(!res||!res.itinerary) return false; window.planResult={}; res.itinerary.forEach(function(d){ dayVenues[d.key]=d.stops.map(function(x){return x.id;}); window.planResult[d.key]={theme:d.theme,window:d.window,stops:d.stops}; }); window.planEngineMeta=res; try{saveLS("ams_dayven",dayVenues);}catch(e){} return true; }catch(e){ return false; } }
 let planSelDay=null, dayFilter="all";
 const SLOT_EMO={"Sabah":"☀️","Öğle":"🍽️","Öğleden sonra":"🎨","Akşam":"🌙"};
 function renderCal(){
@@ -1640,7 +1648,7 @@ function renderDayFilter(d){
 function renderDaySuggest(d){
  const box=document.getElementById("daySuggest"); if(!box)return;
  const sel=new Set(dayVenues[d]||[]);
- let pool=V.filter(v=>v.city==="Amsterdam"&&!sel.has(v.id));
+ let pool=V.filter(v=>v.city===CITY&&!sel.has(v.id));
  if(dayFilter!=="all") pool=pool.filter(v=>catOf(v)===dayFilter);
  pool.sort((a,b)=>((isFav(b.id)?1:0)-(isFav(a.id)?1:0)));
  pool=pool.slice(0,8);
@@ -1701,6 +1709,7 @@ function renderDay(d){
 
 /* ===== WEEKEND ===== */
 function renderTrips(){
+ if(typeof CITY!=='undefined'&&CITY!=='Amsterdam'){return;}
  if(!isMember()){
    document.getElementById("tripReco").innerHTML='<div class="reco"><h3>Hafta sonu kaçamakları</h3><p>Antwerp, Brüksel ve Brugge için tren süreleri, lokal kalınacak mahalleler ve saatlik günübirlik planlar — hepsi üyelere özel.</p></div>'+gateCard('Hafta sonu planlarının tamamı üyelere özel');
    var _c=document.getElementById("cmp");if(_c)_c.innerHTML="";
@@ -1825,8 +1834,8 @@ function modeMatch(v){
  return true;
 }
 function runDE(){
- let pool=V.filter(v=>v.city==="Amsterdam"&&modeMatch(v));
- if(pool.length<2)pool=V.filter(v=>v.city==="Amsterdam");
+ let pool=V.filter(v=>v.city===CITY&&modeMatch(v));
+ if(pool.length<2)pool=V.filter(v=>v.city===CITY);
  const cands=pool.map(v=>({v,s:deScore(v)})).sort((a,b)=>b.s-a.s);
  const best=cands[0].v;
  const nearC=[...cands].sort((a,b)=>distKm(a.v)-distKm(b.v)).find(x=>x.v.id!==best.id);
@@ -1871,6 +1880,19 @@ const CHECKS=[
 document.getElementById("checkList").innerHTML=CHECKS.map(c=>'<li>'+c+'</li>').join("");
 
 /* ===== INIT ===== */
+(function cityInit(){try{
+ var hs=document.getElementById('hdrSub'); if(hs)hs.textContent=CC.sub;
+ try{document.title=CITY+' \u00b7 Lokal Ya\u015fam Rehberi';}catch(e){}
+ if(CITY!=='Amsterdam'){
+   var hp=document.querySelector('[data-ck="app.pano.p"]'); if(hp){hp.textContent=CC.blurb; hp.removeAttribute('data-ck');}
+   var hl=document.getElementById('heroLoc'); if(hl)hl.textContent='\ud83d\udccd '+CC.home.name;
+   var vt=document.getElementById('v-trip'); if(vt)vt.style.display='none';
+   var sgd=document.getElementById('scnGrid'); if(sgd)sgd.style.display='none';
+   var pv=document.getElementById('v-pano'); if(pv){ pv.querySelectorAll('.section-title').forEach(function(h){ if(/senaryo/i.test(h.textContent)){h.style.display='none'; var nx=h.nextElementSibling; if(nx&&nx.classList.contains('section-sub'))nx.style.display='none';} }); }
+   var fc=document.getElementById('fCity'); if(fc)fc.style.display='none';
+   var mcs=document.getElementById('mapCity'); if(mcs){mcs.innerHTML='<option value="'+CITY+'">'+CITY+'</option>';mcs.value=CITY;}
+ }
+}catch(e){}})();
 populateSelectors();populateRefSels();buildChips();renderScenarios();renderCards();renderCal();renderTrips();buildDE();
 
 /* ===== Admin (venues tablosu) → uygulama birleştirme =====
@@ -1919,6 +1941,8 @@ async function mergeDbVenues(){
    window.__mv.photoN=photoN; window.__mv.changed=changed;
    if(changed){
      try{populateSelectors();}catch(e){}
+     try{populateRefSels();}catch(e){}
+     try{buildChips();}catch(e){}
      try{renderCards();}catch(e){}
      try{if(typeof drawMarkers==="function"&&MAP&&MAP.map)drawMarkers();}catch(e){}
    }
@@ -2204,7 +2228,7 @@ if(document.readyState!=="loading"){ try{ASA.init();}catch(e){} }
   try{
     var t=JSON.parse(localStorage.getItem("asa_trip")||"null");
     var el=document.getElementById("tripBanner");
-    if(t&&el&&(t.city==="Amsterdam"||!t.city)){
+    if(t&&el&&(t.city===CITY||!t.city)){
       var vt=(t.vacation_types&&t.vacation_types.length)?t.vacation_types.join(", "):null;
       var dstr=null;
       if(t.start_date&&t.end_date){ var MO=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"]; var s=new Date(t.start_date+"T00:00:00"),e=new Date(t.end_date+"T00:00:00"); if(!isNaN(s)&&!isNaN(e)){ dstr=s.getDate()+" "+MO[s.getMonth()]+"–"+e.getDate()+" "+MO[e.getMonth()]; } }
