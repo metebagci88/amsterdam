@@ -1280,12 +1280,12 @@ function getLoc(){
 }
 function flashLoc(msg){const btn=document.getElementById("locBtn");btn.textContent=msg;
  setTimeout(()=>{btn.textContent=userLoc?"📍 Konum aktif":"📍 Konumumu kullan";},3000);}
-function syncRefSel(val){document.querySelectorAll(".refsel").forEach(s=>{s.value=val;});}
+function syncRefSel(val){document.querySelectorAll("#refMap,#refList").forEach(s=>{s.value=val;});}
 function populateRefSels(){
- const opts='<option value="home">📍 Rembrandtpark (varsayılan)</option>'+
+ const opts='<option value="home">📍 '+HOME.name+' (varsayılan)</option>'+
    Object.keys(AC()).map(a=>'<option value="'+a+'">📍 '+a+'</option>').join("")+
    '<option value="gps">📍 GPS dene (https/Firefox)</option>';
- document.querySelectorAll(".refsel").forEach(s=>{
+ document.querySelectorAll("#refMap,#refList").forEach(s=>{
    s.innerHTML=opts;
    s.addEventListener("change",()=>{
      const val=s.value;syncRefSel(val);
@@ -1483,7 +1483,7 @@ var PSET=(function(){
    return '<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-4">'+
      '<div class="flex items-center justify-between mb-2"><div class="font-headline-md text-[17px] text-primary">Plan kurulumu</div><button type="button" class="text-secondary text-[12px]" onclick="PSET.close()">Küçült ▲</button></div>'+
      '<div class="'+SEC+'">Kurulum (zorunlu)</div>'+
-     '<div class="mb-3"><label class="'+LBL+'">Konaklama (ana merkez)</label><div class="flex flex-wrap gap-2 items-center"><button type="button" class="rounded-full border '+(acc?"border-primary bg-primary text-on-primary":"border-outline-variant bg-surface text-on-surface")+' px-3 py-2 text-[12.5px] min-h-[38px]" onclick="PSET.pin()">📍 Haritadan pin</button><select class="'+INP+'" style="max-width:220px" aria-label="Mahalle seç" onchange="PSET.nb(this.value)"><option value="">Mahalle seç…</option>'+NB.map(n=>'<option>'+esc(n)+'</option>').join("")+'</select></div><div class="text-[11px] '+(acc?"text-on-surface-variant":"text-secondary")+' mt-1">'+(acc?"✓ Konaklama noktan seçildi.":"Haritadan pin bırak ya da mahalle seç — koordinat belirlenmeden geçerli sayılmaz.")+'</div></div>'+
+     '<div class="mb-3"><label class="'+LBL+'">Konaklama (ana merkez)</label><div class="flex flex-wrap gap-2 items-center"><button type="button" class="rounded-full border '+(acc?"border-primary bg-primary text-on-primary":"border-outline-variant bg-surface text-on-surface")+' px-3 py-2 text-[12.5px] min-h-[38px]" onclick="PSET.pin()">📍 Haritadan pin</button><select class="'+INP+'" style="max-width:220px" aria-label="Mahalle seç" onchange="PSET.nb(this.value)"><option value="">Mahalle seç…</option>'+Object.keys(AC()).map(n=>'<option>'+esc(n)+'</option>').join("")+'</select></div><div class="text-[11px] '+(acc?"text-on-surface-variant":"text-secondary")+' mt-1">'+(acc?"✓ Konaklama noktan seçildi.":"Haritadan pin bırak ya da mahalle seç — koordinat belirlenmeden geçerli sayılmaz.")+'</div></div>'+
      '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Başlangıç tarihi</label><input type="date" class="'+INP+'" value="'+esc(s.startDate)+'" onchange="PSET.setDate(\'startDate\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Bitiş tarihi</label><input type="date" class="'+INP+'" value="'+esc(s.endDate)+'" onchange="PSET.setDate(\'endDate\',this.value)"></div></div>'+
      '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Şehre varış saati</label><input type="time" class="'+INP+'" value="'+esc(s.arrival)+'" onchange="PSET.setTime(\'arrival\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Ayrılış saati</label><input type="time" class="'+INP+'" value="'+esc(s.departure)+'" onchange="PSET.setTime(\'departure\',this.value)"></div></div>'+
      '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Gün başlangıç</label><input type="time" class="'+INP+'" value="'+esc(s.dayStart)+'" onchange="PSET.setTime(\'dayStart\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Gün bitiş</label><input type="time" class="'+INP+'" value="'+esc(s.dayEnd)+'" onchange="PSET.setTime(\'dayEnd\',this.value)"></div></div>'+
