@@ -2083,6 +2083,29 @@ const ASA = (function(){
     }catch(e){}
     try{ if(typeof renderTripBanner==="function") renderTripBanner(); }catch(e){}
   }
+  // A10: misafirken kurulan seyahati/planı üye olunca DB'ye taşı (mükerrer kontrollü)
+  async function importGuestTrip(){
+    if(!window.TripStore) return;
+    if(window.TRIP && window.TRIP.id) return;                 // zaten DB seyahati yüklü (?trip=)
+    var t={}; try{ t=JSON.parse(localStorage.getItem("asa_trip")||"{}")||{}; }catch(e){}
+    if(t.id) return;                                          // zaten DB'ye bağlı
+    if(!t.city || !t.start_date || !t.end_date) return;       // taşınacak kesin seyahat yok
+    var existing=null; try{ existing=await window.TripStore.findOverlap(t.city,t.start_date,t.end_date); }catch(e){}
+    if(existing){
+      // Aynı şehir+çakışan tarihte DB seyahati var → onu benimse, DB'yi otorite say (yerelin üstüne yazma)
+      window.TRIP=existing;
+      try{ if(window.TripSync)window.TripSync.hydrate(existing); }catch(e){}
+      try{ t.id=existing.id; t.revision=existing.revision; localStorage.setItem("asa_trip",JSON.stringify(t)); }catch(e){}
+    } else {
+      var res=await window.TripStore.create({ city:t.city, country:t.country||null, start_date:t.start_date, end_date:t.end_date, timezone:asaCityTz(t.city), preferences:{vacation_types:t.vacation_types||[], duration:t.duration||null, duration_days:t.duration_days||null}, dupCheck:false });
+      if(!res || !res.ok || !res.trip) return;
+      window.TRIP=res.trip;
+      try{ t.id=res.trip.id; t.revision=res.trip.revision; localStorage.setItem("asa_trip",JSON.stringify(t)); }catch(e){}
+      // Misafirin yerel planını/tercihlerini yeni DB seyahatine it
+      try{ if(window.TripSync){ var patch=window.TripSync.collect(); var sres=await window.TripStore.saveWithRetry(res.trip.id, res.trip.revision, patch); if(sres&&sres.ok)window.TRIP.revision=sres.revision; } }catch(e){}
+    }
+    try{ if(typeof renderTripBanner==="function") renderTripBanner(); }catch(e){}
+  }
   function mapAuthErr(e){ const m=((e&&e.message)||"").toLowerCase();
     if(m.indexOf("invalid login")>-1||m.indexOf("invalid credentials")>-1) return "E-posta veya şifre hatalı.";
     if(m.indexOf("already")>-1) return "Bu e-posta zaten kayıtlı. ‘Giriş yap’ ile devam et.";
@@ -2095,6 +2118,7 @@ const ASA = (function(){
     try{ await db.rpc("member_upsert_profile",{p_display_name:email.split("@")[0],p_bio:null,p_home_city:null,p_gender:null}); }catch(e){}
     try{ const {data:mrow}=await db.from("members").select("blocked").eq("user_id",uid).maybeSingle(); if(mrow&&mrow.blocked){ try{await db.auth.signOut();}catch(e){} session=null;member=null;render(); return {ok:false,msg:"Bu hesap engellendi. Erişimin kısıtlı."}; } }catch(e){}
     await syncOnLogin(uid,email,false);
+    try{ await importGuestTrip(); }catch(e){}
     return {ok:true};
   }
 
