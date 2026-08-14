@@ -211,6 +211,14 @@
       <div class="absolute bottom-0 right-0 bg-surface p-4 border-t border-l border-primary/20"><p class="font-label-md text-label-md text-on-surface-variant italic">Amsterdam — Kanal boyları</p></div>
     </div>
   </section>
+  <!-- ASA_BUILD_20260814_A7A8 : Aktif Seyahat kartı + Seyahatlerim -->
+  <div id="tripHub" class="w-full mb-12"></div>
+  <div id="tripsModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/40 p-4" style="display:none">
+    <div class="bg-surface max-w-lg w-full max-h-[80vh] overflow-auto p-6 border border-primary/20">
+      <div class="flex justify-between items-center mb-4"><h3 class="font-headline-lg text-headline-lg text-primary">Seyahatlerim</h3><button onclick="closeTripsModal()" class="text-on-surface-variant hover:text-primary text-2xl leading-none">✕</button></div>
+      <div id="tripsList"></div>
+    </div>
+  </div>
   <!-- Aramaya Başla -->
   <section class="mb-32">
     <div class="w-full bg-surface-container-low border border-primary/10 p-6 md:p-8 relative">
@@ -351,7 +359,7 @@ let sel={country:null,city:null,active:false,duration:null,durationDays:null,sta
 try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
 try{ if(db&&window.createTripStore) window.TripStore=window.createTripStore(db); }catch(e){}
 session=null;
-(async function bootAuth(){ if(!db)return; try{ const {data}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ const uid=data.session.user.id; const email=(data.session.user.email||"").toLowerCase(); const {data:m}=await db.from("members").select("display_name,blocked").eq("user_id",uid).maybeSingle(); if(m&&m.blocked){ await db.auth.signOut(); return; } session={uid,email,display_name:m?m.display_name:null}; try{renderAcct();}catch(e){} } }catch(e){} })();
+(async function bootAuth(){ if(!db)return; try{ const {data}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ const uid=data.session.user.id; const email=(data.session.user.email||"").toLowerCase(); const {data:m}=await db.from("members").select("display_name,blocked").eq("user_id",uid).maybeSingle(); if(m&&m.blocked){ await db.auth.signOut(); return; } session={uid,email,display_name:m?m.display_name:null}; try{renderAcct();}catch(e){} try{renderTripHub();}catch(e){} } }catch(e){} })();
 async function applyContent(){
  try{ if(!db)return;
    const {data}=await db.from("site_content").select("key,value,enabled"); if(!data)return;
@@ -444,6 +452,51 @@ function wire(){
   $("goBtn").onclick=async()=>{ if(!sel.city)return; const b=$("goBtn"); b.disabled=true; if(sel.active){ b.textContent="Hazırlanıyor…"; await saveTrip(true);} else { await saveTrip(false); $("goNote").textContent="✓ İlgin kaydedildi — "+sel.city+" açılınca haber vereceğiz."; b.disabled=false; updateGo(); } };
 }
 function renderAcct(){ const b=$("acctBtn"); if(session){ b.textContent="👤 "+((session.display_name)||session.email.split("@")[0]); b.classList.add("bg-secondary","text-on-secondary","border-secondary"); } else { b.textContent="Giriş"; b.classList.remove("bg-secondary","text-on-secondary","border-secondary"); } }
+/* ===== A7/A8: Aktif Seyahat kartı + Seyahatlerim (build ASA_BUILD_20260814_A7A8) ===== */
+window.__ASA_HOME_BUILD="ASA_BUILD_20260814_A7A8";
+function asaEsc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function asaFmtDates(sd,ed){ try{ const MO=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"]; const s=new Date(sd+"T00:00:00"),e=new Date(ed+"T00:00:00"); if(isNaN(s)||isNaN(e))return ""; return s.getDate()+" "+MO[s.getMonth()]+"–"+e.getDate()+" "+MO[e.getMonth()]; }catch(e){return "";} }
+function openTrip(id,city){ location.href="/amsterdam/?trip="+id+"&city="+encodeURIComponent(city); }
+const LC_STYLE={active:["Aktif Seyahat","bg-secondary text-on-secondary"],upcoming:["Yaklaşan","bg-primary text-on-primary"],draft:["Taslak","bg-surface-container text-on-surface-variant"],past:["Geçmiş","bg-surface-container text-on-surface-variant"]};
+async function renderTripHub(){
+  const hub=$("tripHub"); if(!hub)return;
+  if(!session||!window.TripStore){ hub.innerHTML=""; return; }
+  let trips=[]; try{ trips=await window.TripStore.list(); }catch(e){}
+  if(!trips.length){ hub.innerHTML=""; return; }
+  let feat=null; try{ feat=await window.TripStore.activeOrUpcoming(); }catch(e){}
+  let h="";
+  if(feat){
+    const lc=window.TripStore.lifecycle(feat); const st=LC_STYLE[lc]||LC_STYLE.upcoming;
+    h+='<div class="border border-secondary/40 bg-surface-container-low p-5 md:p-6 relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">'
+      +'<div class="absolute top-0 left-0 w-full h-[2px] bg-secondary"></div>'
+      +'<div><span class="inline-block '+st[1]+' text-label-md font-label-md px-2.5 py-1 rounded-full mb-2">'+st[0]+'</span>'
+      +'<div class="font-headline-lg text-headline-lg text-primary">'+asaEsc(feat.city)+'</div>'
+      +'<div class="text-on-surface-variant font-body-md">'+asaFmtDates(feat.start_date,feat.end_date)+'</div></div>'
+      +'<div class="flex flex-wrap gap-2"><button onclick="openTrip('+feat.id+',\''+asaEsc(feat.city)+'\')" class="bg-secondary text-on-secondary font-label-lg py-3 px-6 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors">Devam et</button>'
+      +'<button onclick="openTripsModal()" class="border border-primary/30 text-on-surface font-label-lg py-3 px-5 rounded hover:bg-surface-container transition-colors">🧳 Seyahatlerim ('+trips.length+')</button></div>'
+      +'</div>';
+  } else {
+    h+='<div class="flex justify-end"><button onclick="openTripsModal()" class="border border-primary/30 text-on-surface font-label-lg py-2.5 px-5 rounded hover:bg-surface-container transition-colors">🧳 Seyahatlerim ('+trips.length+')</button></div>';
+  }
+  hub.innerHTML=h;
+}
+async function openTripsModal(){ const m=$("tripsModal"); if(!m)return; m.style.display="flex"; m.classList.remove("hidden"); await renderTripsList(); }
+function closeTripsModal(){ const m=$("tripsModal"); if(!m)return; m.style.display="none"; m.classList.add("hidden"); }
+async function renderTripsList(){
+  const box=$("tripsList"); if(!box)return; box.innerHTML='<div class="text-on-surface-variant">Yükleniyor…</div>';
+  let trips=[]; try{ trips=await window.TripStore.list(); }catch(e){}
+  if(!trips.length){ box.innerHTML='<div class="text-on-surface-variant">Henüz seyahatin yok. Yukarıdan tarih seçip “Keşfet” ile başla.</div>'; return; }
+  const rank={active:0,upcoming:1,draft:2,past:3};
+  trips.sort((a,b)=>{ const d=rank[window.TripStore.lifecycle(a)]-rank[window.TripStore.lifecycle(b)]; return d!==0?d:(a.start_date<b.start_date?-1:1); });
+  box.innerHTML=trips.map(t=>{ const lc=window.TripStore.lifecycle(t); const st=LC_STYLE[lc]||LC_STYLE.draft;
+    return '<div class="flex items-center justify-between gap-3 border-b border-primary/10 py-3">'
+      +'<div><span class="inline-block '+st[1]+' text-label-md font-label-md px-2 py-0.5 rounded-full mr-2">'+st[0]+'</span><b>'+asaEsc(t.city)+'</b> <span class="text-on-surface-variant text-body-sm">'+asaFmtDates(t.start_date,t.end_date)+'</span></div>'
+      +'<div class="flex gap-3 shrink-0"><button onclick="openTrip('+t.id+',\''+asaEsc(t.city)+'\')" class="text-secondary font-label-md hover:underline">Aç</button>'
+      +'<button onclick="archiveTrip('+t.id+','+t.revision+')" class="text-on-surface-variant font-label-md hover:text-secondary">Arşivle</button></div>'
+      +'</div>';
+  }).join("");
+}
+async function archiveTrip(id,rev){ if(!window.TripStore)return; try{ const res=await window.TripStore.archive(id,rev); if(res&&res.ok){ await renderTripsList(); await renderTripHub(); } else if(res&&res.reason==='conflict'&&res.server){ await window.TripStore.archive(id,res.server.revision); await renderTripsList(); await renderTripHub(); } }catch(e){} }
 function openAuth(){ const m=$("authModal"); m.style.display="flex"; m.classList.remove("hidden"); renderAuthBody(); }
 function closeAuth(){ const m=$("authModal"); m.style.display="none"; m.classList.add("hidden"); }
 let authMode="login";
@@ -470,7 +523,7 @@ function renderAuthBody(){
   } else {
     box.innerHTML='<div class="flex items-center gap-4 mb-4"><div class="w-14 h-14 rounded-full bg-secondary text-on-secondary flex items-center justify-center text-2xl">🧭</div><div><div class="font-headline-sm text-headline-sm text-primary">'+((session.display_name)||session.email.split("@")[0])+'</div><div class="font-label-md text-label-md text-on-surface-variant">'+session.email+'</div><div id="amTier" class="font-label-md text-label-md text-secondary mt-1">Üye</div></div></div>'
       +'<button id="amLogout" class="w-full border border-primary/30 text-primary font-label-lg py-3 rounded hover:bg-surface-container">Çıkış yap</button>';
-    $("amLogout").onclick=async()=>{ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; try{localStorage.removeItem("asa_session");}catch(e){} renderAcct(); renderAuthBody(); };
+    $("amLogout").onclick=async()=>{ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; try{localStorage.removeItem("asa_session");}catch(e){} renderAcct(); renderAuthBody(); try{renderTripHub();}catch(e){} };
     if(db){ db.from("members").select("tier,points").eq("user_id",session.uid).maybeSingle().then(({data})=>{ if(data&&$("amTier"))$("amTier").textContent=(tierFor(data.points||0).emoji)+" "+(data.tier||"Kaşif")+" · "+(data.points||0)+" puan"; }).catch(()=>{}); }
   }
 }
@@ -502,10 +555,10 @@ async function doAuth(){
     try{ await db.rpc("member_upsert_profile",{p_display_name:email.split("@")[0],p_bio:null,p_home_city:null,p_gender:null}); }catch(e){}
     const {data:m}=await db.from("members").select("display_name,blocked").eq("user_id",uid).maybeSingle();
     if(m&&m.blocked){ try{await db.auth.signOut();}catch(e){} err.textContent="Bu hesap engellendi."; b.disabled=false;b.textContent=orig; return; }
-    session={uid,email,display_name:m?m.display_name:null}; renderAcct(); renderAuthBody();
+    session={uid,email,display_name:m?m.display_name:null}; renderAcct(); renderAuthBody(); try{renderTripHub();}catch(e){}
   }catch(e){ err.textContent="Sunucu hatası, tekrar dene."; b.disabled=false;b.textContent=orig; }
 }
-renderCountries(); renderCities(); renderTypes(); renderDests(); renderAcct(); wire(); updateGo();
+renderCountries(); renderCities(); renderTypes(); renderDests(); renderAcct(); wire(); updateGo(); try{renderTripHub();}catch(e){}
 $("acctBtn").onclick=openAuth; $("authX").onclick=closeAuth; $("authModal").onclick=e=>{ if(e.target===$("authModal"))closeAuth(); };
 (async function loadAds(){
   if(!db) return; let ads=[];
