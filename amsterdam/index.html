@@ -2009,11 +2009,11 @@ const ASA = (function(){
     if(m.indexOf("email")>-1&&(m.indexOf("valid")>-1||m.indexOf("format")>-1)) return "Geçerli bir e-posta gir.";
     return (e&&e.message)||"Bir hata oluştu, tekrar dene."; }
   async function afterAuth(user){
-    const email=((user&&user.email)||"").toLowerCase();
-    if(!email) return {ok:false,msg:"Oturum alınamadı."};
-    try{ await db.from("members").upsert({email},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
-    try{ const {data:mrow}=await db.from("members").select("blocked").eq("email",email).maybeSingle(); if(mrow&&mrow.blocked){ try{await db.auth.signOut();}catch(e){} session=null;member=null;render(); return {ok:false,msg:"Bu hesap engellendi. Erişimin kısıtlı."}; } }catch(e){}
-    await syncOnLogin(email,false);
+    const uid=user&&user.id; const email=((user&&user.email)||"").toLowerCase();
+    if(!uid) return {ok:false,msg:"Oturum alınamadı."};
+    try{ await db.rpc("member_upsert_profile",{p_display_name:email.split("@")[0],p_bio:null,p_home_city:null,p_gender:null}); }catch(e){}
+    try{ const {data:mrow}=await db.from("members").select("blocked").eq("user_id",uid).maybeSingle(); if(mrow&&mrow.blocked){ try{await db.auth.signOut();}catch(e){} session=null;member=null;render(); return {ok:false,msg:"Bu hesap engellendi. Erişimin kısıtlı."}; } }catch(e){}
+    await syncOnLogin(uid,email,false);
     return {ok:true};
   }
 
@@ -2035,30 +2035,29 @@ const ASA = (function(){
     if(!db) return {ok:false,msg:"Bağlantı kurulamadı, sayfayı yenile."};
     const {data,error}=await db.auth.signUp({email,password,options:{data:{gender,home_city:city.trim()}}});
     if(error) return {ok:false,msg:mapAuthErr(error)};
-    try{ await db.from("members").upsert({email,gender,home_city:city.trim(),display_name:email.split("@")[0]},{onConflict:"email"}); }catch(e){}
-    if(data&&data.session&&data.user){ return await afterAuth(data.user); }
+    if(data&&data.session&&data.user){ try{ await db.rpc("member_upsert_profile",{p_display_name:email.split("@")[0],p_bio:null,p_home_city:city.trim(),p_gender:gender}); }catch(e){} return await afterAuth(data.user); }
     return {ok:false,info:true,msg:"Kayıt alındı. E-postana gelen doğrulama bağlantısına tıkla, sonra ‘Giriş yap’."};
   }
 
-  async function syncOnLogin(email, silent){
+  async function syncOnLogin(uid, email, silent){
     let m=null;
-    try{ const {data}=await db.from("members").select("*").eq("email",email).maybeSingle(); m=data; }catch(e){}
+    try{ const {data}=await db.from("members").select("*").eq("user_id",uid).maybeSingle(); m=data; }catch(e){}
     if(m&&m.blocked){ session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); return; }
     if(!m){ m={email,display_name:null,tier:"Kaşif",points:0}; }
     memberMeta=m;
-    try{ const {data}=await db.from("comments").select("id,photo_url").eq("email",email); postCount=(data||[]).length; photoCount=(data||[]).filter(x=>x.photo_url).length; }catch(e){}
+    try{ const {data}=await db.from("comments").select("id,photo_url").eq("user_id",uid); postCount=(data||[]).length; photoCount=(data||[]).filter(x=>x.photo_url).length; }catch(e){}
     let cloud=[];
-    try{ const {data}=await db.from("favorites").select("venue_id").eq("email",email); cloud=(data||[]).map(r=>r.venue_id); }catch(e){}
+    try{ const {data}=await db.from("favorites").select("venue_id").eq("user_id",uid); cloud=(data||[]).map(r=>r.venue_id); }catch(e){}
     const local=[...favSet];
     const union=new Set([...cloud,...local]);
-    const toAdd=local.filter(id=>!cloud.includes(id)).map(id=>({email,venue_id:id,city:"Amsterdam"}));
-    if(toAdd.length){ try{ await db.from("favorites").upsert(toAdd,{onConflict:"email,venue_id",ignoreDuplicates:true}); }catch(e){} }
+    // user_id trigger tarafından doldurulur; email uyumluluk için bırakılır; çakışma UID+venue
+    const toAdd=local.filter(id=>!cloud.includes(id)).map(id=>({email,venue_id:id,city:CITY}));
+    if(toAdd.length){ try{ await db.from("favorites").upsert(toAdd,{onConflict:"user_id,venue_id",ignoreDuplicates:true}); }catch(e){} }
     favSet=new Set(union);
     try{localStorage.setItem("ams_fav",JSON.stringify([...favSet]));}catch(e){}
-    const points=favSet.size; const t=tierFor(points);
-    try{ await db.from("members").update({points,tier:t.name,updated_at:new Date().toISOString()}).eq("email",email); }catch(e){}
-    member={email,display_name:m.display_name,tier:t.name,points};
-    session={email,display_name:m.display_name};
+    // PUAN: favori sayısından DEĞİL; members.points güvenli aksiyon RPC'leriyle güncellenir.
+    member={uid,email,display_name:m.display_name,tier:m.tier||"Kaşif",points:m.points||0};
+    session={uid,email,display_name:m.display_name};
     saveSession();
     try{refreshGated();}catch(e){}
     try{if(typeof MAP!=="undefined"&&MAP.map)drawMarkers();}catch(e){}
@@ -2067,21 +2066,18 @@ const ASA = (function(){
 
   async function onFav(id, added){
     if(!session||!db) { render(); return; }
-    const email=session.email;
     try{
-      if(added){ await db.from("favorites").upsert([{email,venue_id:id,city:"Amsterdam"}],{onConflict:"email,venue_id",ignoreDuplicates:true}); }
-      else { await db.from("favorites").delete().eq("email",email).eq("venue_id",id); }
+      if(added){ await db.from("favorites").upsert([{email:session.email,venue_id:id,city:CITY}],{onConflict:"user_id,venue_id",ignoreDuplicates:true}); }
+      else { await db.from("favorites").delete().eq("user_id",session.uid).eq("venue_id",id); }
     }catch(e){}
-    const points=favSet.size; const t=tierFor(points);
-    if(member){member.points=points;member.tier=t.name;}
-    try{ await db.from("members").update({points,tier:t.name,updated_at:new Date().toISOString()}).eq("email",email); }catch(e){}
+    // favori artık puan üretmez → members.points doğrudan güncellemesi KALDIRILDI
     render();
   }
 
   async function saveName(name){
     if(!session||!db) return;
     name=(name||"").trim().slice(0,40);
-    try{ await db.from("members").update({display_name:name,updated_at:new Date().toISOString()}).eq("email",session.email); }catch(e){}
+    try{ await db.rpc("member_upsert_profile",{p_display_name:name,p_bio:null,p_home_city:null,p_gender:null}); }catch(e){}
     session.display_name=name; if(member)member.display_name=name; saveSession(); render();
   }
   async function saveProfile(){
@@ -2090,7 +2086,9 @@ const ASA = (function(){
     const gender=((el("asaGender2")||{}).value||"")||null;
     const city=(((el("asaCity2")||{}).value||"").trim())||null;
     const btn=el("asaNameBtn"); if(btn){btn.disabled=true;btn.textContent="Kaydediliyor…";}
-    try{ await db.from("members").update({display_name:name,gender:gender,home_city:city,updated_at:new Date().toISOString()}).eq("email",session.email); }catch(e){}
+    try{ await db.rpc("member_upsert_profile",{p_display_name:name,p_bio:null,p_home_city:city,p_gender:gender}); }catch(e){}
+    // profil tamamlandıysa güvenli RPC ile (ömür boyu 1 kez) puan
+    try{ if(name&&city&&gender){ const {data:pr}=await db.rpc("complete_profile"); if(pr&&pr.ok&&member){member.points=pr.points;member.tier=pr.tier;} } }catch(e){}
     if(memberMeta){memberMeta.display_name=name;memberMeta.gender=gender;memberMeta.home_city=city;}
     session.display_name=name; if(member)member.display_name=name; saveSession();
     if(btn){btn.disabled=false;btn.textContent="Kaydedildi ✓";setTimeout(function(){var b2=el("asaNameBtn");if(b2)b2.textContent="Değişiklikleri Kaydet";},1600);}
@@ -2151,7 +2149,7 @@ const ASA = (function(){
     else if(curSeg==="taste"){ b.innerHTML=tasteHtml(); loadTaste(); }
   }
   function passportHtml(){
-    const t=tierFor(favSet.size);
+    const points=(member&&member.points)||0; const t=tierFor(points);
     const name=session.display_name||session.email.split("@")[0];
     const since=(memberMeta&&memberMeta.created_at)?new Date(memberMeta.created_at).getFullYear():"—";
     const IN='w-full bg-transparent border-b border-outline-variant py-2 text-body-lg text-on-surface focus:outline-none focus:border-primary transition-colors';
@@ -2165,7 +2163,7 @@ const ASA = (function(){
         +'</div>'
         +'<div class="grid grid-cols-3 gap-sm pt-md border-t border-inverse-primary/25 relative z-10">'
           +'<div class="flex flex-col items-center text-center"><span class="text-body-sm text-inverse-primary/80">Seviye</span><span class="font-headline-md text-headline-md mt-1 text-on-primary">'+esc(t.name)+'</span></div>'
-          +'<div class="flex flex-col items-center text-center border-l border-r border-inverse-primary/25"><span class="text-body-sm text-inverse-primary/80">Puan</span><span class="font-headline-md text-headline-md mt-1 text-on-primary">'+favSet.size+'</span></div>'
+          +'<div class="flex flex-col items-center text-center border-l border-r border-inverse-primary/25"><span class="text-body-sm text-inverse-primary/80">Puan</span><span class="font-headline-md text-headline-md mt-1 text-on-primary">'+points+'</span></div>'
           +'<div class="flex flex-col items-center text-center"><span class="text-body-sm text-inverse-primary/80">Katılım</span><span class="font-headline-md text-headline-md mt-1 text-on-primary">'+since+'</span></div>'
         +'</div>'
       +'</section>'
@@ -2182,12 +2180,12 @@ const ASA = (function(){
       +'</section>';
   }
   function pointsHtml(){
-    const points=favSet.size; const t=tierFor(points); const nt=nextTier(points);
+    const points=(member&&member.points)||0; const t=tierFor(points); const nt=nextTier(points);
     const prog=nt?Math.max(4,Math.round(((points-t.min)/(nt.min-t.min))*100)):100;
     const badge=(on,e,tx)=>'<span class="bdg'+(on?" on":"")+'">'+e+' '+tx+'</span>';
     const badges=[badge(points>=1,"🌱","İlk kayıt"),badge(points>=5,"🏙️","Şehirli"),badge(points>=15,"🎨","Küratör"),badge(points>=30,"💎","Insider"),badge(postCount>0,"✍️","Yorumcu"),badge(photoCount>0,"📷","Fotoğrafçı")];
     return '<div class="seg-card"><div class="mstats"><div><b>'+t.emoji+' '+t.name+'</b><span>Seviye</span></div><div><b>'+points+'</b><span>Puan</span></div></div>'
-      +(nt?'<div class="mprog"><div class="mprogbar"><i style="width:'+prog+'%"></i></div><div class="mprogtxt">'+nt.emoji+' <b>'+nt.name+'</b> seviyesine '+(nt.min-points)+' favori kaldı</div></div>':'<div class="mprogtxt">En üst seviyedesin 💎</div>')
+      +(nt?'<div class="mprog"><div class="mprogbar"><i style="width:'+prog+'%"></i></div><div class="mprogtxt">'+nt.emoji+' <b>'+nt.name+'</b> seviyesine '+(nt.min-points)+' puan kaldı</div></div>':'<div class="mprogtxt">En üst seviyedesin 💎</div>')
       +'<div class="tierlist">'+TIERS.map(x=>'<div class="tierrow'+(points>=x.min?" on":"")+'"><span>'+x.emoji+' '+x.name+'</span><b>'+x.min+'+ puan</b></div>').join("")+'</div></div>'
       +'<div class="seg-card"><div class="seg-h">Rozetlerin</div><div class="badges2">'+badges.join("")+'</div></div>';
   }
@@ -2200,23 +2198,23 @@ const ASA = (function(){
   function postsHtml(){ return '<div class="seg-card"><div class="seg-h">Yorumların & fotoğrafların</div><div id="segPosts" class="asahint">Yükleniyor…</div></div>'; }
   async function loadPosts(){
     const e2=el("segPosts"); if(!e2)return; let list=[];
-    try{ const {data}=await db.from("comments").select("*").eq("email",session.email).order("created_at",{ascending:false}); list=data||[]; }catch(e){}
+    try{ const {data}=await db.from("comments").select("*").eq("user_id",session.uid).order("created_at",{ascending:false}); list=data||[]; }catch(e){}
     if(!list.length){ e2.innerHTML="Henüz yorum/fotoğraf yok. Bir mekanı açıp (💬 Yorum) yerli tüyonu bırak."; return; }
     e2.innerHTML=list.map(c=>{const v=byId(c.venue_id);const nm=v?v.name:c.venue_id;return '<div class="march"><div class="marchh">📍 '+esc(nm)+' <button class="lk-x" style="float:right" title="Sil" onclick="ASA.delPost('+c.id+')">✕</button></div>'+(c.body?'<div class="marchb">'+esc(c.body)+'</div>':'')+(c.photo_url?'<img class="marchp" src="'+c.photo_url+'">':'')+'</div>';}).join("");
   }
-  async function delPost(id){ try{ await db.from("comments").delete().eq("id",id).eq("email",session.email); }catch(e){} try{ const {data}=await db.from("comments").select("id,photo_url").eq("email",session.email); postCount=(data||[]).length; photoCount=(data||[]).filter(x=>x.photo_url).length; }catch(e){} loadPosts(); }
+  async function delPost(id){ try{ await db.rpc("delete_comment_with_points",{p_comment_id:id}); }catch(e){} try{ const {data}=await db.from("comments").select("id,photo_url").eq("user_id",session.uid); postCount=(data||[]).length; photoCount=(data||[]).filter(x=>x.photo_url).length; }catch(e){} loadPosts(); }
   function tasteHtml(){ return '<div class="seg-card"><div class="seg-h">Zevk grupların</div><p class="asahint" style="margin-top:0">Ortak beğenilere göre sana en yakın üyeler. Onların kaydettiklerinden yeni yerler keşfet.</p><div id="segTaste">Hesaplanıyor…</div></div>'; }
   async function loadTaste(){
     const e2=el("segTaste"); if(!e2)return;
-    const my=[...favSet]; if(!my.length){ e2.innerHTML="Önce birkaç yer kaydet; sonra sana benzeyen üyeleri kümeleyelim."; return; }
-    let rows=[]; try{ const {data}=await db.from("favorites").select("email,venue_id").in("venue_id",my); rows=data||[]; }catch(e){}
-    const map={}; rows.forEach(r=>{ if(r.email===session.email)return; (map[r.email]=map[r.email]||[]).push(r.venue_id); });
-    const arr=Object.keys(map).map(em=>({email:em,shared:map[em]})).sort((a,b)=>b.shared.length-a.shared.length).slice(0,12);
-    if(!arr.length){ e2.innerHTML="Şu an ortak beğenisi olan başka üye yok. Sen ve arkadaşların kaydettikçe kümeler oluşacak."; return; }
-    e2.innerHTML=arr.map(x=>{const names=x.shared.map(id=>{const v=byId(id);return v?v.name:id;}).slice(0,6).join(", ");const masked=esc((x.email.split("@")[0]||"üye").slice(0,2))+"•••";const pct=Math.round(x.shared.length/my.length*100);return '<div class="tasterow"><div class="tm-h"><b>'+masked+'</b><span class="tm-c">'+x.shared.length+' ortak · %'+pct+' örtüşme</span></div><div class="tm-s">Ortak yerler: '+esc(names)+'</div></div>';}).join("");
+    const my=[...favSet]; if(!my.length){ e2.innerHTML="Önce birkaç yer kaydet; sonra kaydettiğin yerleri kaç kişinin daha sevdiğini görelim."; return; }
+    // Aynı Beyin — anonim: yalnız toplam eşleşme sayısı (kimlik/e-posta/liste sızdırmaz; <3 gizli)
+    let rows=[]; try{ const {data}=await db.rpc("similar_brains",{p_venue_ids:my.slice(0,50)}); rows=data||[]; }catch(e){}
+    if(!rows.length){ e2.innerHTML="Şu an yeterli örtüşme yok. Sen ve diğer üyeler kaydettikçe, kaydettiğin yerleri kaç kişinin daha sevdiğini burada göreceksin."; return; }
+    rows.sort((a,b)=>b.others-a.others);
+    e2.innerHTML=rows.map(r=>{const v=byId(r.venue_id);const nm=v?v.name:r.venue_id;return '<div class="tasterow"><div class="tm-h"><b>'+esc(nm)+'</b><span class="tm-c">❤️ '+r.others+' kişi de burayı sevdi</span></div></div>';}).join("");
   }
 
-  return { init, login, signup, setAuthMode, logout, onFav, saveName, render, seg, removeFav, delPost, get session(){return session;} };
+  return { init, login, signup, setAuthMode, logout, onFav, saveName, render, seg, removeFav, delPost, setPoints:function(p,t){ if(member){ member.points=p; member.tier=t; } try{render();}catch(e){} }, get member(){return member;}, get session(){return session;} };
 })();
 try{window.ASA=ASA;}catch(e){}
 document.addEventListener("DOMContentLoaded",()=>{ try{ASA.init();}catch(e){} });
@@ -2234,7 +2232,7 @@ if(document.readyState!=="loading"){ try{ASA.init();}catch(e){} }
       if(t.start_date&&t.end_date){ var MO=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"]; var s=new Date(t.start_date+"T00:00:00"),e=new Date(t.end_date+"T00:00:00"); if(!isNaN(s)&&!isNaN(e)){ dstr=s.getDate()+" "+MO[s.getMonth()]+"–"+e.getDate()+" "+MO[e.getMonth()]; } }
       else if(t.approx_period){ dstr=t.approx_period; }
       var durTxt=(t.duration_days?t.duration_days+" gün":(t.duration||null));
-      el.innerHTML="🧭 Planın: <b>Amsterdam</b>"+(dstr?" · "+dstr:"")+(durTxt?" · "+durTxt:"")+(vt?" · "+vt:"");
+      el.innerHTML="🧭 Planın: <b>"+CITY+"</b>"+(dstr?" · "+dstr:"")+(durTxt?" · "+durTxt:"")+(vt?" · "+vt:"");
       el.classList.remove("hide");
     }
   }catch(e){}
@@ -2291,59 +2289,67 @@ const VEN=(function(){
     const body=(document.getElementById("vBody").value||"").trim();
     if(!body && !pendingPhoto){ var pn=document.getElementById("vPhotoName"); if(pn)pn.textContent="Bir şeyler yaz ya da fotoğraf ekle."; return; }
     const btn=document.getElementById("vSend"); if(btn){btn.disabled=true;btn.textContent="Gönderiliyor…";}
-    try{ await db.from("comments").insert([{venue_id:curVenue.id,city:"Amsterdam",email:s.email,display_name:s.display_name||s.email.split("@")[0],body:body,photo_url:pendingPhoto}]); }catch(e){}
-    pendingPhoto=null;
+    let res=null;
+    try{ const {data}=await db.rpc("create_comment_with_points",{p_venue_id:curVenue.id,p_city:(typeof CITY!=="undefined"?CITY:"Amsterdam"),p_body:body,p_photo_url:pendingPhoto||null}); res=data; }catch(e){}
+    if(res&&res.ok===false){ var pnx=document.getElementById("vPhotoName"); if(pnx)pnx.textContent="Gönderilemedi, tekrar dene."; if(btn){btn.disabled=false;btn.textContent="Gönder";} return; }
+    try{ if(res&&res.ok&&window.ASA&&ASA.setPoints){ ASA.setPoints(res.points,res.tier); } }catch(e){}
+    pendingPhoto=null; var vb=document.getElementById("vBody"); if(vb)vb.value="";
+    if(btn){btn.disabled=false;btn.textContent="Gönder";}
     renderHead(curVenue);
     loadComments(curVenue.id);
   }
 
   async function loadComments(vid){
     const box=document.getElementById("vComments"); if(!box)return;
-    let comments=[], reactions=[];
-    try{ const {data}=await db.from("comments").select("*").eq("venue_id",vid).order("created_at",{ascending:false}); comments=data||[]; }catch(e){}
+    let comments=[], counts=[], mine=[], mineIds=new Set();
+    try{ const {data}=await db.from("comments_public").select("*").eq("venue_id",vid).order("created_at",{ascending:false}); comments=data||[]; }catch(e){}
     const ids=comments.map(c=>c.id);
-    if(ids.length){ try{ const {data}=await db.from("comment_reactions").select("*").in("comment_id",ids); reactions=data||[]; }catch(e){} }
-    renderComments(box, comments, reactions);
+    if(ids.length){
+      try{ const {data}=await db.from("comment_reaction_counts").select("*").in("comment_id",ids); counts=data||[]; }catch(e){}
+      const s=sess();
+      if(s){
+        try{ const {data}=await db.from("comment_reactions").select("comment_id,reaction").eq("user_id",s.uid).in("comment_id",ids); mine=data||[]; }catch(e){}
+        try{ const {data}=await db.from("comments").select("id").eq("user_id",s.uid).eq("venue_id",vid); (data||[]).forEach(x=>mineIds.add(x.id)); }catch(e){}
+      }
+    }
+    renderComments(box, comments, counts, mine, mineIds);
   }
 
-  function renderComments(box, comments, reactions){
-    const s=sess();
+  function renderComments(box, comments, counts, mine, mineIds){
     if(!comments.length){ box.innerHTML='<div class="vempty">Henüz yorum yok. İlk yerli tüyosunu sen bırak.</div>'; return; }
+    const cnt=(id,rx)=>{const r=counts.find(x=>x.comment_id===id&&x.reaction===rx);return r?r.n:0;};
+    const myR=id=>{const r=mine.find(x=>x.comment_id===id);return r?r.reaction:null;};
     box.innerHTML='<div class="vch">Yorumlar ('+comments.length+')</div>'+comments.map(c=>{
-      const likes=reactions.filter(r=>r.comment_id===c.id&&r.reaction==="like").length;
-      const dis=reactions.filter(r=>r.comment_id===c.id&&r.reaction==="dislike").length;
-      const mine=s?reactions.find(r=>r.comment_id===c.id&&r.email===s.email):null;
+      const likes=cnt(c.id,"like"), dis=cnt(c.id,"dislike"), mr=myR(c.id);
       return '<div class="vc">'
         +'<div class="vcm"><b>'+esc(c.display_name||"Üye")+'</b> <span class="vct">'+timeAgo(c.created_at)+'</span></div>'
         +(c.body?'<div class="vcb">'+esc(c.body)+'</div>':'')
         +(c.photo_url?'<img class="vcp" src="'+c.photo_url+'" alt="">':'')
         +'<div class="vcr">'
-          +'<button class="vreact'+(mine&&mine.reaction==="like"?" on":"")+'" onclick="VEN.react('+c.id+',\'like\')">👍 '+likes+'</button>'
-          +'<button class="vreact'+(mine&&mine.reaction==="dislike"?" on":"")+'" onclick="VEN.react('+c.id+',\'dislike\')">👎 '+dis+'</button>'
-          +(s&&c.email===s.email?'<button class="vreact del" onclick="VEN.del('+c.id+')">🗑 Sil</button>':'')
+          +'<button class="vreact'+(mr==="like"?" on":"")+'" onclick="VEN.react('+c.id+',\'like\')">👍 '+likes+'</button>'
+          +'<button class="vreact'+(mr==="dislike"?" on":"")+'" onclick="VEN.react('+c.id+',\'dislike\')">👎 '+dis+'</button>'
+          +(mineIds&&mineIds.has(c.id)?'<button class="vreact del" onclick="VEN.del('+c.id+')">🗑 Sil</button>':'')
         +'</div></div>';
     }).join("");
   }
 
   async function react(cid, r){
     const s=sess(); if(!s){ close(); go("member"); return; } if(!db) return;
-    try{
-      const {data}=await db.from("comment_reactions").select("reaction").eq("comment_id",cid).eq("email",s.email).maybeSingle();
-      if(data&&data.reaction===r){ await db.from("comment_reactions").delete().eq("comment_id",cid).eq("email",s.email); }
-      else { await db.from("comment_reactions").upsert([{comment_id:cid,email:s.email,reaction:r}],{onConflict:"comment_id,email"}); }
-    }catch(e){}
+    let cur=null; try{ const {data}=await db.from("comment_reactions").select("reaction").eq("comment_id",cid).eq("user_id",s.uid).maybeSingle(); cur=data&&data.reaction; }catch(e){}
+    const next=(cur===r)?"none":r;
+    try{ await db.rpc("set_comment_reaction",{p_comment_id:cid,p_reaction:next}); }catch(e){}
     if(curVenue) loadComments(curVenue.id);
   }
 
   async function del(cid){
     const s=sess(); if(!s||!db)return;
-    try{ await db.from("comments").delete().eq("id",cid).eq("email",s.email); }catch(e){}
+    try{ await db.rpc("delete_comment_with_points",{p_comment_id:cid}); }catch(e){}
     if(curVenue) loadComments(curVenue.id);
   }
 
-  async function profileArchive(email){
-    if(!db) return {comments:[]};
-    try{ const {data}=await db.from("comments").select("*").eq("email",email).order("created_at",{ascending:false}); return {comments:data||[]}; }catch(e){ return {comments:[]}; }
+  async function profileArchive(){
+    const s=sess(); if(!db||!s) return {comments:[]};
+    try{ const {data}=await db.from("comments").select("*").eq("user_id",s.uid).order("created_at",{ascending:false}); return {comments:data||[]}; }catch(e){ return {comments:[]}; }
   }
 
   return { open, close, fav, photo, post, react, del, profileArchive };
