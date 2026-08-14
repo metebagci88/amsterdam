@@ -642,6 +642,39 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 function asaCityTz(city){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; return m[city]||'Europe/Amsterdam'; }
 /* Tek Supabase istemcisi (çoklu GoTrueClient uyarısını ve oturum yarışını önler) */
 window.asaDB=function(){ try{ if(!window.__asaSB && window.supabase && window.supabase.createClient){ window.__asaSB=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"); } }catch(e){} return window.__asaSB||null; };
+/* A5/A9 TripSync: plan+tercihleri DB trip'ine otomatik kaydet, durum göster, geri yükle */
+window.TripSync=(function(){
+  var TS={status:'idle',_t:null,_hide:null};
+  function P(k,d){ try{var v=localStorage.getItem(k);return v?(JSON.parse(v)||d):d;}catch(e){return d;} }
+  function pill(){ var el=document.getElementById('tripSyncPill'); if(!el){ el=document.createElement('div'); el.id='tripSyncPill'; el.style.cssText='position:fixed;right:12px;bottom:80px;z-index:99999;font-size:12px;padding:6px 12px;border-radius:999px;color:#fff;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.25)'; if(document.body)document.body.appendChild(el);} return el; }
+  TS.setStatus=function(s){ TS.status=s; var el=pill(); if(!el)return; var map={saving:['Kaydediliyor…','#555'],saved:['Kaydedildi ✓','#2e7d32'],error:['Kaydedilemedi ⚠','#b3261e']}; var m=map[s]; if(!m){el.style.opacity='0';return;} el.textContent=m[0]; el.style.background=m[1]; el.style.opacity='1'; if(s==='saved'){ clearTimeout(TS._hide); TS._hide=setTimeout(function(){el.style.opacity='0';},1800);} };
+  TS.collect=function(){
+    var pp=P('asa_plan_prefs',{}), t=P('asa_trip',{});
+    var patch={ preferences:{ vacation_types:(t.vacation_types||(window.TRIP&&window.TRIP.preferences&&window.TRIP.preferences.vacation_types)||[]), duration:(t.duration||null), duration_days:(t.duration_days||null), plan_prefs:pp, accommodation:(pp&&pp.accommodation)||null },
+      plan:{ dayven:P('ams_dayven',{}), cal:P('ams_cal',{}), plan:P('ams_plan',{}), updated_at:new Date().toISOString() },
+      setup_completed:!!(pp&&pp.saved) };
+    if(t.start_date)patch.start_date=t.start_date;
+    if(t.end_date)patch.end_date=t.end_date;
+    if(pp.arrival)patch.arrival_time=pp.arrival;
+    if(pp.departure)patch.departure_time=pp.departure;
+    return patch;
+  };
+  TS.flush=async function(){
+    if(!window.TRIP||!window.TripStore){ return; }
+    TS.setStatus('saving');
+    try{ var res=await window.TripStore.saveWithRetry(window.TRIP.id, window.TRIP.revision, TS.collect());
+      if(res&&res.ok){ window.TRIP.revision=res.revision; TS.setStatus('saved'); }
+      else { if(res&&res.server&&res.server.revision!=null)window.TRIP.revision=res.server.revision; TS.setStatus('error'); }
+    }catch(e){ TS.setStatus('error'); }
+  };
+  TS.schedule=function(){ if(!window.TRIP)return; clearTimeout(TS._t); TS.setStatus('saving'); TS._t=setTimeout(function(){TS.flush();},1200); };
+  TS.hydrate=function(t){ if(!t)return; try{
+    if(t.preferences&&t.preferences.plan_prefs&&Object.keys(t.preferences.plan_prefs).length){ localStorage.setItem('asa_plan_prefs',JSON.stringify(t.preferences.plan_prefs)); }
+    if(t.plan){ if(t.plan.dayven)localStorage.setItem('ams_dayven',JSON.stringify(t.plan.dayven)); if(t.plan.cal)localStorage.setItem('ams_cal',JSON.stringify(t.plan.cal)); if(t.plan.plan)localStorage.setItem('ams_plan',JSON.stringify(t.plan.plan)); }
+  }catch(e){} };
+  return TS;
+})();
+window.__tripDirty=function(){ try{ if(window.TripSync)window.TripSync.schedule(); }catch(e){} };
 </script>
 <script>
 /* ===== referans noktaları ===== */
@@ -1360,7 +1393,7 @@ let dayVenues={},dayCur=null;
 try{dayVenues=JSON.parse(localStorage.getItem("ams_dayven")||"{}");}catch(e){}
 function escT(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
-function saveLS(k,o){try{localStorage.setItem(k,JSON.stringify(o));}catch(e){alert("Depolama dolu olabilir (özellikle fotoğraflar). Bazı fotoğrafları silip tekrar dene.");}}
+function saveLS(k,o){try{localStorage.setItem(k,JSON.stringify(o));}catch(e){alert("Depolama dolu olabilir (özellikle fotoğraflar). Bazı fotoğrafları silip tekrar dene.");} try{ if(/^(ams_dayven|ams_cal|ams_plan)$/.test(k)&&window.__tripDirty)window.__tripDirty(); }catch(e){}}
 function addPhoto(d,ev){const f=ev.target.files&&ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const mx=800;let w=img.width,h2=img.height;if(w>mx){h2=Math.round(h2*mx/w);w=mx;}const cv=document.createElement("canvas");cv.width=w;cv.height=h2;cv.getContext("2d").drawImage(img,0,0,w,h2);const data=cv.toDataURL("image/jpeg",0.7);(calPhotos[d]=calPhotos[d]||[]).push(data);saveLS("ams_calphoto",calPhotos);refreshDayUI();};img.src=rd.result;};rd.readAsDataURL(f);}
 function delPhoto(d,i){if(calPhotos[d]){calPhotos[d].splice(i,1);if(!calPhotos[d].length)delete calPhotos[d];saveLS("ams_calphoto",calPhotos);refreshDayUI();}}
 function buildCalDays(){
@@ -1492,7 +1525,7 @@ var PSET=(function(){
  API.edit=()=>{ s.open=true; render(); };
  API.getPrefs=()=>({ base:(typeof userLoc!=="undefined"?userLoc:null), startDate:s.startDate, endDate:s.endDate, arrival:s.arrival, departure:s.departure, dayStart:s.dayStart, dayEnd:s.dayEnd, tempo:s.tempo, transport:s.transport, interests:(function(){var o={};s.cats.forEach(c=>o[c.key]=c.v);return o;})(), must_see_ids:s.mustSee.slice(), avoid_ids:s.avoid.slice(), reservations:s.reservations.slice() });
  API.submit=()=>{ const c=cta(); if(!c.ok)return; savePrefs(); try{CAL=buildCalDays();}catch(e){} var ok=false; try{ ok=runEngine(); }catch(e){} if(!ok){ try{autoGeneratePlan(true);}catch(e){} } s.open=false; render(); try{renderCal();}catch(e){} const el=document.getElementById("planCtl"); if(el)el.scrollIntoView({behavior:"smooth",block:"start"}); };
- function savePrefs(){ const interests={}; s.cats.forEach(c=>interests[c.key]=c.v); const p={interests,tempo:s.tempo,transport:s.transport,arrival:s.arrival,departure:s.departure,dayStart:s.dayStart,dayEnd:s.dayEnd,dietary:s.dietary,mustSee:s.mustSee,avoid:s.avoid,reservations:s.reservations,otherNote:s.otherNote,auto:s.auto,saved:true,updated_at:new Date().toISOString()}; try{localStorage.setItem("asa_plan_prefs",JSON.stringify(p));}catch(e){} const t=trip(); t.start_date=s.startDate; t.end_date=s.endDate; t.plan_prefs=Object.assign({},p,{accommodation:(typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng}:null}); try{localStorage.setItem("asa_trip",JSON.stringify(t));}catch(e){} }
+ function savePrefs(){ const interests={}; s.cats.forEach(c=>interests[c.key]=c.v); const p={interests,tempo:s.tempo,transport:s.transport,arrival:s.arrival,departure:s.departure,dayStart:s.dayStart,dayEnd:s.dayEnd,dietary:s.dietary,mustSee:s.mustSee,avoid:s.avoid,reservations:s.reservations,otherNote:s.otherNote,auto:s.auto,saved:true,updated_at:new Date().toISOString()}; try{localStorage.setItem("asa_plan_prefs",JSON.stringify(p));}catch(e){} const t=trip(); t.start_date=s.startDate; t.end_date=s.endDate; t.plan_prefs=Object.assign({},p,{accommodation:(typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng}:null}); try{localStorage.setItem("asa_trip",JSON.stringify(t));}catch(e){} try{window.__tripDirty&&window.__tripDirty();}catch(e){} }
  // ---- render ----
  function chip(on,txt,onclick,extra){ return '<button type="button" class="rounded-full border px-3 py-2 text-[12.5px] min-h-[38px] inline-flex items-center transition-colors '+(on?"bg-primary text-on-primary border-primary":"bg-surface border-outline-variant text-on-surface hover:bg-surface-container")+'" '+(extra||"")+' onclick="'+onclick+'">'+txt+'</button>'; }
  function invOpt(sel){ return '<option value="">— mekân seç —</option>'+invList().map(x=>'<option value="'+esc(x.id)+'"'+(sel===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join(""); }
@@ -2040,6 +2073,7 @@ const ASA = (function(){
     var t=await window.TripStore.get(tid);
     if(!t) return;                       // sahibi değilse / yoksa RLS null döner
     window.TRIP=t;
+    try{ if(window.TripSync)window.TripSync.hydrate(t); }catch(e){}
     try{
       var cur={}; try{cur=JSON.parse(localStorage.getItem("asa_trip")||"{}")||{};}catch(e){}
       cur.id=t.id; cur.revision=t.revision; cur.city=t.city; cur.country=t.country;
@@ -2279,7 +2313,9 @@ function renderTripBanner(){
       if(t.start_date&&t.end_date){ var MO=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"]; var s=new Date(t.start_date+"T00:00:00"),e=new Date(t.end_date+"T00:00:00"); if(!isNaN(s)&&!isNaN(e)){ dstr=s.getDate()+" "+MO[s.getMonth()]+"–"+e.getDate()+" "+MO[e.getMonth()]; } }
       else if(t.approx_period){ dstr=t.approx_period; }
       var durTxt=(t.duration_days?t.duration_days+" gün":(t.duration||null));
-      el.innerHTML="🧭 Planın: <b>"+CITY+"</b>"+(dstr?" · "+dstr:"")+(durTxt?" · "+durTxt:"")+(vt?" · "+vt:"");
+      var lc=(window.TripStore&&window.TRIP)?window.TripStore.lifecycle(window.TRIP):null;
+      var lcTxt=lc?(' · <b>'+window.TripStore.lifecycleLabel(lc)+'</b>'):'';
+      el.innerHTML="🧭 Planın: <b>"+CITY+"</b>"+(dstr?" · "+dstr:"")+(durTxt?" · "+durTxt:"")+(vt?" · "+vt:"")+lcTxt;
       el.classList.remove("hide");
     }
   }catch(e){}
