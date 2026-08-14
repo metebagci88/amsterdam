@@ -640,6 +640,8 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   global.createTripStore=createTripStore;
 })(window);
 function asaCityTz(city){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; return m[city]||'Europe/Amsterdam'; }
+/* Tek Supabase istemcisi (çoklu GoTrueClient uyarısını ve oturum yarışını önler) */
+window.asaDB=function(){ try{ if(!window.__asaSB && window.supabase && window.supabase.createClient){ window.__asaSB=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"); } }catch(e){} return window.__asaSB||null; };
 </script>
 <script>
 /* ===== referans noktaları ===== */
@@ -1943,7 +1945,7 @@ async function mergeDbVenues(){
  window.__mv={t:Date.now()};
  try{
    if(!(window.supabase&&window.supabase.createClient)){window.__mv.err="no-supabase";return;}
-   if(!_dbVenues){_dbVenues=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0");}
+   if(!_dbVenues){_dbVenues=window.asaDB();}
    const _db=_dbVenues;
    const res=await _db.from("venues").select("*");
    const data=res.data; window.__mv.err=res.error?res.error.message:null; window.__mv.rows=data?data.length:0;
@@ -1983,7 +1985,7 @@ setTimeout(mergeDbVenues,2000);
 async function applyContent(){
  try{
    if(!(window.supabase&&window.supabase.createClient))return;
-   if(!_dbVenues)_dbVenues=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0");
+   if(!_dbVenues)_dbVenues=window.asaDB();
    const {data}=await _dbVenues.from("site_content").select("key,value,enabled");
    if(!data)return;
    const map={}; data.forEach(r=>map[r.key]=r);
@@ -2023,7 +2025,7 @@ const ASA = (function(){
 
   async function init(){
     if(inited) return; inited=true;
-    try{ if(window.supabase&&window.supabase.createClient){ db=window.supabase.createClient(CFG.url,CFG.key); } }catch(e){}
+    try{ db=window.asaDB(); }catch(e){}
     try{ if(db&&window.createTripStore) window.TripStore=window.createTripStore(db); }catch(e){}
     render();
     if(db){
@@ -2290,7 +2292,7 @@ renderTripBanner();
 const VEN=(function(){
   const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"};
   let db=null, curVenue=null, pendingPhoto=null;
-  try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
+  try{ db=window.asaDB(); }catch(e){}
   function sess(){ return (window.ASA&&window.ASA.session)?window.ASA.session:null; }
   function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function timeAgo(ts){ try{const d=new Date(ts);const s=(Date.now()-d.getTime())/1000; if(s<60)return "az önce"; if(s<3600)return Math.floor(s/60)+" dk önce"; if(s<86400)return Math.floor(s/3600)+" sa önce"; return Math.floor(s/86400)+" gün önce";}catch(e){return "";} }
@@ -2342,6 +2344,8 @@ const VEN=(function(){
     try{ if(res&&res.ok&&window.ASA&&ASA.setPoints){ ASA.setPoints(res.points,res.tier); } }catch(e){}
     pendingPhoto=null; var vb=document.getElementById("vBody"); if(vb)vb.value=""; var pn2=document.getElementById("vPhotoName"); if(pn2)pn2.textContent="";
     if(btn){btn.disabled=false;btn.textContent="Gönder";}
+    // Fetch tamamlanana kadar yanıltıcı "Henüz yorum yok" gösterme
+    var cbox=document.getElementById("vComments"); if(cbox){ var cur=(cbox.innerHTML||""); if(!cur.trim()||cur.indexOf("vempty")>-1){ cbox.innerHTML='<div class="vempty">Yorumun ekleniyor…</div>'; } }
     loadComments(curVenue.id);
   }
 
@@ -2419,7 +2423,7 @@ async function loadMemberArchive(email){
 const ADS=(function(){
   const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"};
   let db=null, cache=[];
-  try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
+  try{ db=window.asaDB(); }catch(e){}
   function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function isActive(a){ const now=Date.now(); if(a.active===false)return false; if(a.starts_at&&new Date(a.starts_at).getTime()>now)return false; if(a.ends_at&&new Date(a.ends_at).getTime()<now)return false; return true; }
   function slotAds(slot,city){ return cache.filter(a=>a.slot===slot&&isActive(a)&&(!a.scope_city||a.scope_city===city)); }
@@ -2486,7 +2490,7 @@ if(document.readyState!=="loading"){ try{ADS.load("Amsterdam");}catch(e){} }
   async function loadVenuesFromDB(){
     try{
       if(!(window.supabase&&window.supabase.createClient)) return;
-      const db=window.supabase.createClient(U,K);
+      const db=window.asaDB();
       const {data,error}=await db.from("venues").select("*").eq("active",true);
       if(error||!data||!data.length) return;
       V = data.map(r=>({ id:r.id, hours:r.hours, garden:!!r.garden, type:r.type, tags:r.tags||[], tip:r.tip, name:r.name, city:r.city||"Amsterdam", area:r.area, cats:r.cats||[], best:r.best||[], src:r.src, fav:false, resv:r.resv, walkIn:!!r.walk_in, work:!!r.work, lat:r.lat, lng:r.lng, conf:r.conf, web:r.web, ig:r.ig, desc:r.description, note:r.note, sponsored:!!r.sponsored }));
