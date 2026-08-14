@@ -615,6 +615,33 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+/* ASALOCAL TripStore (A2 veri katmanı) — A1 sözleşmesine göre, production'da doğrulandı */
+(function(global){
+  function createTripStore(db){
+    var T={};
+    async function curUid(){ try{var r=await db.auth.getSession();return (r&&r.data&&r.data.session&&r.data.session.user)?r.data.session.user.id:null;}catch(e){return null;} }
+    function ymdInTz(tz){ try{return new Intl.DateTimeFormat('en-CA',{timeZone:tz||'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}catch(e){return new Date().toISOString().slice(0,10);} }
+    T.curUid=curUid; T.ymdInTz=ymdInTz;
+    T.lifecycle=function(t){ if(!t)return null; if(t.lifecycle_override)return t.lifecycle_override; if(!t.setup_completed)return 'draft'; var d=ymdInTz(t.timezone); if(d<t.start_date)return 'upcoming'; if(d>t.end_date)return 'past'; return 'active'; };
+    T.lifecycleLabel=function(lc){ return ({draft:'Taslak',upcoming:'Yaklaşan',active:'Aktif seyahat',past:'Geçmiş'})[lc]||''; };
+    T.list=async function(o){ o=o||{}; var q=db.from('trips').select('*').order('start_date',{ascending:true}); if(!o.includeArchived)q=q.is('archived_at',null); try{var r=await q;return r.data||[];}catch(e){return [];} };
+    T.get=async function(id){ try{var r=await db.from('trips').select('*').eq('id',id).maybeSingle();return r.data||null;}catch(e){return null;} };
+    T.findOverlap=async function(city,s,e,excludeId){ try{var r=await db.from('trips').select('*').eq('city',city).is('archived_at',null).lte('start_date',e).gte('end_date',s);var rows=r.data||[];if(excludeId)rows=rows.filter(function(x){return x.id!==excludeId;});return rows[0]||null;}catch(e){return null;} };
+    T.activeOrUpcoming=async function(){ var ts=await T.list();var m=ts.map(function(t){return {t:t,lc:T.lifecycle(t)};});var a=m.filter(function(x){return x.lc==='active';})[0];if(a)return a.t;var u=m.filter(function(x){return x.lc==='upcoming';}).sort(function(a,b){return a.t.start_date<b.t.start_date?-1:1;})[0];return u?u.t:null; };
+    T.create=async function(p){ p=p||{}; var u=await curUid(); if(!u)return {ok:false,reason:'no_auth'}; if(!p.city||!p.start_date||!p.end_date)return {ok:false,reason:'missing_fields'}; if(p.dupCheck!==false){var dup=await T.findOverlap(p.city,p.start_date,p.end_date);if(dup)return {ok:false,reason:'duplicate',trip:dup};} var row={user_id:u,city:p.city,country:p.country||null,title:p.title||null,start_date:p.start_date,end_date:p.end_date,arrival_time:p.arrival_time||null,departure_time:p.departure_time||null,timezone:p.timezone||null,preferences:p.preferences||{}}; try{var r=await db.from('trips').insert(row).select().single();if(r.error)return {ok:false,reason:'insert_failed',error:r.error.message};return {ok:true,trip:r.data};}catch(e){return {ok:false,reason:'insert_failed',error:String(e)};} };
+    T.save=async function(id,rev,patch){ try{var r=await db.rpc('trip_save',{p_id:id,p_expected_rev:rev,p_patch:patch});return r.data||{ok:false,reason:'no_data'};}catch(e){return {ok:false,reason:'net'};} };
+    T.saveWithRetry=async function(id,rev,patch){ var res=await T.save(id,rev,patch); if(res&&res.ok===false&&res.reason==='conflict'&&res.server){res=await T.save(id,res.server.revision,patch);if(res&&res.ok)res.reconciled=true;} return res; };
+    T.snapshot=async function(id,reason,rev){ try{var r=await db.rpc('trip_snapshot_plan',{p_id:id,p_reason:reason,p_expected_rev:(rev==null?null:rev)});return r.data||{ok:false,reason:'no_data'};}catch(e){return {ok:false,reason:'net'};} };
+    T.complete=async function(id){ try{var r=await db.rpc('complete_trip',{p_trip_id:id});return r.data||{ok:false,reason:'no_data'};}catch(e){return {ok:false,reason:'net'};} };
+    T.archive=async function(id,rev){ return T.save(id,rev,{archived_at:new Date().toISOString()}); };
+    T.markSetupComplete=async function(id,rev,extra){ return T.saveWithRetry(id,rev,Object.assign({setup_completed:true},extra||{})); };
+    return T;
+  }
+  global.createTripStore=createTripStore;
+})(window);
+function asaCityTz(city){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; return m[city]||'Europe/Amsterdam'; }
+</script>
+<script>
 /* ===== referans noktaları ===== */
 const CITY=(()=>{try{var p=new URLSearchParams(location.search).get('city');if(p)return p;var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';}catch(e){}return 'Amsterdam';})();
 const CITYCONF={
@@ -1997,10 +2024,28 @@ const ASA = (function(){
   async function init(){
     if(inited) return; inited=true;
     try{ if(window.supabase&&window.supabase.createClient){ db=window.supabase.createClient(CFG.url,CFG.key); } }catch(e){}
+    try{ if(db&&window.createTripStore) window.TripStore=window.createTripStore(db); }catch(e){}
     render();
     if(db){
       try{ const {data}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ await afterAuth(data.session.user); } }catch(e){}
+      try{ await loadTripContext(); }catch(e){}
     }
+  }
+  // A2/A3: ?trip=<id> ile gelen seyahati DB'den yükle, bağlamı kur (window.TRIP + asa_trip köprüsü)
+  async function loadTripContext(){
+    var tid=null; try{ tid=new URLSearchParams(location.search).get("trip"); }catch(e){}
+    if(!tid||!window.TripStore) return;
+    var t=await window.TripStore.get(tid);
+    if(!t) return;                       // sahibi değilse / yoksa RLS null döner
+    window.TRIP=t;
+    try{
+      var cur={}; try{cur=JSON.parse(localStorage.getItem("asa_trip")||"{}")||{};}catch(e){}
+      cur.id=t.id; cur.revision=t.revision; cur.city=t.city; cur.country=t.country;
+      cur.start_date=t.start_date; cur.end_date=t.end_date;
+      if(t.preferences){ if(t.preferences.vacation_types)cur.vacation_types=t.preferences.vacation_types; if(t.preferences.duration)cur.duration=t.preferences.duration; if(t.preferences.duration_days)cur.duration_days=t.preferences.duration_days; }
+      localStorage.setItem("asa_trip",JSON.stringify(cur));
+    }catch(e){}
+    try{ if(typeof renderTripBanner==="function") renderTripBanner(); }catch(e){}
   }
   function mapAuthErr(e){ const m=((e&&e.message)||"").toLowerCase();
     if(m.indexOf("invalid login")>-1||m.indexOf("invalid credentials")>-1) return "E-posta veya şifre hatalı.";
@@ -2221,8 +2266,8 @@ document.addEventListener("DOMContentLoaded",()=>{ try{ASA.init();}catch(e){} })
 if(document.readyState!=="loading"){ try{ASA.init();}catch(e){} }
 
 
-/* ===== gezi bağlamı afişi (ana sayfadan gelen kriterler) ===== */
-(function(){
+/* ===== gezi bağlamı afişi (ana sayfadan / DB'den gelen seyahat) ===== */
+function renderTripBanner(){
   try{
     var t=JSON.parse(localStorage.getItem("asa_trip")||"null");
     var el=document.getElementById("tripBanner");
@@ -2236,7 +2281,9 @@ if(document.readyState!=="loading"){ try{ASA.init();}catch(e){} }
       el.classList.remove("hide");
     }
   }catch(e){}
-})();
+}
+window.renderTripBanner=renderTripBanner;
+renderTripBanner();
 
 
 /* ===== MEKAN ETKİLEŞİMLERİ: yorum + fotoğraf + like/dislike (Aşama 3.5) ===== */
@@ -2293,9 +2340,8 @@ const VEN=(function(){
     try{ const {data}=await db.rpc("create_comment_with_points",{p_venue_id:curVenue.id,p_city:(typeof CITY!=="undefined"?CITY:"Amsterdam"),p_body:body,p_photo_url:pendingPhoto||null}); res=data; }catch(e){}
     if(res&&res.ok===false){ var pnx=document.getElementById("vPhotoName"); if(pnx)pnx.textContent="Gönderilemedi, tekrar dene."; if(btn){btn.disabled=false;btn.textContent="Gönder";} return; }
     try{ if(res&&res.ok&&window.ASA&&ASA.setPoints){ ASA.setPoints(res.points,res.tier); } }catch(e){}
-    pendingPhoto=null; var vb=document.getElementById("vBody"); if(vb)vb.value="";
+    pendingPhoto=null; var vb=document.getElementById("vBody"); if(vb)vb.value=""; var pn2=document.getElementById("vPhotoName"); if(pn2)pn2.textContent="";
     if(btn){btn.disabled=false;btn.textContent="Gönder";}
-    renderHead(curVenue);
     loadComments(curVenue.id);
   }
 
