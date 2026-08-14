@@ -322,7 +322,7 @@ let db=null, session=null;
 let sel={country:null,city:null,active:false,duration:null,durationDays:null,startDate:null,endDate:null,approx:null,types:new Set()};
 try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
 session=null;
-(async function bootAuth(){ if(!db)return; try{ const {data}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ const email=(data.session.user.email||"").toLowerCase(); const {data:m}=await db.from("members").select("display_name,blocked").eq("email",email).maybeSingle(); if(m&&m.blocked){ await db.auth.signOut(); return; } session={email,display_name:m?m.display_name:null}; try{renderAcct();}catch(e){} } }catch(e){} })();
+(async function bootAuth(){ if(!db)return; try{ const {data}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ const uid=data.session.user.id; const email=(data.session.user.email||"").toLowerCase(); const {data:m}=await db.from("members").select("display_name,blocked").eq("user_id",uid).maybeSingle(); if(m&&m.blocked){ await db.auth.signOut(); return; } session={uid,email,display_name:m?m.display_name:null}; try{renderAcct();}catch(e){} } }catch(e){} })();
 async function applyContent(){
  try{ if(!db)return;
    const {data}=await db.from("site_content").select("key,value,enabled"); if(!data)return;
@@ -426,7 +426,7 @@ function renderAuthBody(){
     box.innerHTML='<div class="flex items-center gap-4 mb-4"><div class="w-14 h-14 rounded-full bg-secondary text-on-secondary flex items-center justify-center text-2xl">🧭</div><div><div class="font-headline-sm text-headline-sm text-primary">'+((session.display_name)||session.email.split("@")[0])+'</div><div class="font-label-md text-label-md text-on-surface-variant">'+session.email+'</div><div id="amTier" class="font-label-md text-label-md text-secondary mt-1">Üye</div></div></div>'
       +'<button id="amLogout" class="w-full border border-primary/30 text-primary font-label-lg py-3 rounded hover:bg-surface-container">Çıkış yap</button>';
     $("amLogout").onclick=async()=>{ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; try{localStorage.removeItem("asa_session");}catch(e){} renderAcct(); renderAuthBody(); };
-    if(db){ db.from("members").select("tier,points").eq("email",session.email).maybeSingle().then(({data})=>{ if(data&&$("amTier"))$("amTier").textContent=(tierFor(data.points||0).emoji)+" "+(data.tier||"Kaşif")+" · "+(data.points||0)+" puan"; }).catch(()=>{}); }
+    if(db){ db.from("members").select("tier,points").eq("user_id",session.uid).maybeSingle().then(({data})=>{ if(data&&$("amTier"))$("amTier").textContent=(tierFor(data.points||0).emoji)+" "+(data.tier||"Kaşif")+" · "+(data.points||0)+" puan"; }).catch(()=>{}); }
   }
 }
 function amAuthErr(e){ const m=((e&&e.message)||"").toLowerCase(); if(m.indexOf("invalid login")>-1||m.indexOf("invalid credentials")>-1)return "E-posta veya şifre hatalı."; if(m.indexOf("already")>-1)return "Bu e-posta zaten kayıtlı. ‘Giriş yap’ ile devam et."; if(m.indexOf("password")>-1)return "Şifre en az 6 karakter olmalı."; return (e&&e.message)||"Bir hata oluştu."; }
@@ -443,16 +443,21 @@ async function doAuth(){
       if(!city||!city.trim()){ err.textContent="Şehir alanı zorunlu."; b.disabled=false;b.textContent=orig; return; }
       const {data,error}=await db.auth.signUp({email,password:pw,options:{data:{gender,home_city:city.trim()}}});
       if(error){ err.textContent=amAuthErr(error); b.disabled=false;b.textContent=orig; return; }
-      try{ await db.from("members").upsert({email,gender,home_city:city.trim(),display_name:email.split("@")[0]},{onConflict:"email"}); }catch(e){}
       if(!(data&&data.session)){ err.textContent="Kayıt alındı. E-postana gelen doğrulama bağlantısına tıkla, sonra giriş yap."; err.classList.add("text-primary"); b.disabled=false;b.textContent=orig; return; }
+      // UID sahipliğiyle güvenli profil (gender/home_city dahil)
+      try{ await db.rpc("member_upsert_profile",{p_display_name:email.split("@")[0],p_bio:null,p_home_city:city.trim(),p_gender:gender}); }catch(e){}
     } else {
       const {error}=await db.auth.signInWithPassword({email,password:pw});
       if(error){ err.textContent=amAuthErr(error); b.disabled=false;b.textContent=orig; return; }
     }
-    try{ await db.from("members").upsert({email},{onConflict:"email",ignoreDuplicates:true}); }catch(e){}
-    const {data:m}=await db.from("members").select("display_name,blocked").eq("email",email).maybeSingle();
+    // oturumdan UID al (sahiplik anahtarı — e-posta DEĞİL)
+    let uid=null; try{ const {data:sess}=await db.auth.getSession(); uid=sess&&sess.session&&sess.session.user&&sess.session.user.id; }catch(e){}
+    if(!uid){ err.textContent="Oturum alınamadı, tekrar dene."; b.disabled=false;b.textContent=orig; return; }
+    // üye kaydı yoksa oluştur (COALESCE: mevcut alanları ezmez); e-posta yalnız güncellenir
+    try{ await db.rpc("member_upsert_profile",{p_display_name:email.split("@")[0],p_bio:null,p_home_city:null,p_gender:null}); }catch(e){}
+    const {data:m}=await db.from("members").select("display_name,blocked").eq("user_id",uid).maybeSingle();
     if(m&&m.blocked){ try{await db.auth.signOut();}catch(e){} err.textContent="Bu hesap engellendi."; b.disabled=false;b.textContent=orig; return; }
-    session={email,display_name:m?m.display_name:null}; renderAcct(); renderAuthBody();
+    session={uid,email,display_name:m?m.display_name:null}; renderAcct(); renderAuthBody();
   }catch(e){ err.textContent="Sunucu hatası, tekrar dene."; b.disabled=false;b.textContent=orig; }
 }
 renderCountries(); renderCities(); renderTypes(); renderDests(); renderAcct(); wire(); updateGo();
