@@ -676,6 +676,17 @@ window.TripSync=(function(){
   return TS;
 })();
 window.__tripDirty=function(){ try{ if(window.TripSync)window.TripSync.schedule(); }catch(e){} };
+/* A11: plan (yeniden) üretilince mevcut planı trip_plan_versions'a snapshot'la (sürüm koruma) */
+window.__snapshotPlan=async function(){
+  if(!window.TRIP||!window.TripStore)return;
+  try{ if(window.TripSync&&window.TripSync.flush)await window.TripSync.flush(); }catch(e){}   // güncel planı DB'ye yaz
+  var reason=(window.TRIP.plan_version&&window.TRIP.plan_version>0)?'full_replan':'initial';
+  try{
+    var res=await window.TripStore.snapshot(window.TRIP.id, reason, window.TRIP.revision);
+    if(res&&res.ok===false&&res.reason==='conflict'&&res.server){ res=await window.TripStore.snapshot(window.TRIP.id, reason, res.server.revision); }
+    if(res&&res.ok){ window.TRIP.revision=res.revision; window.TRIP.plan_version=res.version; }
+  }catch(e){}
+};
 </script>
 <script>
 /* ===== referans noktaları ===== */
@@ -1530,7 +1541,7 @@ var PSET=(function(){
  API.nb=(v)=>{ if(!v)return; try{ const c=AC()[v]; if(c){ s.baseArea=v; setRef(c[0],c[1],v); } }catch(e){} render(); };
  API.edit=()=>{ s.open=true; render(); };
  API.getPrefs=()=>({ base:(typeof userLoc!=="undefined"?userLoc:null), startDate:s.startDate, endDate:s.endDate, arrival:s.arrival, departure:s.departure, dayStart:s.dayStart, dayEnd:s.dayEnd, tempo:s.tempo, transport:s.transport, interests:(function(){var o={};s.cats.forEach(c=>o[c.key]=c.v);return o;})(), must_see_ids:s.mustSee.slice(), avoid_ids:s.avoid.slice(), reservations:s.reservations.slice() });
- API.submit=()=>{ const c=cta(); if(!c.ok)return; savePrefs(); try{CAL=buildCalDays();}catch(e){} var ok=false; try{ ok=runEngine(); }catch(e){} if(!ok){ try{autoGeneratePlan(true);}catch(e){} } s.open=false; render(); try{renderCal();}catch(e){} const el=document.getElementById("planCtl"); if(el)el.scrollIntoView({behavior:"smooth",block:"start"}); };
+ API.submit=()=>{ const c=cta(); if(!c.ok)return; savePrefs(); try{CAL=buildCalDays();}catch(e){} var ok=false; try{ ok=runEngine(); }catch(e){} if(!ok){ try{autoGeneratePlan(true);}catch(e){} } s.open=false; render(); try{renderCal();}catch(e){} const el=document.getElementById("planCtl"); if(el)el.scrollIntoView({behavior:"smooth",block:"start"}); try{ if(window.__snapshotPlan)setTimeout(function(){window.__snapshotPlan();},1500); }catch(e){} };
  function savePrefs(){ const interests={}; s.cats.forEach(c=>interests[c.key]=c.v); const p={interests,tempo:s.tempo,transport:s.transport,arrival:s.arrival,departure:s.departure,dayStart:s.dayStart,dayEnd:s.dayEnd,dietary:s.dietary,mustSee:s.mustSee,avoid:s.avoid,reservations:s.reservations,otherNote:s.otherNote,auto:s.auto,base_area:(s.baseArea||null),accommodation:((typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng,label:(s.baseArea||null)}:null),saved:true,updated_at:new Date().toISOString()}; try{localStorage.setItem("asa_plan_prefs",JSON.stringify(p));}catch(e){} const t=trip(); t.start_date=s.startDate; t.end_date=s.endDate; t.plan_prefs=Object.assign({},p,{accommodation:(typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng}:null}); try{localStorage.setItem("asa_trip",JSON.stringify(t));}catch(e){} try{window.__tripDirty&&window.__tripDirty();}catch(e){} }
  // ---- render ----
  function chip(on,txt,onclick,extra){ return '<button type="button" class="rounded-full border px-3 py-2 text-[12.5px] min-h-[38px] inline-flex items-center transition-colors '+(on?"bg-primary text-on-primary border-primary":"bg-surface border-outline-variant text-on-surface hover:bg-surface-container")+'" '+(extra||"")+' onclick="'+onclick+'">'+txt+'</button>'; }
