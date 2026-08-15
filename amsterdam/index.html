@@ -1876,7 +1876,7 @@ function buildDE(){
    const o=document.createElement("div");o.className="opts";
    q.opts.forEach(opt=>{const b=document.createElement("button");
      b.className="opt"+(deSel[q.id]===opt?" sel":"");b.textContent=opt;
-     b.onclick=()=>{deSel[q.id]=opt;o.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");};
+     b.onclick=()=>{if(q.id==='time')deTimeManual=true;deSel[q.id]=opt;o.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");if(typeof runDE==='function'&&deLoc)runDE();};
      o.appendChild(b);});
    d.appendChild(o);f.appendChild(d);
  });
@@ -1887,12 +1887,15 @@ window.DecisionEngine=(function(){
   var MODE_MAP={
     'Kahve':['kafe','kahve','brunch','kahvaltı'],
     'Yemek':['restoran','italyan','pizza','burger','taco','meksika','bistro','deniz mahsulleri','deniz ürünleri','tapas','smørrebrød','akdeniz','tavuk','street food','yemek hali','food hall','bagel'],
-    'İçki':['bar','wine bar','şarap','gece','bira','kokteyl'],
+    'İçki':['bar','wine bar','şarap','bira','kokteyl'],
     'Yürüyüş':['park'],'Park':['park'],
     'Alışveriş':['alışveriş','moda','tasarım','vintage','mağaza','mücevher','sneaker','ev','kozmetik','kitap','department store','mobilya','market','lüks','antika']
   };
-  var TIME_TAGS={'Sabah':['kahvaltı','brunch','kahve'],'Öğlen':['öğlen','take-away','brunch','kahve'],'Öğleden sonra':['öğlen','kahve','çalışma','tatlı','mağaza','alışveriş'],'Akşam':['akşam','şarap','gece'],'Gece':['gece']};
   var TIME_WINDOWS={'Sabah':[480,660],'Öğlen':[660,900],'Öğleden sonra':[900,1080],'Akşam':[1080,1320],'Gece':[1320,1500]};
+  var DAY=['Sabah','Öğlen','Öğleden sonra'];
+  var FOOD=['restoran','italyan','pizza','burger','taco','meksika','bistro','deniz mahsulleri','deniz ürünleri','tapas','smørrebrød','akdeniz','tavuk','street food','yemek hali','food hall','bagel','fırın','ekmek'];
+  var DRINK=['bar','wine bar','şarap','bira','kokteyl'];
+  var SHOP=['alışveriş','moda','tasarım','vintage','mağaza','mücevher','sneaker','ev','kozmetik','kitap','department store','mobilya','market','lüks','antika'];
   var VALID_TIME=Object.keys(TIME_WINDOWS), VALID_MODE=['Çalışmak'].concat(Object.keys(MODE_MAP)), CONF_RANK={high:3,medium:2,low:1};
   // Şehir kapsama alanı (envanter coğrafi sınırından belirlendi; başka ülke/şehri dışlar)
   var CITY_COVERAGE={ 'Amsterdam':{lat:52.37043,lng:4.88901,radiusKm:30}, 'Kopenhag':{lat:55.68429,lng:12.57498,radiusKm:45} };
@@ -1908,13 +1911,30 @@ window.DecisionEngine=(function(){
     if(mode==='Kahve'){ var tk=tks(v); var hasCoffee=(tk.indexOf('kafe')>-1||tk.indexOf('kahve')>-1); var isRest=(v.cats||[]).some(function(c){return String(c).toLowerCase()==='restoran';}); return hasCoffee && !isRest; }
     var s=MODE_MAP[mode];if(!s)return false;return anyIn(tks(v),s);
   }
-  function timeEval(v,t){return{tag:anyIn(tks(v),TIME_TAGS[t]||[]),hours:openInWindow(v.hours,TIME_WINDOWS[t]||[0,0])};}
-  function matchTime(v,t){var e=timeEval(v,t);return e.tag&&e.hours!==false;}
+  // ---- Karar'a özel türetilmiş zaman uygunluğu (kategori+tür+saat+etiket+work) ----
+  function slotOpen(v,slot){return openInWindow(v.hours,TIME_WINDOWS[slot]||[0,0]);} // true|false|null
+  function hasT(v,arr){return anyIn(tks(v),arr);}
+  function isCoffeeCat(v){var tk=tks(v);return (tk.indexOf('kafe')>-1||tk.indexOf('kahve')>-1) && !(v.cats||[]).some(function(c){return String(c).toLowerCase()==='restoran';});}
+  function isFoodCat(v){return anyIn(tks(v),FOOD);}
+  function isDrinkCat(v){return anyIn(tks(v),DRINK);}
+  function isShopCat(v){return anyIn(tks(v),SHOP);}
+  function isParkCat(v){return tks(v).indexOf('park')>-1;}
+  function slotSuitable(v,mode,slot){
+    var ow=slotOpen(v,slot); if(ow===false) return false;            // seçilen dilimde kesin kapalı
+    var isDay=DAY.indexOf(slot)>-1, p=parseHours(v.hours);
+    if(mode==='Kahve')     return isCoffeeCat(v) && isDay;
+    if(mode==='Çalışmak'){ if(v.work!==true) return false; if(slot==='Akşam'||slot==='Gece') return hasT(v,['gece']); return isDay; }
+    if(mode==='Yemek'){ if(!isFoodCat(v)) return false; if(slot==='Sabah') return hasT(v,['kahvaltı','brunch']); if(slot==='Gece') return hasT(v,['gece']); return (slot==='Öğlen'||slot==='Öğleden sonra'||slot==='Akşam'); }
+    if(mode==='İçki'){ if(!isDrinkCat(v)) return false; if(slot==='Akşam') return true; if(slot==='Gece') return hasT(v,['gece'])||(!!p&&p.close>=1380); return false; }
+    if(mode==='Alışveriş') return isShopCat(v) && isDay;
+    if(mode==='Yürüyüş'||mode==='Park') return isParkCat(v) && isDay;
+    return false;
+  }
   function matchResv(v,r){if(r==='Fark etmez')return true;if(r==='Yok')return v.resv==='no';if(r==='Var')return v.resv==='rec'||v.resv==='req';return true;}
   function matchGarden(v,g){if(g==='Fark etmez')return true;if(g==='Bahçeli')return v.garden===true;if(g==='Bahçesiz')return v.garden===false;return true;}
   function cmp(a,b){if(a.km!==b.km)return a.km-b.km;var ca=CONF_RANK[a.v.conf]||0,cb=CONF_RANK[b.v.conf]||0;if(ca!==cb)return cb-ca;return String(a.v.id)<String(b.v.id)?-1:(String(a.v.id)>String(b.v.id)?1:0);}
   function distTxt(km){return km<1?('~'+Math.round(km*1000)+' m'):('~'+km.toFixed(1)+' km');}
-  function build(x,f,fav){var v=x.v,km=x.km,why=[],flags=[];why.push('Sana '+distTxt(km));why.push(f.mode+' filtrenle eşleşiyor');var e=timeEval(v,f.time);if(e.tag&&e.hours===true)why.push(f.time+' için uygun (açık)');else if(e.tag&&e.hours===null){why.push(f.time+' için uygun');flags.push('hours_unverified');why.push('⚠ Saat bilgisini kontrol et');}if(f.resv==='Yok'&&v.resv==='no')why.push('Rezervasyon gerekmiyor');if(f.garden==='Bahçeli'&&v.garden===true)why.push('Bahçesi var');if(fav&&fav.indexOf(v.id)>-1)why.push('Favorilerinde');return{v:v,km:km,why:why,flags:flags,unmet:[]};}
+  function build(x,f,fav){var v=x.v,km=x.km,why=[],flags=[];why.push('Sana '+distTxt(km));why.push(f.mode+' filtrenle eşleşiyor');var ow=slotOpen(v,f.time);if(ow===true)why.push(f.time+' saatlerinde açık');else if(ow===null){flags.push('hours_unverified');why.push('⚠ Saat bilgisini kontrol et');}if(f.resv==='Yok'&&v.resv==='no')why.push('Rezervasyon gerekmiyor');if(f.garden==='Bahçeli'&&v.garden===true)why.push('Bahçesi var');if(fav&&fav.indexOf(v.id)>-1)why.push('Favorilerinde');return{v:v,km:km,why:why,flags:flags,unmet:[]};}
   function decide(o){o=o||{};var loc=o.loc,city=o.city,inv=o.inventory||[],fav=o.favIds||[],target=o.targetCount||5;
     var f={mode:o.filters&&o.filters.mode,time:o.filters&&o.filters.time,resv:(o.filters&&o.filters.resv)||'Fark etmez',garden:(o.filters&&o.filters.garden)||'Fark etmez'};
     if(VALID_MODE.indexOf(f.mode)<0||VALID_TIME.indexOf(f.time)<0)return{status:'invalid_filters',reference:null,full:[],alternatives:[]};
@@ -1924,18 +1944,18 @@ window.DecisionEngine=(function(){
       return{status:'out_of_area',reference:{lat:loc.lat,lng:loc.lng},full:[],alternatives:[]};
     var elig=inv.filter(function(v){return v&&v.active!==false&&v.city===city&&validCoord(v.lat,v.lng)&&matchMode(v,f.mode);}).map(function(v){return{v:v,km:hav(loc.lat,loc.lng,v.lat,v.lng)};});
     if(elig.length===0)return{status:'no_mode_match',reference:{lat:loc.lat,lng:loc.lng},full:[],alternatives:[]};
-    var fullAll=elig.filter(function(x){return matchTime(x.v,f.time)&&matchResv(x.v,f.resv)&&matchGarden(x.v,f.garden);}).sort(cmp);
+    var fullAll=elig.filter(function(x){return slotSuitable(x.v,f.mode,f.time)&&matchResv(x.v,f.resv)&&matchGarden(x.v,f.garden);}).sort(cmp);
     var chosen={};fullAll.forEach(function(x){chosen[x.v.id]=1;});
     var full=fullAll.slice(0,target).map(function(x){return build(x,f,fav);});
     var alts=[];var steps=[['garden'],['garden','resv'],['garden','resv','time']];
     for(var i=0;i<steps.length&&(full.length+alts.length)<target;i++){var drop=steps[i];
-      var cand=elig.filter(function(x){if(chosen[x.v.id])return false;var okT=drop.indexOf('time')>-1?true:matchTime(x.v,f.time);var okR=drop.indexOf('resv')>-1?true:matchResv(x.v,f.resv);var okG=drop.indexOf('garden')>-1?true:matchGarden(x.v,f.garden);return okT&&okR&&okG;}).sort(cmp);
+      var cand=elig.filter(function(x){if(chosen[x.v.id])return false;var okT=drop.indexOf('time')>-1?true:slotSuitable(x.v,f.mode,f.time);var okR=drop.indexOf('resv')>-1?true:matchResv(x.v,f.resv);var okG=drop.indexOf('garden')>-1?true:matchGarden(x.v,f.garden);return okT&&okR&&okG;}).sort(cmp);
       for(var j=0;j<cand.length&&(full.length+alts.length)<target;j++){var x=cand[j];if(chosen[x.v.id])continue;chosen[x.v.id]=1;var r=build(x,f,fav),u=[];
         if(f.garden==='Bahçeli'&&x.v.garden!==true)u.push(x.v.garden===false?'Bahçesi yok':'Bahçe bilgisi bilinmiyor');
         if(f.garden==='Bahçesiz'&&x.v.garden!==false)u.push(x.v.garden===true?'Bahçeli':'Bahçe bilgisi bilinmiyor');
         if(f.resv==='Yok'&&x.v.resv!=='no')u.push(x.v.resv==='rec'?'Rezervasyon öneriliyor':(x.v.resv==='req'?'Rezervasyon gerekli':'Rezervasyon bilgisi bilinmiyor'));
         if(f.resv==='Var'&&!(x.v.resv==='rec'||x.v.resv==='req'))u.push('Rezervasyon gerekmiyor');
-        if(!matchTime(x.v,f.time)){var e=timeEval(x.v,f.time);u.push(!e.tag?(f.time+' için uygun değil'):'Seçtiğin saatte kapalı');}
+        if(!slotSuitable(x.v,f.mode,f.time)){var ow2=slotOpen(x.v,f.time);u.push(ow2===false?'Seçtiğin saatte kapalı':(f.time+' için uygun değil'));}
         r.unmet=u;alts.push(r);}}
     var status=full.length>0?'ok':(alts.length>0?'only_alternatives':'empty');
     return{status:status,reference:{lat:loc.lat,lng:loc.lng},full:full,alternatives:alts};}
@@ -1943,7 +1963,9 @@ window.DecisionEngine=(function(){
 })();
 
 /* ---- Karar: GPS-only konum katmanı (deLoc) — konaklama/mahalle/pin/HOME KULLANILMAZ ---- */
-var deLoc=null, deLocState='idle';
+var deLoc=null, deLocState='idle', deTimeManual=false;
+function deCityTz(){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; return m[(typeof CITY!=='undefined'?CITY:'')]||'Europe/Amsterdam'; }
+function deAutoTime(){ try{ var h=parseInt(new Intl.DateTimeFormat('en-GB',{timeZone:deCityTz(),hour:'2-digit',hour12:false}).format(new Date()),10); if(h>=5&&h<11)return 'Sabah'; if(h>=11&&h<15)return 'Öğlen'; if(h>=15&&h<18)return 'Öğleden sonra'; if(h>=18&&h<22)return 'Akşam'; return 'Gece'; }catch(e){ return 'Öğleden sonra'; } }
 function deDist(km){return km<1?('~'+Math.round(km*1000)+' m'):('~'+km.toFixed(1)+' km');}
 function deRenderLocBar(){
   var el=document.getElementById('deLocBar'); if(!el)return;
@@ -1966,7 +1988,7 @@ function deRequestLoc(){
   }, {enableHighAccuracy:true,timeout:9000,maximumAge:60000});
 }
 function deRefreshLoc(){ deRequestLoc(); }
-function deOnEnter(){ try{buildDE();}catch(e){} deRenderLocBar(); deRequestLoc(); }
+function deOnEnter(){ try{ if(!deTimeManual) deSel.time=deAutoTime(); }catch(e){} try{buildDE();}catch(e){} deRenderLocBar(); deRequestLoc(); }
 
 function deCard(r,isAlt){
   var v=r.v, km=r.km, rv=RESV[v.resv]||RESV.unknown;
