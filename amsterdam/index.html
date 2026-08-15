@@ -1872,15 +1872,24 @@ let deSel={time:"Öğleden sonra",mode:"Kahve",resv:"Fark etmez",garden:"Fark et
 function buildDE(){
  const f=document.getElementById("deForm");f.innerHTML="";
  DE_Q.forEach(q=>{
-   const d=document.createElement("div");d.className="de-q";d.innerHTML='<div class="ql">'+q.l+'</div>';
+   const d=document.createElement("div");d.className="de-q";d.dataset.q=q.id;d.innerHTML='<div class="ql">'+q.l+'</div>';
    const o=document.createElement("div");o.className="opts";
    q.opts.forEach(opt=>{const b=document.createElement("button");
      b.className="opt"+(deSel[q.id]===opt?" sel":"");b.textContent=opt;
-     b.onclick=()=>{if(q.id==='time')deTimeManual=true;deSel[q.id]=opt;o.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");if(typeof runDE==='function'&&deLoc)runDE();};
+     b.onclick=()=>{if(q.id==='time')deTimeManual=true;deSel[q.id]=opt;o.querySelectorAll(".opt").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");if(q.id==='mode')deSyncModeFilters();if(typeof runDE==='function'&&deLoc)runDE();};
      o.appendChild(b);});
    d.appendChild(o);f.appendChild(d);
  });
  const go=document.createElement("button");go.className="de-go";go.textContent="🎯 Öner";go.onclick=runDE;f.appendChild(go);
+ deSyncModeFilters();
+}
+// Park/Yürüyüş modunda Rezervasyon+Bahçe anlamsız → gizle + Fark etmez
+function deSyncModeFilters(){
+ var park=(deSel.mode==='Park'||deSel.mode==='Yürüyüş');
+ if(park){ deSel.resv='Fark etmez'; deSel.garden='Fark etmez'; }
+ document.querySelectorAll('#deForm .de-q').forEach(function(d){
+   if(d.dataset.q==='resv'||d.dataset.q==='garden'){ d.style.display=park?'none':''; }
+ });
 }
 /* ---- Karar Motoru (Faz 1 v2): deterministik, GPS-merkezli, kural bazlı ---- */
 window.DecisionEngine=(function(){
