@@ -546,7 +546,8 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   <!-- KARAR -->
   <section class="view" id="v-de">
     <h2 class="section-title" data-ck="app.de.h">Karar motoru</h2>
-    <p class="section-sub">Birkaç soru seç, bulunduğun referansa göre sana 5 öneri çıkarayım. (Tamamen dosya içinde çalışır — API/internet gerekmez.)</p>
+    <p class="section-sub">Bulunduğun konuma göre, seçtiğin ihtiyaca en yakın yerleri saniyeler içinde bulur. Konum izni gerekir.</p>
+    <div id="deLocBar"></div>
     <div class="de-form" id="deForm"></div>
     <div class="de-out" id="deOut"></div>
     <div id="adKarar"></div>
@@ -1047,6 +1048,7 @@ function setActiveView(v,record){
   window.scrollTo({top:0,behavior:"smooth"});
   if(v==="map")setTimeout(initMap,50);
   if(v==="cal")setTimeout(ensurePlan,10);
+  if(v==="de")setTimeout(deOnEnter,10);
 }
 document.querySelectorAll("#nav button").forEach(b=>{
  b.onclick=()=>{ setActiveView(b.dataset.v); };
@@ -1880,65 +1882,118 @@ function buildDE(){
  });
  const go=document.createElement("button");go.className="de-go";go.textContent="🎯 Öner";go.onclick=runDE;f.appendChild(go);
 }
-function deScore(v){
- let s=0;const m=deSel.mode,t=deSel.time;
- const modeMap={"Çalışmak":"work","Yemek":"akşam","Kahve":"kahve","İçki":"şarap","Yürüyüş":"park","Alışveriş":"mağaza","Park":"park"};
- if(m==="Çalışmak"){if(isWork(v))s+=5;else s-=3;}
- else{const key=modeMap[m];if(key&&hasTag(v,key))s+=5;
-   if(m==="İçki"&&v.cats.includes("wine bar"))s+=2;
-   if(m==="Yemek"&&v.cats.includes("restoran"))s+=2;
-   if(m==="Alışveriş"&&v.cats.includes("mağaza"))s+=3;
-   if(m==="Park"&&hasTag(v,"park"))s+=2;}
- const tmap={"Sabah":["kahvaltı","kahve","brunch"],"Öğlen":["öğlen","take-away","kahve"],
-   "Öğleden sonra":["kahve","öğlen","çalışma","mağaza"],"Akşam":["akşam","şarap"],"Gece":["gece","akşam"]};
- (tmap[t]||[]).forEach(k=>{if(hasTag(v,k))s+=1.5;});
- if(t==="Gece"&&!hasTag(v,"gece"))s-=2;
- if(deSel.resv==="Yok"&&v.resv==="req")s-=4;
- if(deSel.resv==="Yok"&&v.resv==="no")s+=2;
- if(deSel.resv==="Var"&&(v.resv==="req"||v.resv==="rec"))s+=1.5;
- s-=distKm(v)*0.15;
- if(deSel.garden==="Bahçeli"){if(v.garden)s+=3;else s-=2;}
- else if(deSel.garden==="Bahçesiz"){if(!v.garden)s+=1.5;}
- if(isFav(v.id))s+=0.6;if(v.src==="user")s+=0.4;if(v.conf==="low")s-=0.6;
- s+=Math.random()*0.3;return s;
+/* ---- Karar Motoru (Faz 1 v2): deterministik, GPS-merkezli, kural bazlı ---- */
+window.DecisionEngine=(function(){
+  var MODE_MAP={
+    'Kahve':['kafe','kahve','brunch','kahvaltı'],
+    'Yemek':['restoran','italyan','pizza','burger','taco','meksika','bistro','deniz mahsulleri','deniz ürünleri','tapas','smørrebrød','akdeniz','tavuk','street food','yemek hali','food hall','bagel'],
+    'İçki':['bar','wine bar','şarap','gece','bira','kokteyl'],
+    'Yürüyüş':['park'],'Park':['park'],
+    'Alışveriş':['alışveriş','moda','tasarım','vintage','mağaza','mücevher','sneaker','ev','kozmetik','kitap','department store','mobilya','market','lüks','antika']
+  };
+  var TIME_TAGS={'Sabah':['kahvaltı','brunch','kahve'],'Öğlen':['öğlen','take-away','brunch','kahve'],'Öğleden sonra':['öğlen','kahve','çalışma','tatlı','mağaza','alışveriş'],'Akşam':['akşam','şarap','gece'],'Gece':['gece']};
+  var TIME_WINDOWS={'Sabah':[480,660],'Öğlen':[660,900],'Öğleden sonra':[900,1080],'Akşam':[1080,1320],'Gece':[1320,1500]};
+  var VALID_TIME=Object.keys(TIME_WINDOWS), VALID_MODE=['Çalışmak'].concat(Object.keys(MODE_MAP)), CONF_RANK={high:3,medium:2,low:1};
+  function toRad(x){return x*Math.PI/180;}
+  function validCoord(a,b){return typeof a==='number'&&typeof b==='number'&&isFinite(a)&&isFinite(b)&&a>=-90&&a<=90&&b>=-180&&b<=180;}
+  function hav(aLat,aLng,bLat,bLng){var R=6371,dLa=toRad(bLat-aLat),dLo=toRad(bLng-aLng);var h=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(toRad(aLat))*Math.cos(toRad(bLat))*Math.sin(dLo/2)*Math.sin(dLo/2);return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
+  function tks(v){var o=[];['cats','tags','best'].forEach(function(k){(v[k]||[]).forEach(function(x){if(x!=null)o.push(String(x).toLowerCase());});});return o;}
+  function anyIn(l,s){for(var i=0;i<l.length;i++){if(s.indexOf(l[i])>-1)return true;}return false;}
+  function parseHours(h){if(!h)return null;var m=String(h).replace(/\s/g,'').match(/^(\d{1,2}):(\d{2})[–\-~](\d{1,2}):(\d{2})$/);if(!m)return null;var o=(+m[1])*60+(+m[2]),c=(+m[3])*60+(+m[4]);if(c<=o)c+=1440;return{open:o,close:c};}
+  function openInWindow(h,win){var p=parseHours(h);if(!p)return null;function ov(a1,a2,b1,b2){return a1<b2&&b1<a2;}if(ov(p.open,p.close,win[0],win[1]))return true;if(ov(p.open,p.close,win[0]+1440,win[1]+1440))return true;return false;}
+  function matchMode(v,mode){if(mode==='Çalışmak')return v.work===true;var s=MODE_MAP[mode];if(!s)return false;return anyIn(tks(v),s);}
+  function timeEval(v,t){return{tag:anyIn(tks(v),TIME_TAGS[t]||[]),hours:openInWindow(v.hours,TIME_WINDOWS[t]||[0,0])};}
+  function matchTime(v,t){var e=timeEval(v,t);return e.tag&&e.hours!==false;}
+  function matchResv(v,r){if(r==='Fark etmez')return true;if(r==='Yok')return v.resv==='no';if(r==='Var')return v.resv==='rec'||v.resv==='req';return true;}
+  function matchGarden(v,g){if(g==='Fark etmez')return true;if(g==='Bahçeli')return v.garden===true;if(g==='Bahçesiz')return v.garden===false;return true;}
+  function cmp(a,b){if(a.km!==b.km)return a.km-b.km;var ca=CONF_RANK[a.v.conf]||0,cb=CONF_RANK[b.v.conf]||0;if(ca!==cb)return cb-ca;return String(a.v.id)<String(b.v.id)?-1:(String(a.v.id)>String(b.v.id)?1:0);}
+  function distTxt(km){return km<1?('~'+Math.round(km*1000)+' m'):('~'+km.toFixed(1)+' km');}
+  function build(x,f,fav){var v=x.v,km=x.km,why=[],flags=[];why.push('Sana '+distTxt(km));why.push(f.mode+' filtrenle eşleşiyor');var e=timeEval(v,f.time);if(e.tag&&e.hours===true)why.push(f.time+' için uygun (açık)');else if(e.tag&&e.hours===null){why.push(f.time+' için uygun');flags.push('hours_unverified');why.push('⚠ Saat bilgisini kontrol et');}if(f.resv==='Yok'&&v.resv==='no')why.push('Rezervasyon gerekmiyor');if(f.garden==='Bahçeli'&&v.garden===true)why.push('Bahçesi var');if(fav&&fav.indexOf(v.id)>-1)why.push('Favorilerinde');return{v:v,km:km,why:why,flags:flags,unmet:[]};}
+  function decide(o){o=o||{};var loc=o.loc,city=o.city,inv=o.inventory||[],fav=o.favIds||[],target=o.targetCount||5;
+    var f={mode:o.filters&&o.filters.mode,time:o.filters&&o.filters.time,resv:(o.filters&&o.filters.resv)||'Fark etmez',garden:(o.filters&&o.filters.garden)||'Fark etmez'};
+    if(VALID_MODE.indexOf(f.mode)<0||VALID_TIME.indexOf(f.time)<0)return{status:'invalid_filters',reference:null,full:[],alternatives:[]};
+    if(!loc||!validCoord(loc.lat,loc.lng))return{status:'no_location',reference:null,full:[],alternatives:[]};
+    var elig=inv.filter(function(v){return v&&v.active!==false&&v.city===city&&validCoord(v.lat,v.lng)&&matchMode(v,f.mode);}).map(function(v){return{v:v,km:hav(loc.lat,loc.lng,v.lat,v.lng)};});
+    if(elig.length===0)return{status:'no_mode_match',reference:{lat:loc.lat,lng:loc.lng},full:[],alternatives:[]};
+    var fullAll=elig.filter(function(x){return matchTime(x.v,f.time)&&matchResv(x.v,f.resv)&&matchGarden(x.v,f.garden);}).sort(cmp);
+    var chosen={};fullAll.forEach(function(x){chosen[x.v.id]=1;});
+    var full=fullAll.slice(0,target).map(function(x){return build(x,f,fav);});
+    var alts=[];var steps=[['garden'],['garden','resv'],['garden','resv','time']];
+    for(var i=0;i<steps.length&&(full.length+alts.length)<target;i++){var drop=steps[i];
+      var cand=elig.filter(function(x){if(chosen[x.v.id])return false;var okT=drop.indexOf('time')>-1?true:matchTime(x.v,f.time);var okR=drop.indexOf('resv')>-1?true:matchResv(x.v,f.resv);var okG=drop.indexOf('garden')>-1?true:matchGarden(x.v,f.garden);return okT&&okR&&okG;}).sort(cmp);
+      for(var j=0;j<cand.length&&(full.length+alts.length)<target;j++){var x=cand[j];if(chosen[x.v.id])continue;chosen[x.v.id]=1;var r=build(x,f,fav),u=[];
+        if(f.garden==='Bahçeli'&&x.v.garden!==true)u.push(x.v.garden===false?'Bahçesi yok':'Bahçe bilgisi bilinmiyor');
+        if(f.garden==='Bahçesiz'&&x.v.garden!==false)u.push(x.v.garden===true?'Bahçeli':'Bahçe bilgisi bilinmiyor');
+        if(f.resv==='Yok'&&x.v.resv!=='no')u.push(x.v.resv==='rec'?'Rezervasyon öneriliyor':(x.v.resv==='req'?'Rezervasyon gerekli':'Rezervasyon bilgisi bilinmiyor'));
+        if(f.resv==='Var'&&!(x.v.resv==='rec'||x.v.resv==='req'))u.push('Rezervasyon gerekmiyor');
+        if(!matchTime(x.v,f.time)){var e=timeEval(x.v,f.time);u.push(!e.tag?(f.time+' için uygun değil'):'Seçtiğin saatte kapalı');}
+        r.unmet=u;alts.push(r);}}
+    var status=full.length>0?'ok':(alts.length>0?'only_alternatives':'empty');
+    return{status:status,reference:{lat:loc.lat,lng:loc.lng},full:full,alternatives:alts};}
+  return{decide:decide};
+})();
+
+/* ---- Karar: GPS-only konum katmanı (deLoc) — konaklama/mahalle/pin/HOME KULLANILMAZ ---- */
+var deLoc=null, deLocState='idle';
+function deDist(km){return km<1?('~'+Math.round(km*1000)+' m'):('~'+km.toFixed(1)+' km');}
+function deRenderLocBar(){
+  var el=document.getElementById('deLocBar'); if(!el)return;
+  var base='display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;padding:9px 12px;border-radius:10px;margin:2px 0 12px;';
+  if(deLocState==='locating'){ el.style.cssText=base+'background:#f4efe2;color:#5a4a2a'; el.innerHTML='<span class="msym">my_location</span> Mevcut konumun belirleniyor…'; }
+  else if(deLocState==='granted'&&deLoc){ el.style.cssText=base+'background:#eaf3ea;color:#2e5c2e'; el.innerHTML='<span class="msym">my_location</span> 📍 Mevcut konumuna göre sonuçlar <button class="btn" style="margin-left:auto" onclick="deRefreshLoc()">Konumumu yenile</button>'; }
+  else if(deLocState==='denied'){ el.style.cssText=base+'background:#fbecea;color:#8a2b1e'; el.innerHTML='Yakınındaki yerleri gösterebilmemiz için konum izni gerekiyor. <button class="btn primary" style="margin-left:auto" onclick="deRequestLoc()">Konum iznini etkinleştir</button>'; }
+  else if(deLocState==='error'){ el.style.cssText=base+'background:#fbecea;color:#8a2b1e'; el.innerHTML='Konumun alınamadı. Cihazının konum servislerini kontrol et. <button class="btn" style="margin-left:auto" onclick="deRequestLoc()">Tekrar dene</button>'; }
+  else { el.style.cssText='display:none'; el.innerHTML=''; }
 }
-function modeMatch(v){
- const m=deSel.mode;
- if(m==="Çalışmak")return isWork(v);
- if(m==="Kahve")return hasTag(v,"kahve")||hasTag(v,"kahvaltı")||hasTag(v,"brunch");
- if(m==="Yemek")return v.cats.includes("restoran")||hasTag(v,"akşam")||hasTag(v,"öğlen");
- if(m==="İçki")return hasTag(v,"şarap")||v.cats.includes("wine bar")||v.cats.includes("bar")||hasTag(v,"gece");
- if(m==="Yürüyüş"||m==="Park")return hasTag(v,"park")||v.cats.includes("park");
- if(m==="Alışveriş")return v.cats.includes("mağaza")||hasTag(v,"mağaza");
- return true;
+function deRequestLoc(){
+  if(!navigator.geolocation){ deLocState='error'; deRenderLocBar(); return; }
+  deLocState='locating'; deRenderLocBar();
+  navigator.geolocation.getCurrentPosition(function(p){
+    deLoc={lat:p.coords.latitude,lng:p.coords.longitude}; deLocState='granted'; deRenderLocBar(); runDE();
+  }, function(err){
+    deLoc=null; var out=document.getElementById('deOut'); if(out)out.innerHTML='';
+    deLocState=(err&&err.code===1)?'denied':'error'; deRenderLocBar();
+  }, {enableHighAccuracy:true,timeout:9000,maximumAge:60000});
+}
+function deRefreshLoc(){ deRequestLoc(); }
+function deOnEnter(){ try{buildDE();}catch(e){} deRenderLocBar(); deRequestLoc(); }
+
+function deCard(r,isAlt){
+  var v=r.v, km=r.km, rv=RESV[v.resv]||RESV.unknown;
+  var why=r.why.map(function(w){return '<span class="dewhy" style="display:inline-block;background:var(--surface-container,#f2eee4);border-radius:999px;padding:2px 9px;margin:2px 4px 2px 0;font-size:11.5px;color:#4a3f2a">'+esc(w)+'</span>';}).join('');
+  var unmet=(r.unmet&&r.unmet.length)?'<div style="margin:5px 0;font-size:12px;color:#8a2b1e">⚠ '+r.unmet.map(esc).join(' · ')+'</div>':'';
+  return '<div class="de-res"><div class="deimg" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="debody">'+
+    '<div class="role">'+(isAlt?'Yakındaki alternatif':'Tam eşleşme')+'</div>'+
+    '<h4>'+esc(v.name)+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
+    '<div class="kicker" style="color:var(--ink2);margin:2px 0 4px">'+esc((v.type||'').toUpperCase())+'</div>'+
+    '<div class="cloc"><span class="msym">location_on</span>'+esc(v.area||'')+' · <span class="'+rv.c+'">'+rv.t+'</span></div>'+
+    '<div class="area" style="margin:6px 0">'+
+      '<span class="mi"><span class="msym">directions_walk</span>'+deDist(km)+'</span>'+
+      '<span class="mi"><span class="msym">pedal_bike</span>'+bikeMin(km)+' dk</span>'+
+      (v.hours?'<span class="mi"><span class="msym">schedule</span>'+esc(v.hours)+'</span>':'')+
+    '</div>'+
+    unmet+
+    '<div style="margin:6px 0">'+why+'</div>'+
+    (v.desc?'<div class="tagline" style="margin:5px 0">'+esc(v.desc)+'</div>':'')+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');runDE()">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div>'+
+  '</div></div>';
+}
+function deRenderResults(res){
+  if(res.status==='no_location') return '';
+  if(res.status==='invalid_filters') return '<div class="asahint">Lütfen zaman ve mod seç.</div>';
+  if(res.status==='no_mode_match') return '<div class="seg-card"><b>Bu modda yakın sonuç bulunamadı.</b><div style="margin-top:4px;color:var(--ink2)">Farklı bir mod dene.</div></div>';
+  var html='';
+  if(res.full.length){ html+=res.full.map(function(r){return deCard(r,false);}).join(''); }
+  else { html+='<div class="seg-card"><b>'+esc(deSel.mode)+' + '+esc(deSel.time)+' için tam eşleşme bulunamadı.</b><div style="margin-top:4px;color:var(--ink2)">Aşağıda hangi koşulun gevşetildiği yazılı yakın alternatifler var. Rezervasyon/Bahçe filtresini kaldırabilir ya da farklı bir zaman seçebilirsin.</div></div>'; }
+  if(res.alternatives.length){ html+='<div class="seg-h" style="margin:14px 0 6px">Yakındaki alternatifler</div>'+res.alternatives.map(function(r){return deCard(r,true);}).join(''); }
+  if(!res.full.length && !res.alternatives.length){ html+='<div class="seg-card">Bu filtre ve mesafe aralığında uygun sonuç bulamadık.</div>'; }
+  return html;
 }
 function runDE(){
- let pool=V.filter(v=>v.city===CITY&&modeMatch(v));
- if(pool.length<2)pool=V.filter(v=>v.city===CITY);
- const cands=pool.map(v=>({v,s:deScore(v)})).sort((a,b)=>b.s-a.s);
- const best=cands[0].v;
- const nearC=[...cands].sort((a,b)=>distKm(a.v)-distKm(b.v)).find(x=>x.v.id!==best.id);
- const near=nearC?nearC.v:null;
- const fav=cands.find(x=>isFav(x.v.id)&&x.v.id!==best.id);
- const walk=cands.find(x=>x.v.resv==="no"&&x.v.id!==best.id);
- const lokal=cands.find(x=>(x.v.src==="extra"||x.v.src==="deck")&&x.v.id!==best.id);
- const out=[["En iyi seçenek",best],["Yakın alternatif",near],["Favori alternatif",fav?fav.v:null],
-   ["Rezervasyonsuz alternatif",walk?walk.v:null],["Daha lokal alternatif",lokal?lokal.v:null]];
- let _items=out.filter(o=>o[1]);const _m=isMember();document.getElementById("deOut").innerHTML=(_m?_items:_items.slice(0,1)).map(o=>{
-   const v=o[1];const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
-   return '<div class="de-res"><div class="deimg" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="debody"><div class="role">'+o[0]+'</div>'+
-     '<h4>'+v.name+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
-     '<div class="kicker" style="color:var(--ink2);margin:2px 0 4px">'+(v.type||'').toUpperCase()+'</div>'+
-     '<div class="cloc"><span class="msym">location_on</span>'+v.area+' · <span class="'+r.c+'">'+r.t+'</span></div>'+
-     '<div class="area" style="margin:6px 0">'+
-       '<span class="mi"><span class="msym">pedal_bike</span>≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk</span>'+
-       (v.hours?'<span class="mi"><span class="msym">schedule</span>'+v.hours+'</span>':'')+
-     '</div>'+
-     '<div class="tagline" style="margin:7px 0">'+v.desc+'</div>'+
-     (v.tip?'<div class="cnote"><span class="msym">chat_bubble</span><span>'+v.tip+'</span></div>':'')+
-     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');this.innerHTML=(this.innerHTML.indexOf(\'Kayıtlı\')>-1?\'🤍 Kaydet\':\'❤️ Kayıtlı\')">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div></div></div>';
- }).join("")+((!_m&&_items.length>1)?gateCard((_items.length-1)+' alternatif daha üyelere özel'):"");
- document.getElementById("deOut").scrollIntoView({behavior:"smooth",block:"start"});
+  var out=document.getElementById('deOut'); if(!out)return;
+  if(!deLoc){ out.innerHTML=''; return; }
+  var res=window.DecisionEngine.decide({loc:deLoc,city:CITY,filters:deSel,inventory:V,favIds:[...favSet],targetCount:5});
+  out.innerHTML=deRenderResults(res);
 }
 
 /* ===== CHECK LIST ===== */
