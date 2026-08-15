@@ -1894,6 +1894,8 @@ window.DecisionEngine=(function(){
   var TIME_TAGS={'Sabah':['kahvaltı','brunch','kahve'],'Öğlen':['öğlen','take-away','brunch','kahve'],'Öğleden sonra':['öğlen','kahve','çalışma','tatlı','mağaza','alışveriş'],'Akşam':['akşam','şarap','gece'],'Gece':['gece']};
   var TIME_WINDOWS={'Sabah':[480,660],'Öğlen':[660,900],'Öğleden sonra':[900,1080],'Akşam':[1080,1320],'Gece':[1320,1500]};
   var VALID_TIME=Object.keys(TIME_WINDOWS), VALID_MODE=['Çalışmak'].concat(Object.keys(MODE_MAP)), CONF_RANK={high:3,medium:2,low:1};
+  // Şehir kapsama alanı (envanter coğrafi sınırından belirlendi; başka ülke/şehri dışlar)
+  var CITY_COVERAGE={ 'Amsterdam':{lat:52.37043,lng:4.88901,radiusKm:30}, 'Kopenhag':{lat:55.68429,lng:12.57498,radiusKm:45} };
   function toRad(x){return x*Math.PI/180;}
   function validCoord(a,b){return typeof a==='number'&&typeof b==='number'&&isFinite(a)&&isFinite(b)&&a>=-90&&a<=90&&b>=-180&&b<=180;}
   function hav(aLat,aLng,bLat,bLng){var R=6371,dLa=toRad(bLat-aLat),dLo=toRad(bLng-aLng);var h=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(toRad(aLat))*Math.cos(toRad(bLat))*Math.sin(dLo/2)*Math.sin(dLo/2);return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
@@ -1901,7 +1903,11 @@ window.DecisionEngine=(function(){
   function anyIn(l,s){for(var i=0;i<l.length;i++){if(s.indexOf(l[i])>-1)return true;}return false;}
   function parseHours(h){if(!h)return null;var m=String(h).replace(/\s/g,'').match(/^(\d{1,2}):(\d{2})[–\-~](\d{1,2}):(\d{2})$/);if(!m)return null;var o=(+m[1])*60+(+m[2]),c=(+m[3])*60+(+m[4]);if(c<=o)c+=1440;return{open:o,close:c};}
   function openInWindow(h,win){var p=parseHours(h);if(!p)return null;function ov(a1,a2,b1,b2){return a1<b2&&b1<a2;}if(ov(p.open,p.close,win[0],win[1]))return true;if(ov(p.open,p.close,win[0]+1440,win[1]+1440))return true;return false;}
-  function matchMode(v,mode){if(mode==='Çalışmak')return v.work===true;var s=MODE_MAP[mode];if(!s)return false;return anyIn(tks(v),s);}
+  function matchMode(v,mode){
+    if(mode==='Çalışmak')return v.work===true;
+    if(mode==='Kahve'){ var tk=tks(v); var hasCoffee=(tk.indexOf('kafe')>-1||tk.indexOf('kahve')>-1); var isRest=(v.cats||[]).some(function(c){return String(c).toLowerCase()==='restoran';}); return hasCoffee && !isRest; }
+    var s=MODE_MAP[mode];if(!s)return false;return anyIn(tks(v),s);
+  }
   function timeEval(v,t){return{tag:anyIn(tks(v),TIME_TAGS[t]||[]),hours:openInWindow(v.hours,TIME_WINDOWS[t]||[0,0])};}
   function matchTime(v,t){var e=timeEval(v,t);return e.tag&&e.hours!==false;}
   function matchResv(v,r){if(r==='Fark etmez')return true;if(r==='Yok')return v.resv==='no';if(r==='Var')return v.resv==='rec'||v.resv==='req';return true;}
@@ -1913,6 +1919,9 @@ window.DecisionEngine=(function(){
     var f={mode:o.filters&&o.filters.mode,time:o.filters&&o.filters.time,resv:(o.filters&&o.filters.resv)||'Fark etmez',garden:(o.filters&&o.filters.garden)||'Fark etmez'};
     if(VALID_MODE.indexOf(f.mode)<0||VALID_TIME.indexOf(f.time)<0)return{status:'invalid_filters',reference:null,full:[],alternatives:[]};
     if(!loc||!validCoord(loc.lat,loc.lng))return{status:'no_location',reference:null,full:[],alternatives:[]};
+    var cov=CITY_COVERAGE[city];
+    if(cov && hav(loc.lat,loc.lng,cov.lat,cov.lng) > cov.radiusKm)
+      return{status:'out_of_area',reference:{lat:loc.lat,lng:loc.lng},full:[],alternatives:[]};
     var elig=inv.filter(function(v){return v&&v.active!==false&&v.city===city&&validCoord(v.lat,v.lng)&&matchMode(v,f.mode);}).map(function(v){return{v:v,km:hav(loc.lat,loc.lng,v.lat,v.lng)};});
     if(elig.length===0)return{status:'no_mode_match',reference:{lat:loc.lat,lng:loc.lng},full:[],alternatives:[]};
     var fullAll=elig.filter(function(x){return matchTime(x.v,f.time)&&matchResv(x.v,f.resv)&&matchGarden(x.v,f.garden);}).sort(cmp);
@@ -1942,6 +1951,7 @@ function deRenderLocBar(){
   if(deLocState==='locating'){ el.style.cssText=base+'background:#f4efe2;color:#5a4a2a'; el.innerHTML='<span class="msym">my_location</span> Mevcut konumun belirleniyor…'; }
   else if(deLocState==='granted'&&deLoc){ el.style.cssText=base+'background:#eaf3ea;color:#2e5c2e'; el.innerHTML='<span class="msym">my_location</span> 📍 Mevcut konumuna göre sonuçlar <button class="btn" style="margin-left:auto" onclick="deRefreshLoc()">Konumumu yenile</button>'; }
   else if(deLocState==='denied'){ el.style.cssText=base+'background:#fbecea;color:#8a2b1e'; el.innerHTML='Yakınındaki yerleri gösterebilmemiz için konum izni gerekiyor. <button class="btn primary" style="margin-left:auto" onclick="deRequestLoc()">Konum iznini etkinleştir</button>'; }
+  else if(deLocState==='out_of_area'){ el.style.cssText=base+'background:#f4efe2;color:#5a4a2a'; el.innerHTML='<span class="msym">my_location</span> 📍 Konumun alındı, ancak '+CITY+' kapsama alanı dışında. <button class="btn" style="margin-left:auto" onclick="deRefreshLoc()">Konumumu yenile</button>'; }
   else if(deLocState==='error'){ el.style.cssText=base+'background:#fbecea;color:#8a2b1e'; el.innerHTML='Konumun alınamadı. Cihazının konum servislerini kontrol et. <button class="btn" style="margin-left:auto" onclick="deRequestLoc()">Tekrar dene</button>'; }
   else { el.style.cssText='display:none'; el.innerHTML=''; }
 }
@@ -1962,15 +1972,16 @@ function deCard(r,isAlt){
   var v=r.v, km=r.km, rv=RESV[v.resv]||RESV.unknown;
   var why=r.why.map(function(w){return '<span class="dewhy" style="display:inline-block;background:var(--surface-container,#f2eee4);border-radius:999px;padding:2px 9px;margin:2px 4px 2px 0;font-size:11.5px;color:#4a3f2a">'+esc(w)+'</span>';}).join('');
   var unmet=(r.unmet&&r.unmet.length)?'<div style="margin:5px 0;font-size:12px;color:#8a2b1e">⚠ '+r.unmet.map(esc).join(' · ')+'</div>':'';
-  return '<div class="de-res"><div class="deimg" style="background-image:url(\''+venueImg(v)+'\')"></div><div class="debody">'+
+  var img=venueImg(v);
+  return '<div class="de-res"><div class="deimg" style="background-color:#e6dcc6;background-image:linear-gradient(135deg,rgba(230,220,198,.15),rgba(214,201,168,.15))'+(img?",url('"+img+"')":'')+'"></div><div class="debody">'+
     '<div class="role">'+(isAlt?'Yakındaki alternatif':'Tam eşleşme')+'</div>'+
     '<h4>'+esc(v.name)+' '+(isFav(v.id)?"❤️":"")+'</h4>'+
     '<div class="kicker" style="color:var(--ink2);margin:2px 0 4px">'+esc((v.type||'').toUpperCase())+'</div>'+
     '<div class="cloc"><span class="msym">location_on</span>'+esc(v.area||'')+' · <span class="'+rv.c+'">'+rv.t+'</span></div>'+
-    '<div class="area" style="margin:6px 0">'+
-      '<span class="mi"><span class="msym">directions_walk</span>'+deDist(km)+'</span>'+
-      '<span class="mi"><span class="msym">pedal_bike</span>'+bikeMin(km)+' dk</span>'+
-      (v.hours?'<span class="mi"><span class="msym">schedule</span>'+esc(v.hours)+'</span>':'')+
+    '<div class="area" style="display:flex;flex-wrap:wrap;gap:8px;margin:7px 0">'+
+      '<span class="mi" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><span class="msym">directions_walk</span>'+deDist(km)+'</span>'+
+      '<span class="mi" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><span class="msym">pedal_bike</span>'+bikeMin(km)+' dk</span>'+
+      (v.hours?'<span class="mi" style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><span class="msym">schedule</span>'+esc(v.hours)+'</span>':'')+
     '</div>'+
     unmet+
     '<div style="margin:6px 0">'+why+'</div>'+
@@ -1993,6 +2004,13 @@ function runDE(){
   var out=document.getElementById('deOut'); if(!out)return;
   if(!deLoc){ out.innerHTML=''; return; }
   var res=window.DecisionEngine.decide({loc:deLoc,city:CITY,filters:deSel,inventory:V,favIds:[...favSet],targetCount:5});
+  if(res.status==='out_of_area'){
+    deLocState='out_of_area'; deRenderLocBar();
+    out.innerHTML='<div class="seg-card"><b>Şu anda '+CITY+'’ın keşif alanı dışındasın.</b><div style="margin-top:4px;color:var(--ink2)">Karar motoru '+CITY+'’dayken mevcut konumuna en yakın yerleri gösterecek.</div></div>';
+    return;
+  }
+  if(deLocState==='out_of_area'){ deLocState='granted'; }
+  deRenderLocBar();
   out.innerHTML=deRenderResults(res);
 }
 
