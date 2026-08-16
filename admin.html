@@ -93,10 +93,10 @@ tr:hover td{background:#faf8f3}
    ===================================================================== */
 const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0",pw:"asaadmin2026"};
 const FN_URL=CFG.url+"/functions/v1/admin-api";
-// Public tablolar için anon istemci (mevcut sekmeler — değiştirilmedi)
-let db=null; try{ db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
-// Privileged admin-api için AYRI Auth istemcisi. persistSession:false → JWT/PII localStorage'a yazılmaz.
-let authClient=null; try{ authClient=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:false,autoRefreshToken:true}}); }catch(e){}
+// Public tablolar için anon istemci (mevcut sekmeler). Benzersiz storageKey + oturum yok → tek GoTrueClient uyarısı gitsin, localStorage'a hiçbir şey yazılmaz.
+let db=null; try{ db=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:"asa-anon-public"}}); }catch(e){}
+// Privileged admin-api için AYRI Auth istemcisi. persistSession:false → JWT/PII localStorage'a yazılmaz. Farklı storageKey ile GoTrueClient çakışması önlenir.
+let authClient=null; try{ authClient=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:false,autoRefreshToken:true,detectSessionInUrl:false,storageKey:"asa-admin-auth"}}); }catch(e){}
 const $=id=>document.getElementById(id);
 const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const arr=s=>(s||"").split(",").map(x=>x.trim()).filter(Boolean);
