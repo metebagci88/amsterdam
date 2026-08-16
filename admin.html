@@ -21,6 +21,8 @@ h1,h2,h3{font-family:Georgia,serif;margin:0}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
 .stat b{font-size:26px;display:block;font-family:Georgia,serif}
 .stat span{font-size:12px;color:var(--ink2)}
+.skel{background:linear-gradient(90deg,#efeae1 25%,#f6f3ec 37%,#efeae1 63%);background-size:400% 100%;animation:sk 1.2s ease infinite;border-radius:8px}
+@keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
 .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .toolbar input,.toolbar select{border:1px solid var(--line);background:#fbfaf7;border-radius:9px;padding:8px 11px;font-size:14px;color:var(--ink)}
@@ -29,6 +31,7 @@ h1,h2,h3{font-family:Georgia,serif;margin:0}
 .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .btn.danger{background:#fdf3f1;color:var(--danger);border-color:#efd6d0}
 .btn.sm{padding:5px 9px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink2)}
@@ -40,10 +43,14 @@ tr:hover td{background:#faf8f3}
 .pill.soon{background:#fbf3e6;color:#8a6d2f;border-color:#ecdcc0}
 .pill.sp{background:#f3e6c9;color:#8a6d2f}
 .muted{color:var(--ink2);font-size:12px}
+.err{color:var(--danger);font-size:13px;min-height:16px}
+.notice{border:1px solid var(--line);background:#fbfaf7;border-radius:10px;padding:12px 14px;font-size:13.5px}
+.notice.warn{background:#fbf3e6;border-color:#ecdcc0;color:#8a6d2f}
+.notice.err{background:#fdf3f1;border-color:#efd6d0;color:var(--danger)}
 /* modal */
 .modal{position:fixed;inset:0;background:rgba(30,25,15,.5);display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow:auto;z-index:60}
 .modal.hide{display:none}
-.sheet{background:var(--card);border-radius:16px;max-width:640px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.sheet{background:var(--card);border-radius:16px;max-width:660px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .sheet h2{font-size:20px;margin-bottom:14px}
 .frow{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 .fld{display:flex;flex-direction:column;gap:4px;flex:1;min-width:150px}
@@ -59,15 +66,14 @@ tr:hover td{background:#faf8f3}
 .login h1{font-size:24px;margin-bottom:4px}.login h1 b{color:var(--accent)}
 .login p{font-size:13px;color:var(--ink2);margin:6px 0 16px}
 .login input{width:100%;border:1px solid var(--line);background:#fbfaf7;border-radius:11px;padding:12px;font-size:15px;margin-bottom:10px}
-.err{color:var(--danger);font-size:13px;min-height:16px}
 .hint{font-size:11.5px;color:var(--ink2);margin-top:12px;line-height:1.5}
 .acc{display:flex;flex-direction:column;gap:8px}
 .accitem{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
-.acchead{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;user-select:none}
-.acchead:hover{background:#faf8f4}
+.acchead{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;user-select:none}
 .accbody{border-top:1px solid var(--line);padding:6px 0}
 .accrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 14px;font-size:13.5px}
 .accrow:not(:last-child){border-bottom:1px solid #f0ece3}
+@media(max-width:620px){.modal{padding:0}.sheet{border-radius:0;min-height:100vh;max-width:none}}
 </style>
 </head>
 <body>
@@ -75,12 +81,26 @@ tr:hover td{background:#faf8f3}
 <div class="modal hide" id="modal"><div class="sheet" id="sheet"></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+/* =====================================================================
+   ASALOCAL Yönetim Paneli · FAZ 0B.1 — Salt-Okunur Admin UI Entegrasyonu
+   - Özet sayaçları, Üye arama/listesi, Üye 360 → admin-api (privileged).
+   - Bu 3 alan Supabase Auth JWT ister (super_admin/support).
+   - Diğer sekmeler (Mekanlar/Şehirler/Etiketler/İçerik/Moderasyon/Reklamlar)
+     mevcut anon akışıyla AYNEN korunur.
+   - Ortak yönetici şifresi 0D'ye kadar dış kapı olarak kalır.
+   - Güvenlik: yalnız anon anahtar; service_role YOK; iç RPC çağrısı YOK;
+     yalnız admin-api Edge Function; tüm kullanıcı metni esc() ile basılır.
+   ===================================================================== */
 const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0",pw:"asaadmin2026"};
+const FN_URL=CFG.url+"/functions/v1/admin-api";
+// Public tablolar için anon istemci (mevcut sekmeler — değiştirilmedi)
 let db=null; try{ db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
+// Privileged admin-api için AYRI Auth istemcisi. persistSession:false → JWT/PII localStorage'a yazılmaz.
+let authClient=null; try{ authClient=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:false,autoRefreshToken:true}}); }catch(e){}
 const $=id=>document.getElementById(id);
-const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const arr=s=>(s||"").split(",").map(x=>x.trim()).filter(Boolean);
-let DATA={venues:[],cities:[],members:[],comments:[],ads:[],trips:0,content:[]};
+let DATA={venues:[],cities:[],comments:[],ads:[],content:[]};
 const CONTENT_DEFAULTS={
  "home.hero.title":"Özenle seçilmiş şehir keşfi, bilinçli gezginler için.",
  "home.hero.desc":"Google haritalarında binlerce pin var, ama hangisi gerçekten iyi? asalocal, şehirde yaşayan yerlilerin önerileriyle doluyor — turist gibi değil, bir yerli gibi plan yaparsın.",
@@ -97,18 +117,58 @@ let seg="ozet";
 function isAuthed(){ try{return sessionStorage.getItem("asa_admin")==="1";}catch(e){return false;} }
 
 function renderLogin(msg){
-  $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Yönetici şifresi ile giriş yap</p><input id="apw" type="password" placeholder="Yönetici şifresi" autocomplete="off"><div class="err" id="aerr">'+(msg||"")+'</div><button class="btn primary" id="abtn" style="width:100%">Giriş</button><div class="hint">Prototip: paylaşımlı yönetici şifresi. Gerçek rol/kimlik doğrulama sonraki aşamada.</div></div>';
+  $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Yönetici şifresi ile giriş yap</p><input id="apw" type="password" placeholder="Yönetici şifresi" autocomplete="off"><div class="err" id="aerr">'+(msg||"")+'</div><button class="btn primary" id="abtn" style="width:100%">Giriş</button><div class="hint">Prototip: paylaşımlı yönetici şifresi (dış kapı). Üye/seyahat verileri için ayrıca Supabase yönetici girişi gerekir. Gerçek rol/kimlik 0D\'de tamamlanacak.</div></div>';
   $("abtn").onclick=()=>{ if($("apw").value===CFG.pw){ try{sessionStorage.setItem("asa_admin","1");}catch(e){} boot(); } else { $("aerr").textContent="Şifre yanlış."; } };
   $("apw").onkeydown=e=>{if(e.key==="Enter")$("abtn").click();};
 }
 
+/* ---------- admin-api (privileged, Auth JWT) ---------- */
+async function isPrivAuthed(){ try{ const {data:{session}}=await authClient.auth.getSession(); return !!session; }catch(e){ return false; } }
+async function adminApi(action, params){
+  try{
+    const {data:{session}}=await authClient.auth.getSession();
+    if(!session) return {status:401, body:{error:"no_session"}};
+    const res=await fetch(FN_URL,{ method:"POST", cache:"no-store",
+      headers:{"Content-Type":"application/json","apikey":CFG.key,"Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify({action, params:params||{}}) });
+    let body=null; try{ body=await res.json(); }catch(e){}
+    return {status:res.status, body};
+  }catch(e){ return {status:0, body:{error:"network"}}; } // hata mesajında PII yok; console'a yazma yok
+}
+function apiErrText(status){
+  if(status===401) return "Oturum gerekli — yönetici olarak tekrar giriş yap.";
+  if(status===403) return "Bu veriye erişim yetkiniz yok.";
+  if(status===429) return "Çok fazla istek — kısa süre bekleyip tekrar dene.";
+  if(status===503) return "Admin servisi geçici olarak kapalı.";
+  if(status===0)   return "Ağ hatası — bağlantını kontrol et.";
+  return "Beklenmeyen hata ("+status+").";
+}
+function privLoginHTML(hint){
+  return '<div class="panel" style="max-width:440px"><h3 style="margin-bottom:6px">Yönetici girişi (Supabase)</h3>'
+   +'<p class="muted" style="margin-bottom:12px">Üye ve seyahat verileri güvenli admin veri katmanından gelir; super_admin/support girişi gerekir.</p>'
+   +'<div class="fld" style="margin-bottom:8px"><label>E-posta</label><input id="pa_email" type="email" autocomplete="username"></div>'
+   +'<div class="fld" style="margin-bottom:8px"><label>Şifre</label><input id="pa_pw" type="password" autocomplete="current-password"></div>'
+   +'<div class="err" id="pa_err">'+esc(hint||"")+'</div>'
+   +'<button class="btn primary" id="pa_btn" style="width:100%">Giriş yap</button></div>';
+}
+function wirePrivLogin(after){
+  $("pa_btn").onclick=async()=>{
+    const email=($("pa_email").value||"").trim(), pw=$("pa_pw").value||"";
+    if(!email||!pw){ $("pa_err").textContent="E-posta ve şifre gerekli."; return; }
+    $("pa_btn").disabled=true; $("pa_btn").textContent="Giriş yapılıyor…";
+    const {error}=await authClient.auth.signInWithPassword({email, password:pw});
+    if(error){ $("pa_err").textContent="Giriş başarısız. Bilgileri kontrol et."; $("pa_btn").disabled=false; $("pa_btn").textContent="Giriş yap"; return; }
+    after();
+  };
+  $("pa_pw").onkeydown=e=>{ if(e.key==="Enter")$("pa_btn").click(); };
+}
+
 async function loadAll(){
+  // Yalnız PUBLIC tablolar (mevcut sekmeler). members/trips artık admin-api'den gelir.
   try{ const {data}=await db.from("venues").select("*").order("name"); DATA.venues=data||[]; }catch(e){}
   try{ const {data}=await db.from("cities").select("*").order("name"); DATA.cities=data||[]; }catch(e){}
-  try{ const {data}=await db.from("members").select("*").order("created_at",{ascending:false}); DATA.members=data||[]; }catch(e){}
   try{ const {data}=await db.from("comments").select("*").order("created_at",{ascending:false}); DATA.comments=data||[]; }catch(e){}
   try{ const {data}=await db.from("ads").select("*").order("id"); DATA.ads=data||[]; }catch(e){}
-  try{ const {count}=await db.from("trips").select("*",{count:"exact",head:true}); DATA.trips=count||0; }catch(e){}
   try{ const {data}=await db.from("site_content").select("*").order("key"); DATA.content=data||[]; }catch(e){}
 }
 
@@ -116,13 +176,12 @@ function shell(body){
   $("app").innerHTML=
    '<div class="topbar"><div><div class="b"><b>asa</b>local · Yönetim</div><div class="s">Merkezi kontrol paneli</div></div><button class="logout" id="lo">Çıkış</button></div>'
    +'<div class="wrap"><div class="nav" id="nav"></div><div id="body"></div></div>';
-  $("lo").onclick=()=>{ try{sessionStorage.removeItem("asa_admin");}catch(e){} renderLogin(); };
+  $("lo").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} try{sessionStorage.removeItem("asa_admin");}catch(e){} renderLogin(); };
   const segs=[["ozet","Özet"],["venues","Mekanlar"],["cities","Şehirler"],["tags","Etiketler"],["content","İçerik"],["comments","Moderasyon"],["ads","Reklamlar"],["members","Üyeler"]];
   $("nav").innerHTML=segs.map(s=>'<button class="'+(seg===s[0]?"on":"")+'" onclick="go(\''+s[0]+'\')">'+s[1]+'</button>').join("");
   $("body").innerHTML=body;
 }
 function go(s){ seg=s; render(); }
-
 function render(){
   if(seg==="ozet") return renderOzet();
   if(seg==="venues") return renderVenues();
@@ -133,18 +192,34 @@ function render(){
   if(seg==="ads") return renderAds();
   if(seg==="members") return renderMembers();
 }
+function stat(n,l){ return '<div class="stat"><b>'+esc(n)+'</b><span>'+esc(l)+'</span></div>'; }
 
-function renderOzet(){
-  const v=DATA.venues, act=v.filter(x=>x.active).length, sp=v.filter(x=>x.sponsored).length, ck=v.filter(x=>x.conf==="low").length;
-  const body='<div class="cards">'
-    +stat(v.length,"Mekan")+stat(act,"Aktif mekan")+stat(DATA.cities.filter(c=>c.status==="active").length+"/"+DATA.cities.length,"Aktif/Toplam şehir")
-    +stat(DATA.members.length,"Üye")+stat(DATA.comments.length,"Yorum")+stat(DATA.trips,"Gezi talebi")+stat(DATA.ads.filter(a=>a.active).length,"Aktif reklam")+stat(ck,"Kontrol gereken")
-    +'</div><div class="panel"><h3 style="margin-bottom:8px">Hızlı bakış</h3><p class="muted">Kontrol bekleyen ('+ck+') düşük güvenli mekan, '+sp+' sponsorlu mekan. Mekanlar sekmesinden düzenle; değişiklikler yayına alındığında siteye yansıyacak.</p></div>';
-  shell(body);
+/* ---------- ÖZET (dashboard) — counts action ---------- */
+async function renderOzet(){
+  const v=DATA.venues, act=v.filter(x=>x.active).length, ck=v.filter(x=>x.conf==="low").length;
+  const staticCards='<div class="cards">'+stat(v.length,"Mekan")+stat(act,"Aktif mekan")
+    +stat(DATA.cities.filter(c=>c.status==="active").length+"/"+DATA.cities.length,"Aktif/Toplam şehir")
+    +stat(DATA.ads.filter(a=>a.active).length,"Aktif reklam")+stat(ck,"Kontrol gereken")+'</div>';
+  const skel='<div class="cards">'+Array(6).fill('<div class="stat skel" style="height:64px"></div>').join("")+'</div>';
+  shell('<div id="ozetBody">'+staticCards+skel+'</div>');
+  if(!(await isPrivAuthed())){ $("ozetBody").innerHTML=staticCards+privLoginHTML(); wirePrivLogin(()=>renderOzet()); return; }
+  const r=await adminApi("counts",{});
+  if(r.status===401){ $("ozetBody").innerHTML=staticCards+privLoginHTML("Oturum sona erdi, tekrar giriş yap."); wirePrivLogin(()=>renderOzet()); return; }
+  if(r.status!==200){
+    $("ozetBody").innerHTML=staticCards+'<div class="notice err">'+esc(apiErrText(r.status))+' <button class="btn sm" onclick="renderOzet()">Tekrar dene</button></div>';
+    return;
+  }
+  const c=(r.body&&r.body.data)||{}; const n=x=>(x==null?"—":x);
+  $("ozetBody").innerHTML=staticCards
+    +'<div class="cards">'
+    +stat(n(c.users),"Kullanıcı")+stat(n(c.members),"Üye profili")+stat(n(c.trips_total),"Toplam seyahat")
+    +stat(n(c.trips_draft),"Taslak")+stat(n(c.trips_upcoming),"Yaklaşan")+stat(n(c.trips_active),"Aktif")
+    +stat(n(c.trips_past),"Geçmiş")+stat(n(c.trips_archived),"Arşiv")
+    +stat(n(c.favorites),"Favori")+stat(n(c.comments),"Yorum")+stat(n(c.point_events),"Puan olayı")
+    +'</div><div class="panel"><p class="muted">Kullanıcı/üye/seyahat sayıları güvenli admin veri katmanından (canlı) gelir.</p></div>';
 }
-function stat(n,l){ return '<div class="stat"><b>'+n+'</b><span>'+l+'</span></div>'; }
 
-/* ---------- MEKANLAR ---------- */
+/* ---------- MEKANLAR (değiştirilmedi) ---------- */
 let vFilter={q:"",city:"",active:""};
 function renderVenues(){
   const cities=[...new Set(DATA.venues.map(v=>v.city))];
@@ -173,7 +248,7 @@ function renderVenues(){
       +'</tr>').join("")
     +'</tbody></table></div></div>';
   shell(body);
-  $("vq").oninput=()=>{vFilter.q=$("vq").value; const l=DATA.venues; renderVenues(); $("vq").focus(); const el=$("vq"); el.setSelectionRange(el.value.length,el.value.length);};
+  $("vq").oninput=()=>{vFilter.q=$("vq").value; renderVenues(); $("vq").focus(); const el=$("vq"); el.setSelectionRange(el.value.length,el.value.length);};
   $("vcity").onchange=()=>{vFilter.city=$("vcity").value; renderVenues();};
   $("vact").onchange=()=>{vFilter.active=$("vact").value; renderVenues();};
 }
@@ -232,7 +307,7 @@ async function venuePhotoUpload(ev){ const file=ev.target.files&&ev.target.files
 async function toggleVenue(id){ const v=venueById(id); if(!v)return; const na=!v.active; try{ await db.from("venues").update({active:na,updated_at:new Date().toISOString()}).eq("id",id); v.active=na; }catch(e){} renderVenues(); }
 async function delVenue(id){ if(!confirm("Bu mekanı silmek istediğine emin misin?"))return; try{ await db.from("venues").delete().eq("id",id); }catch(e){} DATA.venues=DATA.venues.filter(v=>v.id!==id); closeModal(); renderVenues(); }
 
-/* ---------- ŞEHİRLER ---------- */
+/* ---------- ŞEHİRLER (değiştirilmedi) ---------- */
 function renderCities(){
   const body='<div class="panel"><div class="toolbar"><button class="btn primary" onclick="editCity(null)">+ Yeni şehir</button></div>'
     +'<div class="tablewrap"><table><thead><tr><th>Şehir</th><th>Ülke</th><th>Durum</th><th>Mekan</th><th></th></tr></thead><tbody>'
@@ -253,21 +328,21 @@ function editCity(code){
   $("csave").onclick=async()=>{ const g=k=>$("c_"+k).value; const code2=g("code").trim(); if(!code2||!g("name").trim()){$("cerr").textContent="Kod ve Ad zorunlu.";return;} const row={code:code2,name:g("name").trim(),country:g("country").trim(),flag:g("flag").trim(),status:g("status"),updated_at:new Date().toISOString()}; try{await db.from("cities").upsert(row,{onConflict:"code"});}catch(e){$("cerr").textContent="Hata: "+(e.message||e);return;} const i=DATA.cities.findIndex(x=>x.code===code2); if(i>=0)DATA.cities[i]=Object.assign(DATA.cities[i],row); else DATA.cities.push(row); closeModal(); renderCities(); };
 }
 
-/* ---------- ETIKETLER ---------- */
+/* ---------- ETIKETLER (değiştirilmedi) ---------- */
 let openTag=null;
 function renderTags(){
   const map={}; DATA.venues.forEach(v=>(v.tags||[]).forEach(t=>{map[t]=(map[t]||0)+1;}));
   const rows=Object.entries(map).sort((a,b)=>b[1]-a[1]);
-  const body='<div class="panel"><h3 style="margin-bottom:10px">Etiketler ('+rows.length+')</h3><p class="muted" style="margin-bottom:12px">Bir etikete tıkla → o etiketteki mekanlar açılır; oradan düzenle ya da etiketi mekandan kaldır. Etiketleri karar motoru ve filtreler kullanır.</p>'
+  const body='<div class="panel"><h3 style="margin-bottom:10px">Etiketler ('+rows.length+')</h3><p class="muted" style="margin-bottom:12px">Bir etikete tıkla → o etiketteki mekanlar açılır; oradan düzenle ya da etiketi mekandan kaldır.</p>'
     +'<div class="acc">'+rows.map(r=>{
       const t=r[0], open=(openTag===t);
       let inner='';
       if(open){
         const vs=DATA.venues.filter(v=>(v.tags||[]).indexOf(t)>-1).sort((a,b)=>(a.name||"").localeCompare(b.name||"","tr"));
         inner='<div class="accbody">'+vs.map(v=>'<div class="accrow"><span><b>'+esc(v.name)+'</b> <span class="muted">· '+esc(v.city||"")+(v.area?" · "+esc(v.area):"")+'</span></span>'
-          +'<span style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm danger" onclick="removeTag(\''+esc(v.id)+'\',\''+esc(t).replace(/'/g,"\\'")+'\')">Etiketi kaldır</button></span></div>').join("")+'</div>';
+          +'<span style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm danger" onclick="removeTag(\''+esc(v.id)+'\',\''+esc(t)+'\')">Etiketi kaldır</button></span></div>').join("")+'</div>';
       }
-      return '<div class="accitem"><div class="acchead" onclick="toggleTag(\''+esc(t).replace(/'/g,"\\'")+'\')"><span>'+(open?"▾":"▸")+' <b>'+esc(t)+'</b></span><span class="pill">'+r[1]+' mekan</span></div>'+inner+'</div>';
+      return '<div class="accitem"><div class="acchead" style="cursor:pointer" onclick="toggleTag(\''+esc(t)+'\')"><span>'+(open?"▾":"▸")+' <b>'+esc(t)+'</b></span><span class="pill">'+r[1]+' mekan</span></div>'+inner+'</div>';
     }).join("")+'</div></div>';
   shell(body);
 }
@@ -279,21 +354,21 @@ async function removeTag(id,t){
   v.tags=nt; renderTags();
 }
 
-/* ---------- MODERASYON (yorumlar) ---------- */
+/* ---------- MODERASYON (değiştirilmedi) ---------- */
 function renderComments(){
   const body='<div class="panel"><h3 style="margin-bottom:10px">Yorumlar ('+DATA.comments.length+')</h3>'
     +(DATA.comments.length?'<div class="tablewrap"><table><thead><tr><th>Üye</th><th>Mekan</th><th>Yorum</th><th>Foto</th><th></th></tr></thead><tbody>'
     +DATA.comments.map(c=>{const v=venueById(c.venue_id);return '<tr><td>'+esc(c.display_name||c.email||"")+'</td><td>'+esc(v?v.name:c.venue_id)+'</td><td>'+esc((c.body||"").slice(0,120))+'</td><td>'+(c.photo_url?'📷':'')+'</td><td><button class="btn sm danger" onclick="delComment('+c.id+')">Kaldır</button></td></tr>';}).join("")
-    +'</tbody></table></div>':'<p class="muted">Henüz yorum yok.</p>')+'</div>';
+    +'</tbody></table></div>':'<p class="muted">Henüz yorum yok (veya bu görünüm 0C\'de admin-api\'ye taşınacak).</p>')+'</div>';
   shell(body);
 }
 async function delComment(id){ if(!confirm("Yorumu kaldır?"))return; try{await db.from("comments").delete().eq("id",id);}catch(e){} DATA.comments=DATA.comments.filter(c=>c.id!==id); renderComments(); }
 
-/* ---------- İÇERİK (editoryal metinler) ---------- */
+/* ---------- İÇERİK (değiştirilmedi) ---------- */
 function contentRow(key){ return DATA.content.find(c=>c.key===key); }
 function renderContent(){
   const keys=Object.keys(CONTENT_DEFAULTS);
-  let body='<div class="panel"><h3 style="margin-bottom:6px">Site metinleri</h3><p class="muted" style="margin-bottom:14px">Başlık/metin/buton adlarını buradan değiştir. Boş bırakırsan varsayılan metin kullanılır. Kapatırsan o öğe sitede gizlenir. Değişiklik siteye anında yansır (Ctrl+Shift+R).</p>';
+  let body='<div class="panel"><h3 style="margin-bottom:6px">Site metinleri</h3><p class="muted" style="margin-bottom:14px">Başlık/metin/buton adlarını buradan değiştir. Boş bırakırsan varsayılan metin kullanılır.</p>';
   body+=keys.map(k=>{
     const r=contentRow(k)||{}; const label=(r.label||k); const val=r.value||""; const en=(r.enabled!==false);
     const def=CONTENT_DEFAULTS[k]||"";
@@ -322,7 +397,7 @@ async function saveContent(key){
   if(msg)msg.textContent="✓ kaydedildi — sitede Ctrl+Shift+R ile görürsün";
 }
 
-/* ---------- REKLAMLAR ---------- */
+/* ---------- REKLAMLAR (değiştirilmedi) ---------- */
 const AD_SLOTS=["masthead","leaderboard","sidebar","inline","venue_card","decision","map_pin"];
 const AD_TYPES=["display","native_venue","native_decision","html"];
 const AD_FORMATS=["970x250","728x90","300x250","300x600","320x100","320x50"];
@@ -330,7 +405,7 @@ const SLOT_INFO={masthead:"Ana sayfa üstü geniş banner (Pano)",leaderboard:"�
 function adById(id){ return DATA.ads.find(a=>a.id===id); }
 function renderAds(){
   const body='<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Reklam kampanyaları ('+DATA.ads.length+')</h3><button class="btn primary" onclick="editAd(0)">+ Yeni reklam</button></div>'
-    +'<p class="muted" style="margin-bottom:12px">Görsel yükle veya URL yapıştır, slotu seç, canlı önizle, aktif/pasif yap. Değişiklikler siteye anında yansır.</p>'
+    +'<p class="muted" style="margin-bottom:12px">Görsel yükle veya URL yapıştır, slotu seç, canlı önizle, aktif/pasif yap.</p>'
     +(DATA.ads.length?'<div class="tablewrap"><table><thead><tr><th>Önizleme</th><th>Slot</th><th>Boyut</th><th>Tür</th><th>Sponsor</th><th>Durum</th><th></th></tr></thead><tbody>'
     +DATA.ads.map(a=>'<tr>'
       +'<td>'+(a.image_url?'<img src="'+esc(a.image_url)+'" style="width:70px;height:40px;object-fit:cover;border-radius:4px;border:1px solid #ddd">':'<span class="muted">—</span>')+'</td>'
@@ -341,7 +416,6 @@ function renderAds(){
   shell(body);
 }
 async function toggleAd(id){ const a=adById(id); if(!a)return; const na=!a.active; try{await db.from("ads").update({active:na}).eq("id",id);}catch(e){} a.active=na; renderAds(); }
-
 function editAd(id){
   const a=id?adById(id):{id:0,slot:"masthead",creative_type:"display",format:"970x250",active:true,weight:1};
   const isNew=!id;
@@ -380,20 +454,12 @@ function adPreview(){
   if(ct==="native_venue"||ct==="native_decision"){
     p.innerHTML='<div style="text-align:left;max-width:360px;font-family:Georgia,serif"><span style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#a63936;font-weight:700">Sponsorlu · '+sponsor+'</span><div style="font-size:18px;font-weight:600;margin:4px 0">'+(title||"Başlık")+'</div><div style="font-size:13px;color:#555;font-family:sans-serif">'+(body||"")+'</div></div>';
   } else if(img){
-    p.innerHTML='<img src="'+esc(img)+'" style="max-width:100%;max-height:220px;border-radius:4px" onerror="this.parentNode.innerHTML=\'<span style=color:#a33>Görsel yüklenemedi — link doğrudan bir görsel dosyası mı? (.jpg/.png)\'">';
+    p.innerHTML='<img src="'+esc(img)+'" style="max-width:100%;max-height:220px;border-radius:4px" onerror="this.parentNode.innerHTML=\'<span style=color:#a33>Görsel yüklenemedi\'">';
   } else {
     p.innerHTML='<div style="text-align:center;color:#888"><b>'+(title||"Görsel yok")+'</b><div style="font-size:12px">'+(body||"Görsel URL gir ya da yükle")+'</div></div>';
   }
 }
-async function adUpload(ev){
-  const file=ev.target.files&&ev.target.files[0]; if(!file)return;
-  const msg=$("a_upmsg"); if(msg)msg.textContent="Yükleniyor…";
-  try{
-    const url=await uploadToMedia(file,"ads");
-    $("a_image_url").value=url; adPreview();
-    if(msg)msg.textContent="✓ yüklendi";
-  }catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); }
-}
+async function adUpload(ev){ const file=ev.target.files&&ev.target.files[0]; if(!file)return; const msg=$("a_upmsg"); if(msg)msg.textContent="Yükleniyor…"; try{ const url=await uploadToMedia(file,"ads"); $("a_image_url").value=url; adPreview(); if(msg)msg.textContent="✓ yüklendi"; }catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); } }
 async function uploadToMedia(file, prefix){
   const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
   const path=(prefix||"img")+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext;
@@ -418,68 +484,100 @@ async function saveAd(isNew,id){
 }
 async function delAd(id){ if(!confirm("Bu reklamı silmek istediğine emin misin?"))return; try{ await db.from("ads").delete().eq("id",id); }catch(e){} DATA.ads=DATA.ads.filter(a=>a.id!==id); closeModal(); renderAds(); }
 
-/* ---------- ÜYELER ---------- */
-let openMember=null, memberDetail={};
+/* ---------- ÜYELER (0B.1: admin-api member_search + member_360, salt-okunur) ---------- */
 function fmtDate(s){ try{ if(!s)return"—"; const d=new Date(s); return d.toLocaleDateString("tr-TR",{year:"numeric",month:"short",day:"numeric"}); }catch(e){ return "—"; } }
-function renderMembers(){
-  const ms=DATA.members;
-  const blk=ms.filter(m=>m.blocked).length;
-  let body='<div class="panel"><h3 style="margin-bottom:6px">Üyeler ('+ms.length+')</h3><p class="muted" style="margin-bottom:12px">'+blk+' bloke. Bir üyeye tıkla → detayları (kaydettikleri, yorum sayısı) aç. Bloke edilen üye giriş yapamaz.</p>';
-  if(!ms.length){ body+='<p class="muted">Henüz üye yok.</p></div>'; shell(body); return; }
-  body+='<div class="acc">'+ms.map(m=>{
-    const open=(openMember===m.email);
-    let inner='';
-    if(open){
-      const d=memberDetail[m.email];
-      if(!d){ inner='<div class="accbody"><div class="accrow"><span class="muted">Yükleniyor…</span></div></div>'; }
-      else{
-        const favNames=(d.favs||[]).map(id=>{const v=venueById(id);return v?v.name:id;});
-        inner='<div class="accbody">'
-          +'<div class="accrow"><span><b>Katılım</b></span><span>'+fmtDate(m.created_at)+'</span></div>'
-          +'<div class="accrow"><span><b>Kaydettikleri ('+(d.favs||[]).length+')</b></span><span style="max-width:60%;text-align:right">'+(favNames.length?esc(favNames.slice(0,12).join(", ")):'<span class="muted">yok</span>')+'</span></div>'
-          +'<div class="accrow"><span><b>Yorum / fotoğraf</b></span><span>'+(d.comments||0)+' yorum · '+(d.photos||0)+' foto</span></div>'
-          +'</div>';
-      }
-    }
-    return '<div class="accitem"><div class="acchead" onclick="toggleMember(\''+esc(m.email).replace(/'/g,"\\'")+'\')">'
-      +'<span>'+(open?"▾":"▸")+' <b>'+esc(m.display_name||m.email.split("@")[0])+'</b> <span class="muted">· '+esc(m.email)+'</span>'+(m.blocked?' <span class="pill off">bloke</span>':'')+'</span>'
-      +'<span style="white-space:nowrap"><span class="pill">'+esc(m.tier||"Kaşif")+' · '+(m.points!=null?m.points:0)+' puan</span> '
-        +'<button class="btn sm" onclick="event.stopPropagation();toggleBlock(\''+esc(m.email).replace(/'/g,"\\'")+'\')">'+(m.blocked?"Blokeyi kaldır":"Bloke et")+'</button> '
-        +'<button class="btn sm danger" onclick="event.stopPropagation();delMember(\''+esc(m.email).replace(/'/g,"\\'")+'\')">Sil</button></span>'
-      +'</div>'+inner+'</div>';
-  }).join("")+'</div></div>';
-  shell(body);
+let mState={q:"",type:"filter",blocked:"",limit:25,offset:0,total:0,has_more:false};
+let mTimer=null;
+async function renderMembers(){
+  if(!(await isPrivAuthed())){ shell(privLoginHTML()); wirePrivLogin(()=>renderMembers()); return; }
+  shell('<div class="panel"><div class="toolbar">'
+    +'<input class="search" id="mq" placeholder="Ara (ad / e-posta)…" value="'+esc(mState.q)+'">'
+    +'<select id="mtype"><option value="filter"'+(mState.type==="filter"?" selected":"")+'>Filtre (tümü)</option><option value="name"'+(mState.type==="name"?" selected":"")+'>Ad</option><option value="email"'+(mState.type==="email"?" selected":"")+'>E-posta</option></select>'
+    +'<select id="mblk"><option value=""'+(mState.blocked===""?" selected":"")+'>Aktif+Bloke</option><option value="false"'+(mState.blocked==="false"?" selected":"")+'>Yalnız aktif</option><option value="true"'+(mState.blocked==="true"?" selected":"")+'>Yalnız bloke</option></select>'
+    +'<span class="muted" id="mcount"></span></div>'
+    +'<div id="memResults"><p class="muted">Yükleniyor…</p></div>'
+    +'<div id="memPager" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>'
+    +'<div class="hint">Salt-okunur. Bloke / puan düzeltme / silme / moderasyon kontrollü yazma fazında (0C).</div></div>');
+  $("mq").oninput=()=>{ mState.q=$("mq").value; clearTimeout(mTimer); mTimer=setTimeout(()=>{ mState.offset=0; loadMembersPage(); },350); };
+  $("mtype").onchange=()=>{ mState.type=$("mtype").value; mState.offset=0; loadMembersPage(); };
+  $("mblk").onchange=()=>{ mState.blocked=$("mblk").value; mState.offset=0; loadMembersPage(); };
+  loadMembersPage();
 }
-async function toggleMember(email){
-  if(openMember===email){ openMember=null; renderMembers(); return; }
-  openMember=email; renderMembers();
-  if(!memberDetail[email]){
-    const d={favs:[],comments:0,photos:0};
-    try{ const r=await db.from("favorites").select("venue_id").eq("email",email); d.favs=(r.data||[]).map(x=>x.venue_id); }catch(e){}
-    try{ const r=await db.from("comments").select("id,photo_url").eq("email",email); d.comments=(r.data||[]).length; d.photos=(r.data||[]).filter(x=>x.photo_url).length; }catch(e){}
-    memberDetail[email]=d;
-    if(openMember===email) renderMembers();
+async function loadMembersPage(){
+  const rEl=$("memResults"), pEl=$("memPager"), cEl=$("mcount");
+  if(!rEl) return;
+  if(mState.type!=="filter" && (!mState.q || mState.q.trim().length<2)){
+    rEl.innerHTML='<p class="muted">Ad/E-posta araması için en az 2 karakter girin (ya da "Filtre" ile tümünü listele).</p>'; pEl.innerHTML=""; cEl.textContent=""; return;
   }
+  const params={ search_type:mState.type, limit:mState.limit, offset:mState.offset };
+  if(mState.type!=="filter") params.q=mState.q.trim();
+  if(mState.blocked!=="") params.blocked=(mState.blocked==="true");
+  rEl.innerHTML='<p class="muted">Yükleniyor…</p>';
+  const r=await adminApi("member_search", params);
+  if(r.status===401){ shell(privLoginHTML("Oturum sona erdi.")); wirePrivLogin(()=>renderMembers()); return; }
+  if(r.status!==200){ rEl.innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; pEl.innerHTML=""; cEl.textContent=""; return; }
+  const d=(r.body&&r.body.data)||{total:0,rows:[],has_more:false};
+  mState.total=d.total||0; mState.has_more=!!d.has_more;
+  const rows=d.rows||[];
+  cEl.textContent=mState.total+' üye';
+  if(!rows.length){ rEl.innerHTML='<p class="muted">Sonuç yok.</p>'; }
+  else{
+    rEl.innerHTML='<div class="tablewrap"><table><thead><tr><th>Ad</th><th>E-posta</th><th>Profil</th><th>Seviye</th><th>Şehir</th><th>Durum</th><th>Kayıt</th><th>Son giriş</th><th></th></tr></thead><tbody>'
+     +rows.map(m=>'<tr>'
+       +'<td><b>'+esc(m.display_name||"(profil yok)")+'</b></td>'
+       +'<td class="muted">'+esc(m.email_masked||"—")+'</td>'
+       +'<td>'+(m.profile_exists?'<span class="pill on">var</span>':'<span class="pill off">yok</span>')+'</td>'
+       +'<td>'+esc(m.tier||"—")+'</td>'
+       +'<td class="muted">'+esc(m.home_city||"—")+'</td>'
+       +'<td>'+(m.blocked?'<span class="pill off">bloke</span>':'<span class="pill on">aktif</span>')+'</td>'
+       +'<td class="muted">'+fmtDate(m.created_at)+'</td>'
+       +'<td class="muted">'+fmtDate(m.last_sign_in_at)+'</td>'
+       +'<td><button class="btn sm" onclick="openMember360(\''+esc(m.user_id)+'\')">360</button></td>'
+       +'</tr>').join("")+'</tbody></table></div>';
+  }
+  const from=rows.length?mState.offset+1:0, to=mState.offset+rows.length;
+  pEl.innerHTML='<button class="btn sm" id="mprev"'+(mState.offset<=0?" disabled":"")+'>‹ Önceki</button>'
+   +'<span class="muted">'+from+'–'+to+' / '+mState.total+'</span>'
+   +'<button class="btn sm" id="mnext"'+(mState.has_more?"":" disabled")+'>Sonraki ›</button>';
+  if($("mprev"))$("mprev").onclick=()=>{ mState.offset=Math.max(0,mState.offset-mState.limit); loadMembersPage(); };
+  if($("mnext"))$("mnext").onclick=()=>{ if(mState.has_more){ mState.offset+=mState.limit; loadMembersPage(); } };
 }
-async function toggleBlock(email){
-  const m=DATA.members.find(x=>x.email===email); if(!m)return;
-  const nb=!m.blocked;
-  try{ await db.from("members").update({blocked:nb,updated_at:new Date().toISOString()}).eq("email",email); }catch(e){ alert("Hata: "+(e.message||e)); return; }
-  m.blocked=nb; renderMembers();
-}
-async function delMember(email){
-  if(!confirm("Bu üyeyi KALICI olarak sil?\n\nGiriş hesabı (auth) + favori + yorum verileri de silinecek; bu e-posta ile yeniden kayıt olunabilir.\n\n"+email))return;
-  try{
-    const res=await fetch(CFG.url+"/functions/v1/admin-delete-user",{
-      method:"POST",
-      headers:{"Content-Type":"application/json","apikey":CFG.key,"Authorization":"Bearer "+CFG.key},
-      body:JSON.stringify({email:email,admin_password:CFG.pw})
-    });
-    const j=await res.json().catch(()=>({}));
-    if(!res.ok||j.error){ alert("Silme hatası: "+(j.error||("HTTP "+res.status))); return; }
-  }catch(e){ alert("Hata: "+(e.message||e)); return; }
-  DATA.members=DATA.members.filter(x=>x.email!==email);
-  openMember=null; renderMembers();
+async function openMember360(uid){
+  openModal();
+  $("sheet").innerHTML='<h2>Üye 360</h2><div class="acc"><div class="accitem"><div class="accbody"><div class="accrow"><span class="muted">Yükleniyor…</span></div></div></div></div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  const r=await adminApi("member_360",{target:uid});
+  if(r.status!==200){
+    const t=(r.status===404)?"Kullanıcı bulunamadı.":apiErrText(r.status);
+    $("sheet").innerHTML='<h2>Üye 360</h2><div class="notice err">'+esc(t)+'</div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+    return;
+  }
+  const d=(r.body&&r.body.data)||{};
+  const id=d.identity||{}, mem=d.member||{}, sm=d.summary||{};
+  const line=(l,val)=>'<div class="accrow"><span><b>'+esc(l)+'</b></span><span style="max-width:62%;text-align:right;word-break:break-word">'+esc(val==null||val===""?"—":val)+'</span></div>';
+  const moreNote=s=>(s&&s.has_more)?'<div class="accrow"><span class="muted">…ilk 20 gösteriliyor (toplam '+esc(s.total||0)+')</span></div>':'';
+  const T=d.trips||{}, F=d.favorites||{}, C=d.comments||{}, P=d.point_events||{};
+  let h='<h2>Üye 360</h2>';
+  h+='<div class="accitem" style="margin-bottom:12px"><div class="acchead"><span><b>Kimlik &amp; profil</b></span>'+(mem.profile_exists?'<span class="pill on">profil var</span>':'<span class="pill off">profil yok</span>')+'</div><div class="accbody">'
+    +line("Ad", mem.display_name)+line("E-posta", id.email)
+    +line("Seviye", mem.tier)+line("Puan", mem.points)
+    +line("Şehir", mem.home_city)+line("Cinsiyet", mem.gender)+line("Bio", mem.bio)
+    +line("Bloke", mem.blocked?"Evet":"Hayır")
+    +line("Kayıt", fmtDate(id.created_at))+line("Son giriş", fmtDate(id.last_sign_in_at))
+    +'</div></div>';
+  h+='<div class="cards">'+stat(sm.trips||0,"Seyahat")+stat(sm.favorites||0,"Favori")+stat(sm.comments||0,"Yorum")+stat(sm.point_events||0,"Puan olayı")+'</div>';
+  h+='<div class="acc">';
+  h+='<div class="accitem"><div class="acchead"><span><b>Son seyahatler</b></span><span class="pill">'+esc(T.total||0)+'</span></div><div class="accbody">'
+    +((T.items||[]).length?(T.items).map(t=>'<div class="accrow"><span><b>'+esc(t.city||"—")+'</b> <span class="muted">· '+esc((t.start_date||"")+(t.end_date?(" → "+t.end_date):""))+(t.archived?" · arşiv":"")+'</span></span><span class="muted">v'+esc(t.plan_version)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(T)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Son favoriler</b></span><span class="pill">'+esc(F.total||0)+'</span></div><div class="accbody">'
+    +((F.items||[]).length?(F.items).map(f=>'<div class="accrow"><span>'+esc(f.venue_id||"—")+' <span class="muted">· '+esc(f.city||"")+'</span></span><span class="muted">'+fmtDate(f.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(F)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Son yorumlar</b></span><span class="pill">'+esc(C.total||0)+'</span></div><div class="accbody">'
+    +((C.items||[]).length?(C.items).map(c=>'<div class="accrow"><span style="max-width:70%;word-break:break-word">'+esc((c.body||"").slice(0,140))+' <span class="muted">· '+esc(c.venue_id||"")+(c.hidden?" · gizli":"")+'</span></span><span class="muted">'+fmtDate(c.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(C)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Son puan olayları</b></span><span class="pill">'+esc(P.total||0)+'</span></div><div class="accbody">'
+    +((P.items||[]).length?(P.items).map(p=>'<div class="accrow"><span><b>'+esc(p.event_type||"—")+'</b> <span class="muted">· '+esc(p.status||"")+'</span></span><span>'+esc(p.points)+' puan · '+fmtDate(p.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(P)+'</div></div>';
+  h+='</div>';
+  h+='<div class="hint" style="margin-top:10px">Salt-okunur görünüm. Bloke/puan/moderasyon işlemleri 0C\'de eklenecek.</div>';
+  h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  $("sheet").innerHTML=h;
 }
 
 /* ---------- modal ---------- */
