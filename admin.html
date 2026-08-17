@@ -138,6 +138,7 @@ async function adminApi(action, params){
 function apiErrText(status){
   if(status===401) return "Oturum gerekli — yönetici olarak tekrar giriş yap.";
   if(status===403) return "Bu veriye erişim yetkiniz yok.";
+  if(status===409) return "İşlem çakışması — sayfayı yenileyip tekrar deneyin.";
   if(status===429) return "Çok fazla istek — kısa süre bekleyip tekrar dene.";
   if(status===503) return "Admin servisi geçici olarak kapalı.";
   if(status===0)   return "Ağ hatası — bağlantını kontrol et.";
@@ -354,15 +355,121 @@ async function removeTag(id,t){
   v.tags=nt; renderTags();
 }
 
-/* ---------- MODERASYON (değiştirilmedi) ---------- */
-function renderComments(){
-  const body='<div class="panel"><h3 style="margin-bottom:10px">Yorumlar ('+DATA.comments.length+')</h3>'
-    +(DATA.comments.length?'<div class="tablewrap"><table><thead><tr><th>Üye</th><th>Mekan</th><th>Yorum</th><th>Foto</th><th></th></tr></thead><tbody>'
-    +DATA.comments.map(c=>{const v=venueById(c.venue_id);return '<tr><td>'+esc(c.display_name||c.email||"")+'</td><td>'+esc(v?v.name:c.venue_id)+'</td><td>'+esc((c.body||"").slice(0,120))+'</td><td>'+(c.photo_url?'📷':'')+'</td><td><button class="btn sm danger" onclick="delComment('+c.id+')">Kaldır</button></td></tr>';}).join("")
-    +'</tbody></table></div>':'<p class="muted">Henüz yorum yok (veya bu görünüm 0C\'de admin-api\'ye taşınacak).</p>')+'</div>';
-  shell(body);
+/* ---------- MODERASYON (0C.1: admin-api comment_search + gizle/göster) ---------- */
+let modState={city:"",venue:"",visibility:"all",limit:25,offset:0,total:0,has_more:false};
+let modTimer=null;
+async function renderComments(){
+  if(!(await isPrivAuthed())){ shell(privLoginHTML()); wirePrivLogin(()=>renderComments()); return; }
+  shell('<div class="panel"><div class="toolbar">'
+    +'<select id="cvis"><option value="all"'+(modState.visibility==="all"?" selected":"")+'>Tümü</option><option value="visible"'+(modState.visibility==="visible"?" selected":"")+'>Görünür</option><option value="hidden"'+(modState.visibility==="hidden"?" selected":"")+'>Gizli</option></select>'
+    +'<input class="search" id="ccity" placeholder="Şehir (opsiyonel)" value="'+esc(modState.city)+'">'
+    +'<input class="search" id="cvenue" placeholder="Mekan ID (opsiyonel)" value="'+esc(modState.venue)+'">'
+    +'<button class="btn sm" id="crefresh">Yenile</button><span class="muted" id="ccount"></span></div>'
+    +'<div id="modResults"><p class="muted">Yükleniyor…</p></div>'
+    +'<div id="modPager" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>'
+    +'<div class="hint">Gizleme yorumu SİLMEZ; puan ve beğeniler korunur, yalnız herkese açık görünürlük kalkar. Yalnız super_admin/moderator.</div></div>');
+  $("cvis").onchange=()=>{ modState.visibility=$("cvis").value; modState.offset=0; loadModerationPage(); };
+  $("ccity").oninput=()=>{ modState.city=$("ccity").value; clearTimeout(modTimer); modTimer=setTimeout(()=>{modState.offset=0;loadModerationPage();},350); };
+  $("cvenue").oninput=()=>{ modState.venue=$("cvenue").value; clearTimeout(modTimer); modTimer=setTimeout(()=>{modState.offset=0;loadModerationPage();},350); };
+  $("crefresh").onclick=()=>{ modState.offset=0; loadModerationPage(); };
+  loadModerationPage();
 }
-async function delComment(id){ if(!confirm("Yorumu kaldır?"))return; try{await db.from("comments").delete().eq("id",id);}catch(e){} DATA.comments=DATA.comments.filter(c=>c.id!==id); renderComments(); }
+async function loadModerationPage(){
+  const rEl=$("modResults"), pEl=$("modPager"), cEl=$("ccount");
+  if(!rEl) return;
+  const params={ visibility:modState.visibility, limit:modState.limit, offset:modState.offset };
+  if(modState.city.trim()) params.city=modState.city.trim();
+  if(modState.venue.trim()) params.venue=modState.venue.trim();
+  rEl.innerHTML='<p class="muted">Yükleniyor…</p>';
+  const r=await adminApi("comment_search", params);
+  if(r.status===401){ shell(privLoginHTML("Oturum sona erdi.")); wirePrivLogin(()=>renderComments()); return; }
+  if(r.status===403){ rEl.innerHTML='<div class="notice err">Bu alana erişim yetkiniz yok (moderator/super_admin gerekir).</div>'; pEl.innerHTML=""; cEl.textContent=""; return; }
+  if(r.status!==200){ rEl.innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; pEl.innerHTML=""; cEl.textContent=""; return; }
+  const d=(r.body&&r.body.data)||{total:0,rows:[],has_more:false};
+  modState.total=d.total||0; modState.has_more=!!d.has_more;
+  const rows=d.rows||[];
+  cEl.textContent=modState.total+' yorum';
+  if(!rows.length){ rEl.innerHTML='<p class="muted">Sonuç yok.</p>'; }
+  else{
+    rEl.innerHTML='<div class="tablewrap"><table><thead><tr><th>Üye</th><th>E-posta</th><th>Mekan</th><th>Şehir</th><th>Yorum</th><th>Durum</th><th>Tarih</th><th></th></tr></thead><tbody>'
+     +rows.map(c=>{
+        const lbl=(c.venue_id||"")+" · "+((c.body||"").slice(0,60));
+        return '<tr>'
+          +'<td>'+esc(c.display_name||"Üye")+'</td>'
+          +'<td class="muted">'+esc(c.email_masked||"—")+'</td>'
+          +'<td class="muted">'+esc(c.venue_id||"—")+'</td>'
+          +'<td class="muted">'+esc(c.city||"—")+'</td>'
+          +'<td style="max-width:320px;word-break:break-word">'+esc((c.body||"").slice(0,300))+'</td>'
+          +'<td>'+(c.hidden?'<span class="pill off">gizli</span>':'<span class="pill on">görünür</span>')+'</td>'
+          +'<td class="muted">'+fmtDate(c.created_at)+'</td>'
+          +'<td><button class="btn sm '+(c.hidden?"":"danger")+' mod-hide" data-id="'+c.id+'" data-desired="'+(c.hidden?"0":"1")+'" data-label="'+esc(lbl)+'">'+(c.hidden?"Göster":"Gizle")+'</button></td>'
+          +'</tr>';
+      }).join("")+'</tbody></table></div>';
+    Array.from(document.querySelectorAll(".mod-hide")).forEach(b=>{ b.onclick=()=>modHide(Number(b.dataset.id), b.dataset.desired==="1", b.dataset.label||""); });
+  }
+  const from=rows.length?modState.offset+1:0, to=modState.offset+rows.length;
+  pEl.innerHTML='<button class="btn sm" id="cprev"'+(modState.offset<=0?" disabled":"")+'>‹ Önceki</button>'
+   +'<span class="muted">'+from+'–'+to+' / '+modState.total+'</span>'
+   +'<button class="btn sm" id="cnext"'+(modState.has_more?"":" disabled")+'>Sonraki ›</button>';
+  if($("cprev"))$("cprev").onclick=()=>{ modState.offset=Math.max(0,modState.offset-modState.limit); loadModerationPage(); };
+  if($("cnext"))$("cnext").onclick=()=>{ if(modState.has_more){ modState.offset+=modState.limit; loadModerationPage(); } };
+}
+
+/* ---------- Kontrollü yazma: onay + gerekçe diyaloğu (0C.1) ---------- */
+function writeErrText(r){
+  const code=(r.body&&r.body.error)||"";
+  if(r.status===409&&code==="idempotency_conflict") return "İşlem çakışması — sayfayı yenileyip tekrar deneyin.";
+  if(r.status===409&&code==="cannot_target_self") return "Kendi hesabını hedefleyemezsin.";
+  if(r.status===409&&code==="cannot_target_admin") return "Bir yönetici hesabı hedeflenemez.";
+  if(r.status===404) return "Hedef bulunamadı (profil olmayabilir).";
+  if(r.status===503&&code==="writes_temporarily_disabled") return "Yazma işlemleri geçici olarak kapalı.";
+  return apiErrText(r.status);
+}
+const WC_REASONS=[["spam","Spam"],["inappropriate","Uygunsuz içerik"],["harassment","Taciz"],["misleading","Yanıltıcı bilgi"],["user_request","Kullanıcı talebi"],["security","Güvenlik"],["other","Diğer"]];
+function uuid4(){
+  if(window.crypto&&crypto.randomUUID) return crypto.randomUUID();
+  const b=new Uint8Array(16); crypto.getRandomValues(b);
+  b[6]=(b[6]&0x0f)|0x40; b[8]=(b[8]&0x3f)|0x80;
+  const h=[]; for(let i=0;i<16;i++) h.push(b[i].toString(16).padStart(2,"0"));
+  return h[0]+h[1]+h[2]+h[3]+"-"+h[4]+h[5]+"-"+h[6]+h[7]+"-"+h[8]+h[9]+"-"+h[10]+h[11]+h[12]+h[13]+h[14]+h[15];
+}
+function openWriteConfirm(cfg){
+  openModal();
+  const idem=uuid4();
+  $("sheet").innerHTML='<h2>'+esc(cfg.title)+'</h2>'
+    +'<div class="notice'+(cfg.danger?" warn":"")+'" style="margin-bottom:12px">'+esc(cfg.actionDesc)+'<br><b>'+esc(cfg.targetDesc)+'</b></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Gerekçe (zorunlu)</label><select id="wc_reason"><option value="">— seçin —</option>'+WC_REASONS.map(x=>'<option value="'+x[0]+'">'+esc(x[1])+'</option>').join("")+'</select></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Not (isteğe bağlı, en fazla 280)</label><textarea id="wc_note" maxlength="280" placeholder="Kısa açıklama…"></textarea></div>'
+    +'<div class="err" id="wc_err"></div>'
+    +'<div class="foot"><button class="btn" id="wc_cancel">Vazgeç</button><button class="btn '+(cfg.danger?"danger":"primary")+'" id="wc_ok">Onayla</button></div>';
+  $("wc_cancel").onclick=()=>{ closeModal(); if(cfg.onDone)cfg.onDone(false); };
+  $("wc_ok").onclick=async()=>{
+    const reason=$("wc_reason").value, note=($("wc_note").value||"").trim();
+    if(!reason){ $("wc_err").textContent="Gerekçe seçin."; return; }
+    $("wc_ok").disabled=true; $("wc_cancel").disabled=true; $("wc_ok").textContent="İşleniyor…";
+    const r=await cfg.run(reason, note||null, idem);
+    if(r.status===200){ closeModal(); if(cfg.onDone)cfg.onDone(true); return; }
+    $("wc_err").textContent=writeErrText(r); $("wc_ok").disabled=false; $("wc_cancel").disabled=false; $("wc_ok").textContent="Onayla";
+  };
+}
+function modHide(id, desired, label){
+  openWriteConfirm({
+    title: desired?"Yorumu gizle":"Yorumu göster",
+    actionDesc: desired?"Bu yorum tüm herkese açık yüzeylerden ve beğeni sayaçlarından gizlenecek (silinmez; puan/beğeni korunur).":"Bu yorum yeniden herkese açık olacak.",
+    targetDesc: label, danger: !!desired,
+    run:(reason,note,idem)=>adminApi("comment_set_hidden",{target:id,desired:desired,reason:reason,note:note,idempotency_key:idem}),
+    onDone:(ok)=>{ if(ok) loadModerationPage(); }
+  });
+}
+function memBlock(uid, desired, label){
+  openWriteConfirm({
+    title: desired?"Topluluk profilini bloke et":"Blokeyi kaldır",
+    actionDesc: desired?"Bu üyenin tüm yorum ve beğenileri herkese açık yüzeylerden gizlenecek. Bu bir Auth hesap yasağı DEĞİLDİR.":"Üyenin topluluk içeriği yeniden görünür olacak.",
+    targetDesc: label, danger: !!desired,
+    run:(reason,note,idem)=>adminApi("member_set_blocked",{target:uid,desired:desired,reason:reason,note:note,idempotency_key:idem}),
+    onDone:()=>{ openMember360(uid); }
+  });
+}
 
 /* ---------- İÇERİK (değiştirilmedi) ---------- */
 function contentRow(key){ return DATA.content.find(c=>c.key===key); }
@@ -497,7 +604,7 @@ async function renderMembers(){
     +'<span class="muted" id="mcount"></span></div>'
     +'<div id="memResults"><p class="muted">Yükleniyor…</p></div>'
     +'<div id="memPager" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>'
-    +'<div class="hint">Salt-okunur. Bloke / puan düzeltme / silme / moderasyon kontrollü yazma fazında (0C).</div></div>');
+    +'<div class="hint">Bloke/blokeyi kaldır işlemi Üye 360 içinde (onay + gerekçe ile). Puan düzeltme / silme 0C.2\'de.</div></div>');
   $("mq").oninput=()=>{ mState.q=$("mq").value; clearTimeout(mTimer); mTimer=setTimeout(()=>{ mState.offset=0; loadMembersPage(); },350); };
   $("mtype").onchange=()=>{ mState.type=$("mtype").value; mState.offset=0; loadMembersPage(); };
   $("mblk").onchange=()=>{ mState.blocked=$("mblk").value; mState.offset=0; loadMembersPage(); };
@@ -564,6 +671,12 @@ async function openMember360(uid){
     +line("Bloke", mem.blocked?"Evet":"Hayır")
     +line("Kayıt", fmtDate(id.created_at))+line("Son giriş", fmtDate(id.last_sign_in_at))
     +'</div></div>';
+  const canBlock=!!mem.profile_exists;
+  h+='<div style="margin:-4px 0 12px">'
+    +(canBlock
+       ? '<button class="btn '+(mem.blocked?"":"danger")+'" id="m360block">'+(mem.blocked?"Blokeyi kaldır":"Topluluk profilini bloke et")+'</button>'
+       : '<button class="btn" disabled>Bloke</button> <span class="muted">Topluluk profili bulunmuyor; bu işlem Auth hesabını kapatmaz.</span>')
+    +'</div>';
   h+='<div class="cards">'+stat(sm.trips||0,"Seyahat")+stat(sm.favorites||0,"Favori")+stat(sm.comments||0,"Yorum")+stat(sm.point_events||0,"Puan olayı")+'</div>';
   h+='<div class="acc">';
   h+='<div class="accitem"><div class="acchead"><span><b>Son seyahatler</b></span><span class="pill">'+esc(T.total||0)+'</span></div><div class="accbody">'
@@ -575,9 +688,10 @@ async function openMember360(uid){
   h+='<div class="accitem"><div class="acchead"><span><b>Son puan olayları</b></span><span class="pill">'+esc(P.total||0)+'</span></div><div class="accbody">'
     +((P.items||[]).length?(P.items).map(p=>'<div class="accrow"><span><b>'+esc(p.event_type||"—")+'</b> <span class="muted">· '+esc(p.status||"")+'</span></span><span>'+esc(p.points)+' puan · '+fmtDate(p.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(P)+'</div></div>';
   h+='</div>';
-  h+='<div class="hint" style="margin-top:10px">Salt-okunur görünüm. Bloke/puan/moderasyon işlemleri 0C\'de eklenecek.</div>';
+  h+='<div class="hint" style="margin-top:10px">Bloke = topluluk içeriği bastırma (yorum/beğeni herkese açık yüzeylerden kalkar); Auth hesap yasağı değildir. Puan düzeltme / içerik 0C.2\'de.</div>';
   h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
   $("sheet").innerHTML=h;
+  if(canBlock && $("m360block")) $("m360block").onclick=()=>memBlock(uid, !mem.blocked, (mem.display_name||id.email||uid));
 }
 
 /* ---------- modal ---------- */
