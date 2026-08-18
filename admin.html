@@ -91,12 +91,13 @@ tr:hover td{background:#faf8f3}
    - Güvenlik: yalnız anon anahtar; service_role YOK; iç RPC çağrısı YOK;
      yalnız admin-api Edge Function; tüm kullanıcı metni esc() ile basılır.
    ===================================================================== */
-const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0",pw:"asaadmin2026"};
+const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"};
 const FN_URL=CFG.url+"/functions/v1/admin-api";
-// Public tablolar için anon istemci (mevcut sekmeler). Benzersiz storageKey + oturum yok → tek GoTrueClient uyarısı gitsin, localStorage'a hiçbir şey yazılmaz.
-let db=null; try{ db=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:"asa-anon-public"}}); }catch(e){}
-// Privileged admin-api için AYRI Auth istemcisi. persistSession:false → JWT/PII localStorage'a yazılmaz. Farklı storageKey ile GoTrueClient çakışması önlenir.
-let authClient=null; try{ authClient=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:false,autoRefreshToken:true,detectSessionInUrl:false,storageKey:"asa-admin-auth"}}); }catch(e){}
+// FAZ 0D: ortak şifre KALDIRILDI. TEK Supabase istemcisi — authenticated admin oturumu,
+// sessionStorage (sekme oturumu; localStorage'a JWT yazılmaz). Editör okuma/yazma da bu oturumdan
+// geçer (RLS capability'e göre süzer). Tek GoTrueClient → çakışma yok.
+let authClient=null; try{ authClient=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:"asa-admin-auth",storage:window.sessionStorage}}); }catch(e){}
+let db=authClient;
 const $=id=>document.getElementById(id);
 const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const arr=s=>(s||"").split(",").map(x=>x.trim()).filter(Boolean);
@@ -114,12 +115,52 @@ const CONTENT_DEFAULTS={
 };
 let seg="ozet";
 
-function isAuthed(){ try{return sessionStorage.getItem("asa_admin")==="1";}catch(e){return false;} }
+let CAPS={admin:false,venues:false,cities:false,content:false,ads:false,moderate:false,members:false};
+function resetCaps(){ CAPS={admin:false,venues:false,cities:false,content:false,ads:false,moderate:false,members:false}; }
 
+// FAZ 0D: giriş = Supabase e-posta/şifre (ortak şifre yok). Sonra aktif admin + rol doğrulanır.
 function renderLogin(msg){
-  $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Yönetici şifresi ile giriş yap</p><input id="apw" type="password" placeholder="Yönetici şifresi" autocomplete="off"><div class="err" id="aerr">'+(msg||"")+'</div><button class="btn primary" id="abtn" style="width:100%">Giriş</button><div class="hint">Prototip: paylaşımlı yönetici şifresi (dış kapı). Üye/seyahat verileri için ayrıca Supabase yönetici girişi gerekir. Gerçek rol/kimlik 0D\'de tamamlanacak.</div></div>';
-  $("abtn").onclick=()=>{ if($("apw").value===CFG.pw){ try{sessionStorage.setItem("asa_admin","1");}catch(e){} boot(); } else { $("aerr").textContent="Şifre yanlış."; } };
-  $("apw").onkeydown=e=>{if(e.key==="Enter")$("abtn").click();};
+  $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Yönetici hesabınla giriş yap</p>'
+   +'<input id="le" type="email" placeholder="E-posta" autocomplete="username">'
+   +'<input id="lp" type="password" placeholder="Şifre" autocomplete="current-password">'
+   +'<div class="err" id="aerr">'+esc(msg||"")+'</div>'
+   +'<button class="btn primary" id="abtn" style="width:100%">Giriş</button>'
+   +'<div class="hint">Yalnız Supabase hesabı olan ve admin rolü verilmiş kişiler erişebilir.</div></div>';
+  const submit=async()=>{
+    const email=($("le").value||"").trim(), pw=$("lp").value||"";
+    if(!email||!pw){ $("aerr").textContent="E-posta ve şifre gerekli."; return; }
+    $("abtn").disabled=true; $("abtn").textContent="Giriş yapılıyor…";
+    const {error}=await authClient.auth.signInWithPassword({email, password:pw});
+    if(error){ $("aerr").textContent="Giriş başarısız. Bilgileri kontrol et."; $("abtn").disabled=false; $("abtn").textContent="Giriş"; return; }
+    bootGate();
+  };
+  $("abtn").onclick=submit;
+  $("lp").onkeydown=e=>{ if(e.key==="Enter")submit(); };
+  $("le").onkeydown=e=>{ if(e.key==="Enter")$("lp").focus(); };
+}
+
+async function loadCaps(){
+  const rc=async(fn)=>{ try{ const {data}=await authClient.rpc(fn); return data===true; }catch(e){ return false; } };
+  CAPS.admin=await rc('is_current_user_admin');
+  if(!CAPS.admin){ resetCaps(); return; }
+  CAPS.venues=await rc('_can_edit_venues');  CAPS.cities=await rc('_can_edit_cities');
+  CAPS.content=await rc('_can_edit_content'); CAPS.ads=await rc('_can_edit_ads');
+  CAPS.moderate=await rc('_can_moderate');    CAPS.members=await rc('_can_manage_members');
+}
+
+async function bootGate(){
+  let session=null; try{ const r=await authClient.auth.getSession(); session=r.data.session; }catch(e){}
+  if(!session){ renderLogin(); return; }
+  $("app").innerHTML='<div class="login"><p class="muted" style="padding:24px">Yetki kontrol ediliyor…</p></div>';
+  await loadCaps();
+  if(!CAPS.admin){
+    $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Bu panele erişim yetkiniz yok.</p>'
+     +'<div class="hint">Hesabınız aktif admin rolüne sahip değil. Yetki için sistem yöneticisiyle görüşün.</div>'
+     +'<button class="btn" id="lo2" style="width:100%;margin-top:14px">Çıkış</button></div>';
+    $("lo2").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} resetCaps(); renderLogin(); };
+    return;
+  }
+  boot();
 }
 
 /* ---------- admin-api (privileged, Auth JWT) ---------- */
@@ -177,13 +218,22 @@ function shell(body){
   $("app").innerHTML=
    '<div class="topbar"><div><div class="b"><b>asa</b>local · Yönetim</div><div class="s">Merkezi kontrol paneli</div></div><button class="logout" id="lo">Çıkış</button></div>'
    +'<div class="wrap"><div class="nav" id="nav"></div><div id="body"></div></div>';
-  $("lo").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} try{sessionStorage.removeItem("asa_admin");}catch(e){} renderLogin(); };
-  const segs=[["ozet","Özet"],["venues","Mekanlar"],["cities","Şehirler"],["tags","Etiketler"],["content","İçerik"],["comments","Moderasyon"],["ads","Reklamlar"],["members","Üyeler"]];
+  $("lo").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} resetCaps(); seg="ozet"; renderLogin(); };
+  const segs=[["ozet","Özet"]];
+  if(CAPS.venues){ segs.push(["venues","Mekanlar"]); segs.push(["tags","Etiketler"]); }
+  if(CAPS.cities)   segs.push(["cities","Şehirler"]);
+  if(CAPS.content)  segs.push(["content","İçerik"]);
+  if(CAPS.ads)      segs.push(["ads","Reklamlar"]);
+  if(CAPS.moderate) segs.push(["comments","Moderasyon"]);
+  if(CAPS.members)  segs.push(["members","Üyeler"]);
+  if(!segs.some(s=>s[0]===seg)) seg=segs[0][0];
   $("nav").innerHTML=segs.map(s=>'<button class="'+(seg===s[0]?"on":"")+'" onclick="go(\''+s[0]+'\')">'+s[1]+'</button>').join("");
   $("body").innerHTML=body;
 }
 function go(s){ seg=s; render(); }
 function render(){
+  const need={venues:'venues',tags:'venues',cities:'cities',content:'content',ads:'ads',comments:'moderate',members:'members'};
+  if(need[seg] && !CAPS[need[seg]]) seg='ozet';   // yetkisiz sekme → Özet (UI koruması; RLS/sunucu asıl kapı)
   if(seg==="ozet") return renderOzet();
   if(seg==="venues") return renderVenues();
   if(seg==="cities") return renderCities();
@@ -700,12 +750,11 @@ function closeModal(){ $("modal").classList.add("hide"); }
 $("modal").onclick=e=>{ if(e.target===$("modal"))closeModal(); };
 
 async function boot(){
-  if(!isAuthed()){ renderLogin(); return; }
   $("app").innerHTML='<div class="wrap"><p class="muted" style="padding:40px;text-align:center">Yükleniyor…</p></div>';
   await loadAll();
   render();
 }
-boot();
+bootGate();
 </script>
 </body>
 </html>
