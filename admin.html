@@ -115,8 +115,8 @@ const CONTENT_DEFAULTS={
 };
 let seg="ozet";
 
-let CAPS={admin:false,venues:false,cities:false,content:false,ads:false,moderate:false,members:false};
-function resetCaps(){ CAPS={admin:false,venues:false,cities:false,content:false,ads:false,moderate:false,members:false}; }
+let CAPS={admin:false,venues:false,cities:false,content:false,ads:false,moderate:false,members:false,superadmin:false};
+function resetCaps(){ CAPS={admin:false,venues:false,cities:false,content:false,ads:false,moderate:false,members:false,superadmin:false}; }
 
 // FAZ 0D: giriş = Supabase e-posta/şifre (ortak şifre yok). Sonra aktif admin + rol doğrulanır.
 function renderLogin(msg){
@@ -146,6 +146,7 @@ async function loadCaps(){
   CAPS.venues=await rc('_can_edit_venues');  CAPS.cities=await rc('_can_edit_cities');
   CAPS.content=await rc('_can_edit_content'); CAPS.ads=await rc('_can_edit_ads');
   CAPS.moderate=await rc('_can_moderate');    CAPS.members=await rc('_can_manage_members');
+  try{ const {data}=await authClient.rpc('current_user_has_admin_role',{role_name:'super_admin'}); CAPS.superadmin=(data===true); }catch(e){ CAPS.superadmin=false; }
 }
 
 async function bootGate(){
@@ -226,13 +227,14 @@ function shell(body){
   if(CAPS.ads)      segs.push(["ads","Reklamlar"]);
   if(CAPS.moderate) segs.push(["comments","Moderasyon"]);
   if(CAPS.members)  segs.push(["members","Üyeler"]);
+  if(CAPS.superadmin) segs.push(["changelog","Değişiklik Günlüğü"]);
   if(!segs.some(s=>s[0]===seg)) seg=segs[0][0];
   $("nav").innerHTML=segs.map(s=>'<button class="'+(seg===s[0]?"on":"")+'" onclick="go(\''+s[0]+'\')">'+s[1]+'</button>').join("");
   $("body").innerHTML=body;
 }
 function go(s){ seg=s; render(); }
 function render(){
-  const need={venues:'venues',tags:'venues',cities:'cities',content:'content',ads:'ads',comments:'moderate',members:'members'};
+  const need={venues:'venues',tags:'venues',cities:'cities',content:'content',ads:'ads',comments:'moderate',members:'members',changelog:'superadmin'};
   if(need[seg] && !CAPS[need[seg]]) seg='ozet';   // yetkisiz sekme → Özet (UI koruması; RLS/sunucu asıl kapı)
   if(seg==="ozet") return renderOzet();
   if(seg==="venues") return renderVenues();
@@ -242,6 +244,7 @@ function render(){
   if(seg==="comments") return renderComments();
   if(seg==="ads") return renderAds();
   if(seg==="members") return renderMembers();
+  if(seg==="changelog") return renderChangeLog();
 }
 function stat(n,l){ return '<div class="stat"><b>'+esc(n)+'</b><span>'+esc(l)+'</span></div>'; }
 
@@ -534,7 +537,7 @@ function renderContent(){
       +'<textarea id="c_'+k+'" style="width:100%;min-height:52px" placeholder="Varsayılan: '+esc(def)+'">'+esc(val)+'</textarea>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">'
         +'<label class="check" style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="ce_'+k+'" '+(en?"checked":"")+'> Sitede göster</label>'
-        +'<button class="btn sm primary" onclick="saveContent(\''+k+'\')">Kaydet</button>'
+        +'<div style="display:flex;gap:6px"><button class="btn sm" onclick="openContentHistory(\''+k+'\')">Geçmiş / Geri Al</button><button class="btn sm primary" onclick="saveContent(\''+k+'\')">Kaydet</button></div>'
       +'</div>'
       +'<div class="muted" id="cmsg_'+k+'" style="font-size:12px;min-height:14px;margin-top:4px"></div>'
     +'</div>';
@@ -722,10 +725,11 @@ async function openMember360(uid){
     +line("Kayıt", fmtDate(id.created_at))+line("Son giriş", fmtDate(id.last_sign_in_at))
     +'</div></div>';
   const canBlock=!!mem.profile_exists;
-  h+='<div style="margin:-4px 0 12px">'
+  h+='<div style="margin:-4px 0 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     +(canBlock
        ? '<button class="btn '+(mem.blocked?"":"danger")+'" id="m360block">'+(mem.blocked?"Blokeyi kaldır":"Topluluk profilini bloke et")+'</button>'
        : '<button class="btn" disabled>Bloke</button> <span class="muted">Topluluk profili bulunmuyor; bu işlem Auth hesabını kapatmaz.</span>')
+    +(CAPS.superadmin && mem.profile_exists ? ' <button class="btn" id="m360pts">Puan düzelt</button>' : '')
     +'</div>';
   h+='<div class="cards">'+stat(sm.trips||0,"Seyahat")+stat(sm.favorites||0,"Favori")+stat(sm.comments||0,"Yorum")+stat(sm.point_events||0,"Puan olayı")+'</div>';
   h+='<div class="acc">';
@@ -738,10 +742,130 @@ async function openMember360(uid){
   h+='<div class="accitem"><div class="acchead"><span><b>Son puan olayları</b></span><span class="pill">'+esc(P.total||0)+'</span></div><div class="accbody">'
     +((P.items||[]).length?(P.items).map(p=>'<div class="accrow"><span><b>'+esc(p.event_type||"—")+'</b> <span class="muted">· '+esc(p.status||"")+'</span></span><span>'+esc(p.points)+' puan · '+fmtDate(p.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(P)+'</div></div>';
   h+='</div>';
-  h+='<div class="hint" style="margin-top:10px">Bloke = topluluk içeriği bastırma (yorum/beğeni herkese açık yüzeylerden kalkar); Auth hesap yasağı değildir. Puan düzeltme / içerik 0C.2\'de.</div>';
+  h+='<div class="hint" style="margin-top:10px">Bloke = topluluk içeriği bastırma (yorum/beğeni herkese açık yüzeylerden kalkar); Auth hesap yasağı değildir. Manuel puan düzeltme yalnız super_admin, ±100, gerekçe zorunlu, denetim kayıtlı.</div>';
   h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
   $("sheet").innerHTML=h;
   if(canBlock && $("m360block")) $("m360block").onclick=()=>memBlock(uid, !mem.blocked, (mem.display_name||id.email||uid));
+  if($("m360pts")) $("m360pts").onclick=()=>openPointsAdjust(uid, (mem.display_name||id.email||uid), mem.points);
+}
+
+/* ---------- 0C.2: manuel puan düzeltme (super_admin, ±100, gerekçe zorunlu, idempotent) ---------- */
+function openPointsAdjust(uid, label, curPoints){
+  openModal();
+  const idem=uuid4();
+  $("sheet").innerHTML='<h2>Puan düzelt</h2>'
+    +'<div class="notice warn" style="margin-bottom:12px">Manuel puan düzeltmesi denetim kaydına yazılır ve geri alınamaz. İşlem başına en fazla <b>±100</b>. Toplam puan negatife düşemez.<br><b>'+esc(label)+'</b> · mevcut puan: <b>'+esc(curPoints==null?"—":curPoints)+'</b></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Değişim (−100 … +100, 0 olamaz)</label><input id="pa_delta" type="number" min="-100" max="100" step="1" placeholder="örn. -5 veya 10"></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Gerekçe (zorunlu, en az 3 karakter)</label><input id="pa_reason" type="text" maxlength="280" placeholder="Neden düzeltiliyor?"></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Not (isteğe bağlı, en fazla 280)</label><textarea id="pa_note" maxlength="280" placeholder="Ek açıklama…"></textarea></div>'
+    +'<div class="err" id="pa_err"></div>'
+    +'<div class="foot"><button class="btn" id="pa_cancel">Vazgeç</button><button class="btn primary" id="pa_ok">Onayla</button></div>';
+  $("pa_cancel").onclick=()=>closeModal();
+  $("pa_ok").onclick=async()=>{
+    const delta=parseInt($("pa_delta").value,10); const reason=($("pa_reason").value||"").trim(); const note=($("pa_note").value||"").trim();
+    if(!Number.isInteger(delta)||delta===0||delta<-100||delta>100){ $("pa_err").textContent="Değişim −100..+100 arası, 0 dışında bir tam sayı olmalı."; return; }
+    if(reason.length<3){ $("pa_err").textContent="Gerekçe en az 3 karakter."; return; }
+    $("pa_ok").disabled=true; $("pa_cancel").disabled=true; $("pa_ok").textContent="İşleniyor…";
+    const r=await adminApi("adjust_points",{target:uid,delta:delta,reason:reason,note:note||null,idempotency_key:idem});
+    if(r.status===200){ closeModal(); openMember360(uid); return; }
+    let t=writeErrText(r); if(r.body&&r.body.error==="would_make_negative") t="Bu düzeltme toplam puanı negatife düşürür — daha küçük bir değer gir.";
+    $("pa_err").textContent=t; $("pa_ok").disabled=false; $("pa_cancel").disabled=false; $("pa_ok").textContent="Onayla";
+  };
+}
+
+/* ---------- 0C.2: içerik geçmişi + geri alma (super_admin/content_editor) ---------- */
+async function openContentHistory(key){
+  openModal();
+  $("sheet").innerHTML='<h2>İçerik geçmişi</h2><p class="muted">'+esc(key)+'</p><div class="acc"><div class="accitem"><div class="accbody"><div class="accrow"><span class="muted">Yükleniyor…</span></div></div></div></div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  const r=await adminApi("content_versions",{key:key,limit:50});
+  if(r.status!==200){ $("sheet").innerHTML='<h2>İçerik geçmişi</h2><div class="notice err">'+esc(apiErrText(r.status))+'</div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>'; return; }
+  const rows=((r.body&&r.body.data&&r.body.data.rows)||[]);
+  let h='<h2>İçerik geçmişi</h2><p class="muted" style="margin-bottom:10px">'+esc(key)+' · '+esc((r.body.data.total||rows.length))+' sürüm</p>';
+  if(!rows.length){ h+='<p class="muted">Sürüm yok.</p>'; }
+  else{ h+='<div class="acc">'+rows.map(v=>'<div class="accitem"><div class="acchead"><span><b>v'+esc(v.version)+'</b> <span class="muted">· '+esc(fmtDate(v.at))+(v.reason?(" · "+esc(v.reason)):"")+'</span></span><span>'+(v.enabled===false?'<span class="pill off">gizli</span>':'<span class="pill on">açık</span>')+'</span></div>'
+      +'<div class="accbody"><div class="accrow"><span style="max-width:70%;word-break:break-word">'+esc((v.value||"").slice(0,240)||"—")+'</span>'
+      +'<button class="btn sm" onclick="doContentRollback(\''+esc(key).replace(/'/g,"\\'")+'\','+esc(v.version)+')">Bu sürüme dön</button></div></div></div>').join("")+'</div>'; }
+  h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  $("sheet").innerHTML=h;
+}
+function doContentRollback(key, version){
+  openModal();
+  const idem=uuid4();
+  $("sheet").innerHTML='<h2>Sürüme geri dön</h2>'
+    +'<div class="notice warn" style="margin-bottom:12px"><b>'+esc(key)+'</b> içeriği <b>v'+esc(version)+'</b> ile değiştirilecek. Geçmiş silinmez; bu yeni bir sürüm olarak yazılır.</div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Gerekçe (zorunlu, en az 3 karakter)</label><input id="cr_reason" type="text" maxlength="280" placeholder="Neden geri alınıyor?"></div>'
+    +'<div class="err" id="cr_err"></div>'
+    +'<div class="foot"><button class="btn" id="cr_cancel">Vazgeç</button><button class="btn primary" id="cr_ok">Onayla</button></div>';
+  $("cr_cancel").onclick=()=>openContentHistory(key);
+  $("cr_ok").onclick=async()=>{
+    const reason=($("cr_reason").value||"").trim();
+    if(reason.length<3){ $("cr_err").textContent="Gerekçe en az 3 karakter."; return; }
+    $("cr_ok").disabled=true; $("cr_cancel").disabled=true; $("cr_ok").textContent="İşleniyor…";
+    const r=await adminApi("content_rollback",{key:key,version:version,reason:reason,idempotency_key:idem});
+    if(r.status===200){ try{ const {data}=await db.from("site_content").select("*").order("key"); DATA.content=data||[]; }catch(e){} closeModal(); if(seg==="content")render(); return; }
+    $("cr_err").textContent=writeErrText(r); $("cr_ok").disabled=false; $("cr_cancel").disabled=false; $("cr_ok").textContent="Onayla";
+  };
+}
+
+/* ---------- 0C.2: Değişiklik Günlüğü (super_admin, salt-okunur, sayfalı) ---------- */
+let CL={from:"",to:"",actor:"",entity:"",action:"",eid:"",offset:0,limit:25,total:0};
+function renderChangeLog(){
+  const b='<div class="panel"><h3 style="margin-bottom:6px">Değişiklik Günlüğü</h3><p class="muted" style="margin-bottom:12px">Editör tablolarındaki (mekan/şehir/içerik/reklam) değişikliklerin salt-okunur denetim kaydı. Yalnız super_admin.</p>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px">'
+    +'<div class="fld"><label>Başlangıç</label><input id="cl_from" type="date" value="'+esc(CL.from)+'"></div>'
+    +'<div class="fld"><label>Bitiş</label><input id="cl_to" type="date" value="'+esc(CL.to)+'"></div>'
+    +'<div class="fld"><label>Tablo</label><select id="cl_entity"><option value="">Hepsi</option>'+["venues","cities","site_content","ads"].map(e=>'<option value="'+e+'"'+(CL.entity===e?" selected":"")+'>'+e+'</option>').join("")+'</select></div>'
+    +'<div class="fld"><label>İşlem</label><select id="cl_action"><option value="">Hepsi</option>'+["insert","update","delete"].map(a=>'<option value="'+a+'"'+(CL.action===a?" selected":"")+'>'+a+'</option>').join("")+'</select></div>'
+    +'<div class="fld"><label>Admin UID</label><input id="cl_actor" type="text" value="'+esc(CL.actor)+'" placeholder="uuid (ops.)"></div>'
+    +'<div class="fld"><label>Kayıt kimliği</label><input id="cl_eid" type="text" value="'+esc(CL.eid)+'" placeholder="id/code/key (ops.)"></div>'
+    +'</div><div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn primary sm" onclick="clSearch(0)">Filtrele</button><button class="btn sm" onclick="clReset()">Temizle</button></div>'
+    +'<div id="clBody"><p class="muted">Yükleniyor…</p></div></div>';
+  shell(b);
+  clSearch(CL.offset||0);
+}
+function clReset(){ CL={from:"",to:"",actor:"",entity:"",action:"",eid:"",offset:0,limit:25,total:0}; renderChangeLog(); }
+async function clSearch(offset){
+  CL.from=($("cl_from")||{}).value||""; CL.to=($("cl_to")||{}).value||""; CL.entity=($("cl_entity")||{}).value||"";
+  CL.action=($("cl_action")||{}).value||""; CL.actor=(($("cl_actor")||{}).value||"").trim(); CL.eid=(($("cl_eid")||{}).value||"").trim();
+  CL.offset=offset||0;
+  const p={limit:CL.limit,offset:CL.offset};
+  if(CL.from) p.from=CL.from+"T00:00:00Z"; if(CL.to) p.to=CL.to+"T23:59:59Z";
+  if(CL.entity) p.entity=CL.entity; if(CL.action) p.action=CL.action;
+  if(CL.actor) p.actor_uid=CL.actor; if(CL.eid) p.entity_id=CL.eid;
+  const box=$("clBody"); if(box)box.innerHTML='<p class="muted">Yükleniyor…</p>';
+  const r=await adminApi("audit_search",p);
+  if(!box)return;
+  if(r.status!==200){ box.innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; return; }
+  const d=(r.body&&r.body.data)||{}; const rows=d.rows||[]; CL.total=d.total||0;
+  if(!rows.length){ box.innerHTML='<p class="muted">Kayıt yok.</p>'; return; }
+  let h='<div class="tablewrap"><table><thead><tr><th>Tarih</th><th>Admin</th><th>Tablo</th><th>İşlem</th><th>Kayıt</th><th></th></tr></thead><tbody>';
+  h+=rows.map(x=>'<tr><td style="white-space:nowrap">'+esc(fmtDate(x.at))+'</td><td class="muted" style="font-size:11px">'+esc((x.actor_uid||"—"))+'</td><td><b>'+esc(x.entity)+'</b></td><td>'+esc(x.action)+'</td><td>'+esc(x.entity_id||"—")+'</td><td><button class="btn sm" onclick="openAuditDetail('+esc(x.id)+')">Detay</button></td></tr>').join("");
+  h+='</tbody></table></div>';
+  const from=CL.offset+1, to=CL.offset+rows.length;
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><span class="muted">'+from+'–'+to+' / '+CL.total+'</span><span style="display:flex;gap:6px">'
+    +'<button class="btn sm" '+(CL.offset<=0?"disabled":"")+' onclick="clSearch('+Math.max(0,CL.offset-CL.limit)+')">← Önceki</button>'
+    +'<button class="btn sm" '+(to>=CL.total?"disabled":"")+' onclick="clSearch('+(CL.offset+CL.limit)+')">Sonraki →</button></span></div>';
+  box.innerHTML=h;
+}
+async function openAuditDetail(id){
+  openModal();
+  $("sheet").innerHTML='<h2>Değişiklik detayı</h2><p class="muted">Yükleniyor…</p><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  const r=await adminApi("audit_detail",{id:id});
+  if(r.status!==200){ $("sheet").innerHTML='<h2>Değişiklik detayı</h2><div class="notice err">'+esc(apiErrText(r.status))+'</div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>'; return; }
+  const d=(r.body&&r.body.data)||{};
+  const jshow=o=>{ if(o==null)return '<span class="muted">—</span>'; try{ return '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;background:#f6f6f4;padding:8px;border-radius:6px;max-height:200px;overflow:auto">'+esc(JSON.stringify(o,null,2))+'</pre>'; }catch(e){ return esc(String(o)); } };
+  let h='<h2>Değişiklik detayı</h2>';
+  h+='<div class="acc"><div class="accitem"><div class="accbody">'
+    +'<div class="accrow"><span><b>Tarih</b></span><span>'+esc(fmtDate(d.at))+'</span></div>'
+    +'<div class="accrow"><span><b>Admin</b></span><span class="muted" style="font-size:12px">'+esc(d.actor_uid||"—")+'</span></div>'
+    +'<div class="accrow"><span><b>Tablo</b></span><span>'+esc(d.entity)+'</span></div>'
+    +'<div class="accrow"><span><b>İşlem</b></span><span>'+esc(d.action)+'</span></div>'
+    +'<div class="accrow"><span><b>Kayıt</b></span><span>'+esc(d.entity_id||"—")+'</span></div>'
+    +'</div></div></div>';
+  h+='<div style="margin-top:10px"><b>Önce</b>'+jshow(d.before)+'</div><div style="margin-top:8px"><b>Sonra</b>'+jshow(d.after)+'</div>';
+  h+='<div class="hint" style="margin-top:8px">Alanlar güvenli allowlist ile gösterilir.</div>';
+  h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  $("sheet").innerHTML=h;
 }
 
 /* ---------- modal ---------- */
