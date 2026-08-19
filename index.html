@@ -320,6 +320,7 @@
 })(window);
 /* şehir -> IANA timezone */
 function asaCityTz(city){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; return m[city]||'Europe/Amsterdam'; }
+function asaCityPath(city){ return city==='Kopenhag' ? '/kopenhag/' : '/amsterdam/'; }
 </script>
 <script>
 const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0",pw:"asalocal2026"};
@@ -432,13 +433,13 @@ async function saveTrip(navigate){
         timezone:asaCityTz(sel.city),
         preferences:{vacation_types:[...sel.types], duration:sel.duration, duration_days:sel.durationDays}
       });
-      if(res && res.ok && res.trip){ location.href="/amsterdam/?trip="+res.trip.id+"&city="+encodeURIComponent(sel.city); return; }
+      if(res && res.ok && res.trip){ location.href=asaCityPath(sel.city)+"?trip="+res.trip.id+"&city="+encodeURIComponent(sel.city); return; }
       // Aynı şehir+çakışan tarihte zaten seyahat varsa onu aç (yeni mükerrer oluşturma)
-      if(res && res.reason==="duplicate" && res.trip){ location.href="/amsterdam/?trip="+res.trip.id+"&city="+encodeURIComponent(sel.city); return; }
+      if(res && res.reason==="duplicate" && res.trip){ location.href=asaCityPath(sel.city)+"?trip="+res.trip.id+"&city="+encodeURIComponent(sel.city); return; }
     }catch(e){}
   }
   // Misafir / tarihsiz / hata: eski akış
-  location.href="/amsterdam/?city="+encodeURIComponent(sel.city);
+  location.href=asaCityPath(sel.city)+"?city="+encodeURIComponent(sel.city);
 }
 function wire(){
   $("countrySel").onchange=e=>{ sel.country=e.target.value||null; sel.city=null; sel.active=false; renderCities(); updateGo(); };
@@ -456,7 +457,7 @@ function renderAcct(){ const b=$("acctBtn"); if(session){ b.textContent="👤 "+
 window.__ASA_HOME_BUILD="ASA_BUILD_20260814_A7A8";
 function asaEsc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function asaFmtDates(sd,ed){ try{ const MO=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"]; const s=new Date(sd+"T00:00:00"),e=new Date(ed+"T00:00:00"); if(isNaN(s)||isNaN(e))return ""; return s.getDate()+" "+MO[s.getMonth()]+"–"+e.getDate()+" "+MO[e.getMonth()]; }catch(e){return "";} }
-function openTrip(id,city){ location.href="/amsterdam/?trip="+id+"&city="+encodeURIComponent(city); }
+function openTrip(id,city){ location.href=asaCityPath(city)+"?trip="+id+"&city="+encodeURIComponent(city); }
 const LC_STYLE={active:["Aktif Seyahat","bg-secondary text-on-secondary"],upcoming:["Yaklaşan","bg-primary text-on-primary"],draft:["Taslak","bg-surface-container text-on-surface-variant"],past:["Geçmiş","bg-surface-container text-on-surface-variant"]};
 async function renderTripHub(){
   const hub=$("tripHub"); if(!hub)return;
