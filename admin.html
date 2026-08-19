@@ -742,7 +742,7 @@ async function openMember360(uid){
   h+='<div class="accitem"><div class="acchead"><span><b>Son puan olayları</b></span><span class="pill">'+esc(P.total||0)+'</span></div><div class="accbody">'
     +((P.items||[]).length?(P.items).map(p=>'<div class="accrow"><span><b>'+esc(p.event_type||"—")+'</b> <span class="muted">· '+esc(p.status||"")+'</span></span><span>'+esc(p.points)+' puan · '+fmtDate(p.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(P)+'</div></div>';
   h+='</div>';
-  h+='<div class="hint" style="margin-top:10px">Bloke = topluluk içeriği bastırma (yorum/beğeni herkese açık yüzeylerden kalkar); Auth hesap yasağı değildir. Manuel puan düzeltme yalnız super_admin, ±100, gerekçe zorunlu, denetim kayıtlı.</div>';
+  h+='<div class="hint" style="margin-top:10px">Bloke = topluluk içeriği bastırma (yorum/beğeni herkese açık yüzeylerden kalkar); Auth hesap yasağı değildir. Manuel puan düzeltme yalnız super_admin tarafından yapılabilir; ±100 sınırındadır, gerekçe ve ayrıntılı not zorunludur ve işlem denetim kaydına yazılır.</div>';
   h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
   $("sheet").innerHTML=h;
   if(canBlock && $("m360block")) $("m360block").onclick=()=>memBlock(uid, !mem.blocked, (mem.display_name||id.email||uid));
@@ -756,17 +756,18 @@ function openPointsAdjust(uid, label, curPoints){
   $("sheet").innerHTML='<h2>Puan düzelt</h2>'
     +'<div class="notice warn" style="margin-bottom:12px">Manuel puan düzeltmesi denetim kaydına yazılır ve geri alınamaz. İşlem başına en fazla <b>±100</b>. Toplam puan negatife düşemez.<br><b>'+esc(label)+'</b> · mevcut puan: <b>'+esc(curPoints==null?"—":curPoints)+'</b></div>'
     +'<div class="fld" style="margin-bottom:8px"><label>Değişim (−100 … +100, 0 olamaz)</label><input id="pa_delta" type="number" min="-100" max="100" step="1" placeholder="örn. -5 veya 10"></div>'
-    +'<div class="fld" style="margin-bottom:8px"><label>Gerekçe (zorunlu, en az 3 karakter)</label><input id="pa_reason" type="text" maxlength="280" placeholder="Neden düzeltiliyor?"></div>'
-    +'<div class="fld" style="margin-bottom:8px"><label>Not (isteğe bağlı, en fazla 280)</label><textarea id="pa_note" maxlength="280" placeholder="Ek açıklama…"></textarea></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Gerekçe (zorunlu, 3–280 karakter)</label><input id="pa_reason" type="text" maxlength="280" placeholder="Neden düzeltiliyor?"></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Not (zorunlu, 3–280 karakter)</label><textarea id="pa_note" maxlength="280" placeholder="Düzeltmenin ayrıntılı açıklamasını yazın…"></textarea></div>'
     +'<div class="err" id="pa_err"></div>'
     +'<div class="foot"><button class="btn" id="pa_cancel">Vazgeç</button><button class="btn primary" id="pa_ok">Onayla</button></div>';
   $("pa_cancel").onclick=()=>closeModal();
   $("pa_ok").onclick=async()=>{
     const delta=parseInt($("pa_delta").value,10); const reason=($("pa_reason").value||"").trim(); const note=($("pa_note").value||"").trim();
     if(!Number.isInteger(delta)||delta===0||delta<-100||delta>100){ $("pa_err").textContent="Değişim −100..+100 arası, 0 dışında bir tam sayı olmalı."; return; }
-    if(reason.length<3){ $("pa_err").textContent="Gerekçe en az 3 karakter."; return; }
+    if(reason.length<3||reason.length>280){ $("pa_err").textContent="Gerekçe 3–280 karakter olmalı."; return; }
+    if(note.length<3||note.length>280){ $("pa_err").textContent="Ayrıntılı not zorunlu (3–280 karakter)."; return; }
     $("pa_ok").disabled=true; $("pa_cancel").disabled=true; $("pa_ok").textContent="İşleniyor…";
-    const r=await adminApi("adjust_points",{target:uid,delta:delta,reason:reason,note:note||null,idempotency_key:idem});
+    const r=await adminApi("adjust_points",{target:uid,delta:delta,reason:reason,note:note,idempotency_key:idem});
     if(r.status===200){ closeModal(); openMember360(uid); return; }
     let t=writeErrText(r); if(r.body&&r.body.error==="would_make_negative") t="Bu düzeltme toplam puanı negatife düşürür — daha küçük bir değer gir.";
     $("pa_err").textContent=t; $("pa_ok").disabled=false; $("pa_cancel").disabled=false; $("pa_ok").textContent="Onayla";
