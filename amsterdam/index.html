@@ -691,7 +691,7 @@ window.__snapshotPlan=async function(){
 </script>
 <script>
 /* ===== referans noktaları ===== */
-const CITY=(()=>{try{var p=new URLSearchParams(location.search).get('city');if(p)return p;var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';}catch(e){}return 'Amsterdam';})();
+const CITY=(()=>{try{var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';var p=new URLSearchParams(location.search).get('city');if(p)return p;}catch(e){}return 'Amsterdam';})();
 const CITYCONF={
  "Amsterdam":{home:{lat:52.3680,lng:4.8470,name:"Rembrandtpark"},view:[52.370,4.895,12],sub:"Amsterdam \u00b7 yerel gibi gez",blurb:"Klasik turist de\u011fil, lokal ya\u015fam modundas\u0131n: iyi kahve, g\u00fczel \u00f6\u011fle yeme\u011fi, bisikletle ke\u015fif, ak\u015fam \u015farab\u0131."},
  "Kopenhag":{home:{lat:55.6805,lng:12.5615,name:"Indre By (merkez)"},view:[55.6805,12.5615,13],sub:"Kopenhag \u00b7 yerel gibi gez",blurb:"\u0130skandinav tasar\u0131m\u0131, \u00fc\u00e7\u00fcnc\u00fc dalga kahve, efsane f\u0131r\u0131nlar ve liman kenar\u0131: Kopenhag'\u0131 turist de\u011fil, yerel gibi ke\u015ffet."}
@@ -2065,7 +2065,7 @@ document.getElementById("checkList").innerHTML=CHECKS.map(c=>'<li>'+c+'</li>').j
 /* ===== INIT ===== */
 (function cityInit(){try{
  var hs=document.getElementById('hdrSub'); if(hs)hs.textContent=CC.sub;
- try{document.title=CITY+' \u00b7 Lokal Ya\u015fam Rehberi';}catch(e){}
+ try{document.title=CITY+' \u00b7 Lokal Ya\u015fam Rehberi';}catch(e){} try{var _cn=(CITY==='Kopenhag')?'https://www.asalocal.club/kopenhag/':'https://www.asalocal.club/amsterdam/';var _l=document.querySelector('link[rel="canonical"]');if(!_l){_l=document.createElement('link');_l.setAttribute('rel','canonical');document.head.appendChild(_l);}_l.setAttribute('href',_cn);}catch(e){}
  if(CITY!=='Amsterdam'){
    var hp=document.querySelector('[data-ck="app.pano.p"]'); if(hp){hp.textContent=CC.blurb; hp.removeAttribute('data-ck');}
    var hl=document.getElementById('heroLoc'); if(hl)hl.textContent='\ud83d\udccd '+CC.home.name;
