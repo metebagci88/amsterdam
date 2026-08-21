@@ -640,7 +640,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   }
   global.createTripStore=createTripStore;
 })(window);
-function asaCityTz(city){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; return m[city]||'Europe/Amsterdam'; }
+function asaCityTz(city){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; return (window.__cityTz&&window.__cityTz[city])||m[city]||'Europe/Amsterdam'; }
 /* Tek Supabase istemcisi (çoklu GoTrueClient uyarısını ve oturum yarışını önler) */
 window.asaDB=function(){ try{ if(!window.__asaSB && window.supabase && window.supabase.createClient){ window.__asaSB=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"); } }catch(e){} return window.__asaSB||null; };
 /* A5/A9 TripSync: plan+tercihleri DB trip'ine otomatik kaydet, durum göster, geri yükle */
@@ -691,13 +691,55 @@ window.__snapshotPlan=async function(){
 </script>
 <script>
 /* ===== referans noktaları ===== */
-const CITY=(()=>{try{var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';var p=new URLSearchParams(location.search).get('city');if(p)return p;}catch(e){}return 'Amsterdam';})();
+const CITY=(()=>{try{var p=new URLSearchParams(location.search).get('city');if(p)return p;var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';}catch(e){}return 'Amsterdam';})();
 const CITYCONF={
  "Amsterdam":{home:{lat:52.3680,lng:4.8470,name:"Rembrandtpark"},view:[52.370,4.895,12],sub:"Amsterdam \u00b7 yerel gibi gez",blurb:"Klasik turist de\u011fil, lokal ya\u015fam modundas\u0131n: iyi kahve, g\u00fczel \u00f6\u011fle yeme\u011fi, bisikletle ke\u015fif, ak\u015fam \u015farab\u0131."},
  "Kopenhag":{home:{lat:55.6805,lng:12.5615,name:"Indre By (merkez)"},view:[55.6805,12.5615,13],sub:"Kopenhag \u00b7 yerel gibi gez",blurb:"\u0130skandinav tasar\u0131m\u0131, \u00fc\u00e7\u00fcnc\u00fc dalga kahve, efsane f\u0131r\u0131nlar ve liman kenar\u0131: Kopenhag'\u0131 turist de\u011fil, yerel gibi ke\u015ffet."}
 };
 const CC=CITYCONF[CITY]||CITYCONF["Amsterdam"];
 const HOME=CC.home;
+/* ===== AOÇ-1B · cities tablosundan görünüm+metin (fail-safe, timeout≤1.8s) =====
+   Yalnız: harita view (lat/lng/zoom), alt-başlık(name), blurb(Amsterdam-dışı, mevcut mantık), timezone.
+   HOME / AREA_CENTERS / CITY_COVERAGE DEĞİŞMEZ. DB hata/kayıt yok/null/geçersiz → hard-coded korunur. */
+(function(){
+  function vnum(x){ return typeof x==='number' && isFinite(x); }
+  function vlat(x){ return vnum(x) && x>=-90 && x<=90; }
+  function vlng(x){ return vnum(x) && x>=-180 && x<=180; }
+  function vzoom(x){ return vnum(x) && x>=1 && x<=22; }
+  function vtz(x){ try{ if(!x||typeof x!=='string')return false; Intl.DateTimeFormat(undefined,{timeZone:x}); return true; }catch(e){ return false; } }
+  function applyRow(r){
+    if(!r) return;
+    if(vlat(r.lat)&&vlng(r.lng)&&vzoom(r.zoom)){
+      CC.view=[r.lat,r.lng,r.zoom];
+      try{ if(typeof CITY_VIEW!=='undefined'){ CITY_VIEW[CITY]=CC.view;
+        if(typeof MAP!=='undefined'&&MAP&&MAP.map&&MAP.city===CITY){ MAP.map.setView([r.lat,r.lng],r.zoom); } } }catch(e){}
+    }
+    if(typeof r.name==='string'&&r.name.trim()){
+      CC.sub=r.name.trim()+' · yerel gibi gez';
+      try{ var hs=document.getElementById('hdrSub'); if(hs)hs.textContent=CC.sub; }catch(e){}
+    }
+    if(typeof r.blurb==='string'&&r.blurb.trim()&&CITY!=='Amsterdam'){   // Amsterdam pano statik (regresyon önleme)
+      CC.blurb=r.blurb.trim();
+      try{ var hp=document.getElementById('panoBlurb')||document.querySelector('[data-ck="app.pano.p"]');
+        if(hp){ hp.textContent=CC.blurb; hp.removeAttribute('data-ck'); } }catch(e){}
+    }
+    if(vtz(r.timezone)){ CC._tz=r.timezone; window.__cityTz=window.__cityTz||{}; window.__cityTz[CITY]=r.timezone; }
+  }
+  async function run(){
+    var deadline=Date.now()+1800, cli=null;
+    while(Date.now()<deadline){ try{ cli=(window.asaDB&&window.asaDB())||null; }catch(e){ cli=null; } if(cli)break; await new Promise(function(res){ setTimeout(res,80); }); }
+    if(!cli) return;                                                    // supabase yüklenmedi → fallback
+    var remain=deadline-Date.now(); if(remain<300)remain=300;
+    try{
+      var qp=cli.from('cities').select('name,lat,lng,zoom,timezone,blurb,status').eq('name',CITY).eq('status','active').maybeSingle();
+      var to=new Promise(function(res){ setTimeout(function(){ res({__timeout:true}); },remain); });
+      var r=await Promise.race([qp,to]);
+      if(r&&r.__timeout) return;                                        // ağ takıldı → fallback (hard-coded zaten çizili)
+      if(r&&!r.error&&r.data) applyRow(r.data);                         // status!='active' → data null → fallback
+    }catch(e){}                                                         // her istisna → fallback
+  }
+  try{ run(); }catch(e){}
+})();
 function AC(){ if(CITY==='Amsterdam')return AREA_CENTERS; var m={}; (typeof V!=='undefined'?V:[]).forEach(function(v){ if(!v||v.city!==CITY||v.lat==null)return; (m[v.area]=m[v.area]||[]).push([v.lat,v.lng]); }); var out={}; Object.keys(m).forEach(function(a){var p=m[a];out[a]=[p.reduce(function(t,x){return t+x[0];},0)/p.length,p.reduce(function(t,x){return t+x[1];},0)/p.length];}); return out; }
 let userLoc=null;
 
@@ -1973,7 +2015,7 @@ window.DecisionEngine=(function(){
 
 /* ---- Karar: GPS-only konum katmanı (deLoc) — konaklama/mahalle/pin/HOME KULLANILMAZ ---- */
 var deLoc=null, deLocState='idle', deTimeManual=false;
-function deCityTz(){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; return m[(typeof CITY!=='undefined'?CITY:'')]||'Europe/Amsterdam'; }
+function deCityTz(){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; var ck=(typeof CITY!=='undefined'?CITY:''); return (window.__cityTz&&window.__cityTz[ck])||m[ck]||'Europe/Amsterdam'; }
 function deAutoTime(){ try{ var h=parseInt(new Intl.DateTimeFormat('en-GB',{timeZone:deCityTz(),hour:'2-digit',hour12:false}).format(new Date()),10); if(h>=5&&h<11)return 'Sabah'; if(h>=11&&h<15)return 'Öğlen'; if(h>=15&&h<18)return 'Öğleden sonra'; if(h>=18&&h<22)return 'Akşam'; return 'Gece'; }catch(e){ return 'Öğleden sonra'; } }
 function deDist(km){return km<1?('~'+Math.round(km*1000)+' m'):('~'+km.toFixed(1)+' km');}
 function deRenderLocBar(){
@@ -2065,9 +2107,9 @@ document.getElementById("checkList").innerHTML=CHECKS.map(c=>'<li>'+c+'</li>').j
 /* ===== INIT ===== */
 (function cityInit(){try{
  var hs=document.getElementById('hdrSub'); if(hs)hs.textContent=CC.sub;
- try{document.title=CITY+' \u00b7 Lokal Ya\u015fam Rehberi';}catch(e){} try{var _cn=(CITY==='Kopenhag')?'https://www.asalocal.club/kopenhag/':'https://www.asalocal.club/amsterdam/';var _l=document.querySelector('link[rel="canonical"]');if(!_l){_l=document.createElement('link');_l.setAttribute('rel','canonical');document.head.appendChild(_l);}_l.setAttribute('href',_cn);}catch(e){}
+ try{document.title=CITY+' \u00b7 Lokal Ya\u015fam Rehberi';}catch(e){}
  if(CITY!=='Amsterdam'){
-   var hp=document.querySelector('[data-ck="app.pano.p"]'); if(hp){hp.textContent=CC.blurb; hp.removeAttribute('data-ck');}
+   var hp=document.querySelector('[data-ck="app.pano.p"]'); if(hp){hp.id='panoBlurb'; hp.textContent=CC.blurb; hp.removeAttribute('data-ck');}
    var hl=document.getElementById('heroLoc'); if(hl)hl.textContent='\ud83d\udccd '+CC.home.name;
    var vt=document.getElementById('v-trip'); if(vt)vt.style.display='none';
    var sgd=document.getElementById('scnGrid'); if(sgd)sgd.style.display='none';
