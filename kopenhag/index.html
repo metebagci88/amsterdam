@@ -726,13 +726,14 @@ const HOME=CC.home;
     if(vtz(r.timezone)){ CC._tz=r.timezone; window.__cityTz=window.__cityTz||{}; window.__cityTz[CITY]=r.timezone; }
   }
   async function run(){
-    var deadline=Date.now()+1800, cli=null;
-    while(Date.now()<deadline){ try{ cli=(window.asaDB&&window.asaDB())||null; }catch(e){ cli=null; } if(cli)break; await new Promise(function(res){ setTimeout(res,80); }); }
-    if(!cli) return;                                                    // supabase yüklenmedi → fallback
-    var remain=deadline-Date.now(); if(remain<300)remain=300;
+    // 1) client-hazır beklemesi: supabase CDN geç yüklenebilir → arka planda bekle (app'i BLOKLAMAZ; bu IIFE fire-and-forget).
+    var clientDeadline=Date.now()+12000, cli=null;
+    while(Date.now()<clientDeadline){ try{ cli=(window.asaDB&&window.asaDB())||null; }catch(e){ cli=null; } if(cli)break; await new Promise(function(res){ setTimeout(res,120); }); }
+    if(!cli) return;                                                    // supabase hiç yüklenmedi → fallback
+    // 2) yalnız AĞ İSTEĞİNE 1.8s timeout (istek takılırsa hard-coded'da kalır)
     try{
       var qp=cli.from('cities').select('name,lat,lng,zoom,timezone,blurb,status').eq('name',CITY).eq('status','active').maybeSingle();
-      var to=new Promise(function(res){ setTimeout(function(){ res({__timeout:true}); },remain); });
+      var to=new Promise(function(res){ setTimeout(function(){ res({__timeout:true}); },1800); });
       var r=await Promise.race([qp,to]);
       if(r&&r.__timeout) return;                                        // ağ takıldı → fallback (hard-coded zaten çizili)
       if(r&&!r.error&&r.data) applyRow(r.data);                         // status!='active' → data null → fallback
