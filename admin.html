@@ -93,6 +93,23 @@ tr:hover td{background:#faf8f3}
    ===================================================================== */
 const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"};
 const FN_URL=CFG.url+"/functions/v1/admin-api";
+/* AOÇ-1: teşhis sözleşmesi ORTAK dosyadan yüklenir (admin'e KOPYALANMAZ) — /decision_contract.js
+   Şehir motorunun DOĞRULANMIŞ AYNASI; gerçek tek-kaynak AOÇ-1B/AOÇ-3'te app de bu dosyayı kullanınca tamamlanır.
+   Yüklenemezse sağlık üretilmez (fail-closed). */
+let _contractLoad=null;
+const _CONTRACT_URL='/decision_contract.js?v=a6743474f0b5b5b9';   // contract SHA-256(16); her güncellemede yenile
+function ensureContract(){
+  if(window.DecisionContract) return Promise.resolve(true);
+  if(_contractLoad) return _contractLoad;                          // yalnız DEVAM EDEN yükleme paylaşılır
+  _contractLoad=new Promise(function(res){
+    var s=document.createElement('script'); s.src=_CONTRACT_URL; s.async=true; s.setAttribute('data-contract','1');
+    function fail(){ try{ s.remove(); }catch(e){} _contractLoad=null; res(false); }   // retry gerçekten yeniden yükleyebilsin
+    s.onload=function(){ if(window.DecisionContract) res(true); else fail(); };        // yüklendi ama global yoksa da başarısız say
+    s.onerror=fail;
+    document.head.appendChild(s);
+  });
+  return _contractLoad;
+}
 // FAZ 0D: ortak şifre KALDIRILDI. TEK Supabase istemcisi — authenticated admin oturumu,
 // sessionStorage (sekme oturumu; localStorage'a JWT yazılmaz). Editör okuma/yazma da bu oturumdan
 // geçer (RLS capability'e göre süzer). Tek GoTrueClient → çakışma yok.
@@ -223,6 +240,7 @@ function shell(body){
   const segs=[["ozet","Özet"]];
   if(CAPS.venues){ segs.push(["venues","Mekanlar"]); segs.push(["tags","Etiketler"]); }
   if(CAPS.cities)   segs.push(["cities","Şehirler"]);
+  if(CAPS.cities)   segs.push(["dhealth","Veri Sağlığı"]);
   if(CAPS.content)  segs.push(["content","İçerik"]);
   if(CAPS.ads)      segs.push(["ads","Reklamlar"]);
   if(CAPS.moderate) segs.push(["comments","Moderasyon"]);
@@ -234,7 +252,7 @@ function shell(body){
 }
 function go(s){ seg=s; render(); }
 function render(){
-  const need={venues:'venues',tags:'venues',cities:'cities',content:'content',ads:'ads',comments:'moderate',members:'members',changelog:'superadmin'};
+  const need={venues:'venues',tags:'venues',cities:'cities',dhealth:'cities',content:'content',ads:'ads',comments:'moderate',members:'members',changelog:'superadmin'};
   if(need[seg] && !CAPS[need[seg]]) seg='ozet';   // yetkisiz sekme → Özet (UI koruması; RLS/sunucu asıl kapı)
   if(seg==="ozet") return renderOzet();
   if(seg==="venues") return renderVenues();
@@ -245,6 +263,7 @@ function render(){
   if(seg==="ads") return renderAds();
   if(seg==="members") return renderMembers();
   if(seg==="changelog") return renderChangeLog();
+  if(seg==="dhealth") return renderDataHealth();
 }
 function stat(n,l){ return '<div class="stat"><b>'+esc(n)+'</b><span>'+esc(l)+'</span></div>'; }
 
@@ -370,17 +389,95 @@ function renderCities(){
   shell(body);
 }
 function editCity(code){
-  const c=code?DATA.cities.find(x=>x.code===code):{code:"",name:"",country:"",flag:"",status:"draft"};
+  const c=code?DATA.cities.find(x=>x.code===code):{code:"",name:"",country:"",flag:"",status:"draft",lat:null,lng:null,zoom:null,blurb:"",cover_url:"",timezone:"",coverage_radius_km:60};
   const isNew=!code;
-  const f=(k,l,val)=>'<div class="fld"><label>'+l+'</label><input id="c_'+k+'" value="'+esc(val)+'"></div>';
+  const f=(k,l,val,ro)=>'<div class="fld"><label>'+l+'</label><input id="c_'+k+'" value="'+esc(val==null?"":val)+'"'+(ro?' readonly style="opacity:.6;background:#f2f1ee"':'')+'></div>';
+  const NL='<span class="pill" style="background:#efe7d6;color:#7c5a12;font-size:10px">canlı app\'te henüz kullanılmıyor (AOÇ-1B)</span>';
   $("sheet").innerHTML='<h2>'+(isNew?"Yeni şehir":"Şehri düzenle")+'</h2>'
-    +'<div class="frow">'+f("code","Kod (benzersiz)",c.code)+f("name","Ad",c.name)+'</div>'
+    +'<div class="frow">'+f("code","Kod (benzersiz"+(isNew?"":", salt-okunur")+")",c.code,!isNew)+f("name","Ad",c.name)+'</div>'
+    +(isNew?"":'<div class="muted" style="font-size:11px;margin:-6px 0 8px">Kod kimliktir; mevcut şehirde değiştirilemez (ayrı kontrollü migration gerektirir).</div>')
     +'<div class="frow">'+f("country","Ülke",c.country||"")+f("flag","Bayrak (emoji)",c.flag||"")+'</div>'
     +'<div class="frow"><div class="fld"><label>Durum</label><select id="c_status">'+["draft","soon","active","inactive"].map(o=>'<option'+(c.status===o?" selected":"")+'>'+o+'</option>').join("")+'</select></div></div>'
+    +'<div style="border-top:1px solid var(--line);margin:10px 0 6px;padding-top:8px"><b style="font-size:13px">Harita & bağlam</b> '+NL+'</div>'
+    +'<div class="frow">'+f("lat","Merkez enlem (lat)",c.lat)+f("lng","Merkez boylam (lng)",c.lng)+f("zoom","Zoom (1–22)",c.zoom)+'</div>'
+    +'<div class="frow">'+f("timezone","IANA saat dilimi (örn. Europe/Berlin)",c.timezone||"")+f("coverage_radius_km","Kapsama yarıçapı (km, 1–250)",c.coverage_radius_km==null?60:c.coverage_radius_km)+'</div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Blurb (şehir kısa tanıtımı)</label><textarea id="c_blurb">'+esc(c.blurb||"")+'</textarea></div>'
+    +'<div class="frow">'+f("cover_url","Kapak görseli URL (yalnız https://)",c.cover_url||"")+'</div>'
     +'<div class="err" id="cerr"></div><div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn primary" id="csave">Kaydet</button></div>';
   openModal();
-  $("csave").onclick=async()=>{ const g=k=>$("c_"+k).value; const code2=g("code").trim(); if(!code2||!g("name").trim()){$("cerr").textContent="Kod ve Ad zorunlu.";return;} const row={code:code2,name:g("name").trim(),country:g("country").trim(),flag:g("flag").trim(),status:g("status"),updated_at:new Date().toISOString()}; try{await db.from("cities").upsert(row,{onConflict:"code"});}catch(e){$("cerr").textContent="Hata: "+(e.message||e);return;} const i=DATA.cities.findIndex(x=>x.code===code2); if(i>=0)DATA.cities[i]=Object.assign(DATA.cities[i],row); else DATA.cities.push(row); closeModal(); renderCities(); };
+  $("csave").onclick=async()=>{
+    const g=k=>($("c_"+k)?$("c_"+k).value:"");
+    const code2=(isNew?g("code").trim():c.code), name=g("name").trim();
+    const num=(s)=>{ s=(s||"").trim(); if(s==="")return null; const n=Number(s); return isFinite(n)?n:NaN; };
+    const lat=num(g("lat")), lng=num(g("lng")), zoom=num(g("zoom")), cov=num(g("coverage_radius_km"));
+    const tz=g("timezone").trim(), cover=g("cover_url").trim();
+    if(!code2||!name){ $("cerr").textContent="Kod ve Ad zorunlu."; return; }
+    if(isNew && !/^[a-z0-9-]{2,40}$/.test(code2)){ $("cerr").textContent="Kod: küçük harf/rakam/tire, 2–40."; return; }
+    if(lat!==null&&(Number.isNaN(lat)||lat< -90||lat>90)){ $("cerr").textContent="Enlem −90..90 arası olmalı."; return; }
+    if(lng!==null&&(Number.isNaN(lng)||lng< -180||lng>180)){ $("cerr").textContent="Boylam −180..180 arası olmalı."; return; }
+    if(zoom!==null&&(Number.isNaN(zoom)||zoom<1||zoom>22||zoom%1!==0)){ $("cerr").textContent="Zoom 1–22 tam sayı olmalı."; return; }
+    if(cov!==null&&(Number.isNaN(cov)||cov<1||cov>250||cov%1!==0)){ $("cerr").textContent="Kapsama 1–250 km tam sayı olmalı."; return; }
+    if(cover&&!/^https:\/\//i.test(cover)){ $("cerr").textContent="Kapak URL yalnız https:// olabilir."; return; }
+    if(tz&&!/^[A-Za-z]+\/[A-Za-z0-9_+\-\/]+$/.test(tz)){ $("cerr").textContent="Saat dilimi biçimi geçersiz (örn. Europe/Berlin). Sunucu ayrıca doğrular."; return; }
+    const row={code:code2,name:name,country:g("country").trim(),flag:g("flag").trim(),status:g("status"),
+      lat:lat,lng:lng,zoom:zoom,blurb:g("blurb").trim()||null,cover_url:cover||null,timezone:tz||null,
+      coverage_radius_km:(cov==null?60:cov),updated_at:new Date().toISOString()};
+    const btn=$("csave"); btn.disabled=true; btn.textContent="Kaydediliyor…";
+    try{ const {error}=await db.from("cities").upsert(row,{onConflict:"code"}); if(error)throw error; }
+    catch(e){ const m=(e.message||e)+""; $("cerr").textContent = m.includes("invalid_timezone")?"Sunucu: geçersiz saat dilimi.":(m.includes("chk_cities")||m.includes("code_immutable")?"Sunucu doğrulaması reddetti: "+m:"Hata: "+m); btn.disabled=false; btn.textContent="Kaydet"; return; }
+    const i=DATA.cities.findIndex(x=>x.code===code2); if(i>=0)DATA.cities[i]=Object.assign(DATA.cities[i],row); else DATA.cities.push(row);
+    closeModal(); renderCities();
+  };
 }
+
+/* ---------- AOÇ-1: VERİ SAĞLIĞI (salt-okunur teşhis) ---------- */
+let DH={city:""};
+function renderDataHealth(){
+  const cityNames=DATA.cities.map(c=>c.name).sort((a,b)=>a.localeCompare(b,'tr'));
+  const b='<div class="panel"><h3 style="margin-bottom:6px">Veri Sağlığı (salt-okunur teşhis)</h3><p class="muted" style="margin-bottom:10px">Şehir seç → sunucu sayımları + karar motoru havuzları (motorla birebir). Otomatik düzeltme/CSV yok; her uyarı editöre yönlendirir.</p>'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><select id="dhCity"><option value="">— şehir seç —</option>'+cityNames.map(n=>'<option'+(DH.city===n?' selected':'')+'>'+esc(n)+'</option>').join("")+'</select><button class="btn sm primary" onclick="dhLoad()">Kontrol et</button></div>'
+    +'<div id="dhBody"><p class="muted">Bir şehir seçip "Kontrol et"e bas. (Henüz kontrol edilmedi.)</p></div></div>';
+  shell(b);
+  if(DH.city) setTimeout(dhLoad,50);
+}
+async function dhLoad(){
+  const sel=$("dhCity"); if(sel)DH.city=sel.value;
+  const box=$("dhBody"); if(!box)return;
+  if(!DH.city){ box.innerHTML='<p class="muted">Önce şehir seç.</p>'; return; }
+  box.innerHTML='<p class="muted">Yükleniyor…</p>';
+  const r=await adminApi("city_health",{city:DH.city});
+  if(r.status!==200){ box.innerHTML='<div class="notice err">Veri alınamadı: '+esc(apiErrText(r.status))+' <button class="btn sm" onclick="dhLoad()">Tekrar</button></div>'; return; }
+  const d=(r.body&&r.body.data)||{}; const cs=d.city_settings||{}, cnt=d.counts||{}, vs=d.venues||[];
+  const okC=await ensureContract();
+  if(!okC || !window.DecisionContract){ box.innerHTML='<div class="notice err">Motor sözleşmesi (/decision_contract.js) yüklenemedi — sağlık teşhisi üretilemiyor (fail-closed). decision_contract.js yayınlandı mı?</div>'; return; }
+  cnt.unparseable_hours = vs.filter(function(v){ return v.hours && String(v.hours).trim()!=='' && window.DecisionContract.parseHours(v.hours)===null; }).length;  // motorla birebir (SQL regex değil)
+  let h='', anyIssue=false;
+  h+='<div class="cards">'+stat(cnt.venues_total||0,"Mekan")+stat(cnt.venues_active||0,"Aktif")+stat(cnt.venues_inactive||0,"Pasif")+stat(cs.settings_complete?"✓":"eksik","Şehir ayarı")+'</div>';
+  if(!cs.city_exists){ anyIssue=true; h+='<div class="notice warn">Bu isimde cities kaydı yok (mekanlar var ama şehir tanımı eksik). Şehir editöründen ekleyin.</div>'; }
+  else if(!cs.settings_complete){
+    const miss=[['lat',cs.lat],['lng',cs.lng],['zoom',cs.zoom],['timezone',cs.timezone]].filter(x=>x[1]==null).map(x=>x[0]).join(", ");
+    const editBtn=' <button class="btn sm" onclick="editCityByName(\''+esc(DH.city).replace(/'/g,"\\'")+'\')">Şehri düzenle</button>';
+    if(cs.status==='active'){ anyIssue=true; h+='<div class="notice warn"><b>Yayında ama ayar eksik:</b> '+esc(miss)+editBtn+'</div>'; }
+    else { h+='<div class="notice" style="background:#eef3fa;border-color:#b3c7e6">Şehir henüz yayında değil ('+esc(cs.status||'—')+'); açılmadan önce tamamlanmalı: '+esc(miss)+editBtn+'</div>'; }
+  }
+  const RULES=[['missing_coord','Koordinatsız mekan','high'],['invalid_coord','Geçersiz koordinat','high'],['out_of_coverage','Kapsama dışı pin ('+(cs.coverage_radius_km||60)+' km)','med'],['missing_cats','Kategori yok','med'],['missing_tags','Etiket yok','med'],['missing_best','Best yok','med'],['missing_hours','Saat yok','low'],['unparseable_hours','Ayrıştırılamayan saat','low'],['missing_photo','Foto yok','low'],['missing_description','Açıklama yok','low'],['conf_low','Güven düşük','med']];
+  const rows=RULES.map(function(r){ const v=cnt[r[0]]; if(v==null)return '<tr><td>'+esc(r[1])+'</td><td class="muted">kontrol edilmedi</td><td></td></tr>'; if(v>0)anyIssue=true; const cls=r[2]==='high'?'off':(r[2]==='med'?'soon':'muted'); return '<tr><td>'+esc(r[1])+'</td><td>'+(v>0?'<span class="pill '+cls+'">'+v+'</span>':'<span class="pill on">0</span>')+'</td><td>'+(v>0?'<button class="btn sm" onclick="dhGoVenues(\''+esc(DH.city).replace(/'/g,"\\'")+'\')">Mekanlar</button>':'')+'</td></tr>'; }).join("");
+  h+='<div style="margin-top:12px"><b>Veri kalitesi</b><div class="tablewrap"><table><thead><tr><th>Kural</th><th>Sayı</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  const empties=DecisionContract.modePoolEmpty(vs,DH.city);
+  const cells=DecisionContract.healthCells(vs,DH.city);
+  let poolH='';
+  if(empties.length){ anyIssue=true; poolH+='<div class="notice warn">Karar havuzu BOŞ mod(lar): '+empties.map(e=>esc(e.mode)).join(", ")+' — bu modda hiç uygun mekan yok.</div>'; }
+  if(cells.filter(c=>c.cls==='core'&&(c.severity==='critical'||c.severity==='weak')).length) anyIssue=true;
+  poolH+='<div class="tablewrap"><table><thead><tr><th>Mod</th><th>Zaman</th><th>Uygun</th><th>Durum</th></tr></thead><tbody>'
+    +cells.map(c=>'<tr><td>'+esc(c.mode)+'</td><td>'+esc(c.slot)+'</td><td>'+c.count+'</td><td>'+dhSev(c.severity)+(c.cls==='optional'?' <span class="muted" style="font-size:10px">(dar)</span>':'')+'</td></tr>').join("")
+    +'</tbody></table></div>';
+  h+='<div style="margin-top:12px"><b>Karar motoru havuzları (motorla birebir)</b> <span class="muted" style="font-size:11px">0–2 kritik · 3–4 zayıf · 5+ yeterli; beklenmeyen (na) hücreler hariç</span>'+poolH+'</div>';
+  if(!anyIssue) h='<div class="notice" style="background:#e8f5e9;border-color:#a5d6a7">✓ '+esc(DH.city)+' için sorun bulunamadı (0 sorun).</div>'+h;
+  box.innerHTML=h;
+}
+function dhSev(s){ if(s==='critical')return '<span class="pill off">kritik</span>'; if(s==='weak')return '<span class="pill soon">zayıf</span>'; if(s==='info')return '<span class="pill muted">info</span>'; return '<span class="pill on">yeterli</span>'; }
+function dhGoVenues(city){ vFilter={q:"",city:city,active:""}; seg="venues"; render(); }
+function editCityByName(name){ const c=DATA.cities.find(x=>x.name===name); if(c){ seg="cities"; render(); setTimeout(()=>editCity(c.code),60);} }
 
 /* ---------- ETIKETLER (değiştirilmedi) ---------- */
 let openTag=null;
