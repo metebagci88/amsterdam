@@ -101,7 +101,7 @@ const FN_URL=CFG.url+"/functions/v1/admin-api";
    Şehir motorunun DOĞRULANMIŞ AYNASI; gerçek tek-kaynak AOÇ-1B/AOÇ-3'te app de bu dosyayı kullanınca tamamlanır.
    Yüklenemezse sağlık üretilmez (fail-closed). */
 let _contractLoad=null;
-const _CONTRACT_URL='/decision_contract.js?v=3d213996e71a655d';   // contract SHA-256(16); her güncellemede yenile
+const _CONTRACT_URL='/decision_contract.js?v=f8ea1634cff7090f';   // contract SHA-256(16); her güncellemede yenile
 function ensureContract(){
   if(window.DecisionContract) return Promise.resolve(true);
   if(_contractLoad) return _contractLoad;                          // yalnız DEVAM EDEN yükleme paylaşılır
@@ -329,7 +329,7 @@ function renderVenues(){
       +'<td>'+(v.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')
         +(admTempClosed(v)?' <span class="pill tc" title="Karar/Plan/Harita\'da gizli; tarih geçince otomatik açılır">geçici kapalı'+(v.closed_until?' · '+esc(String(v.closed_until).slice(0,10)):'')+'</span>':'')
         +(admCoordState(v)==="missing"?' <span class="pill soon">koordinatsız</span>':(admCoordState(v)==="invalid"?' <span class="pill off">geçersiz koord</span>':''))+'</td>'
-      +'<td style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm" onclick="toggleVenue(\''+esc(v.id)+'\')">'+(v.active?"Pasifle":"Aktifle")+'</button></td>'
+      +'<td style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm" onclick="diagVenue(\''+esc(v.id)+'\')">Teşhis</button> <button class="btn sm" onclick="toggleVenue(\''+esc(v.id)+'\')">'+(v.active?"Pasifle":"Aktifle")+'</button></td>'
       +'</tr>').join("")
     +'</tbody></table></div></div>';
   shell(body);
@@ -443,6 +443,71 @@ function venuePhotoPrev(){ const el=$("vPhotoPrev"); if(!el)return; const u=($("
 async function venuePhotoUpload(ev){ const file=ev.target.files&&ev.target.files[0]; if(!file)return; const msg=$("f_upmsg"); if(msg)msg.textContent="Yükleniyor…"; try{ const url=await uploadToMedia(file,"venues"); $("f_photo_url").value=url; venuePhotoPrev(); if(msg)msg.textContent="✓ yüklendi"; }catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); } }
 async function toggleVenue(id){ const v=venueById(id); if(!v)return; const na=!v.active; try{ await db.from("venues").update({active:na,updated_at:new Date().toISOString()}).eq("id",id); v.active=na; }catch(e){} renderVenues(); }
 async function delVenue(id){ if(!confirm("Bu mekanı silmek istediğine emin misin?"))return; try{ await db.from("venues").delete().eq("id",id); }catch(e){} DATA.venues=DATA.venues.filter(v=>v.id!==id); closeModal(); renderVenues(); }
+
+/* ---------- AOÇ-3 · KARAR TEŞHİSİ (yalnız okuma; decision_contract.js) ---------- */
+let _diag={id:null,mode:"Kahve",time:"Sabah",resv:"Fark etmez",garden:"Fark etmez",loc:null};
+let _diagMap=null,_diagMarker=null;
+async function diagVenue(id){
+  const v=venueById(id); if(!v)return;
+  const ok=await ensureContract(); const C=window.DecisionContract;
+  if(!ok||!C||!C.diagnoseVenue){ $("sheet").innerHTML='<h2>Karar Teşhisi</h2><div style="background:#fbeaea;border:1px solid #e6bcbc;padding:10px;border-radius:8px">Motor sözleşmesi yüklenemedi — teşhis üretilemez.</div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>'; openModal(); return; }
+  _diag={id:id,mode:"Kahve",time:"Sabah",resv:"Fark etmez",garden:"Fark etmez",loc:null};
+  const cov=C.CITY_COVERAGE[v.city]; if(cov)_diag.loc={lat:cov.lat,lng:cov.lng};
+  const opt=(arr,cur)=>arr.map(o=>'<option'+(o===cur?" selected":"")+'>'+o+'</option>').join("");
+  $("sheet").innerHTML='<h2>Karar Teşhisi — '+esc(v.name)+' <span class="muted" style="font-size:13px">('+esc(v.city)+')</span></h2>'
+   +'<div class="frow">'
+     +'<div class="fld"><label>Mod</label><select id="dg_mode">'+opt(C.VALID_MODE,_diag.mode)+'</select></div>'
+     +'<div class="fld"><label>Zaman</label><select id="dg_time">'+opt(C.VALID_TIME,_diag.time)+'</select></div>'
+     +'<div class="fld"><label>Rezervasyon</label><select id="dg_resv">'+opt(["Fark etmez","Yok","Var"],_diag.resv)+'</select></div>'
+     +'<div class="fld"><label>Bahçe</label><select id="dg_garden">'+opt(["Fark etmez","Bahçeli","Bahçesiz"],_diag.garden)+'</select></div>'
+   +'</div>'
+   +'<div class="frow"><div class="fld"><label>Test konumu (lat)</label><input id="dg_lat" value="'+(_diag.loc?_diag.loc.lat:"")+'"></div>'
+     +'<div class="fld"><label>Test konumu (lng)</label><input id="dg_lng" value="'+(_diag.loc?_diag.loc.lng:"")+'"></div>'
+     +'<div class="fld"><label>&nbsp;</label><button type="button" class="btn sm" onclick="dgCityCenter(\''+esc(v.city)+'\')">Şehir merkezi</button></div></div>'
+   +'<div class="fld" style="flex:1 1 100%"><label>Test konumu — haritada tıkla (turuncu = mekân)</label><div id="diagMap" style="height:200px;border-radius:8px;border:1px solid var(--line)"></div></div>'
+   +'<div id="diagOut" style="margin-top:10px"></div>'
+   +'<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  openModal();
+  ["dg_mode","dg_time","dg_resv","dg_garden"].forEach(k=>{ const e=$(k); if(e)e.onchange=computeDiag; });
+  ["dg_lat","dg_lng"].forEach(k=>{ const e=$(k); if(e)e.oninput=computeDiag; });
+  try{ dgInitMap(v); }catch(e){}
+  computeDiag();
+}
+function dgInitMap(v){
+  if(typeof L==="undefined")return; if(_diagMap){try{_diagMap.remove();}catch(e){} _diagMap=null;}
+  const c=_diag.loc||{lat:(v.lat!=null?v.lat:52.37),lng:(v.lng!=null?v.lng:4.895)};
+  _diagMap=L.map('diagMap').setView([c.lat,c.lng],12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_diagMap);
+  _diagMarker=L.marker([c.lat,c.lng],{draggable:true}).addTo(_diagMap);
+  if(v.lat!=null&&v.lng!=null) L.circleMarker([v.lat,v.lng],{radius:6,color:"#b8944f",weight:2,fillColor:"#b8944f",fillOpacity:.9}).addTo(_diagMap).bindPopup("Mekân: "+esc(v.name));
+  const setL=(la,ln)=>{ _diag.loc={lat:la,lng:ln}; $("dg_lat").value=la.toFixed(6); $("dg_lng").value=ln.toFixed(6); _diagMarker.setLatLng([la,ln]); computeDiag(); };
+  _diagMap.on('click',e=>setL(e.latlng.lat,e.latlng.lng));
+  _diagMarker.on('dragend',()=>{ const p=_diagMarker.getLatLng(); setL(p.lat,p.lng); });
+  setTimeout(()=>{try{_diagMap.invalidateSize();}catch(e){}},200);
+}
+function dgSyncLoc(){ const a=parseFloat($("dg_lat").value),b=parseFloat($("dg_lng").value); if(isFinite(a)&&a>=-90&&a<=90&&isFinite(b)&&b>=-180&&b<=180){ _diag.loc={lat:a,lng:b}; if(_diagMarker)_diagMarker.setLatLng([a,b]); } else { _diag.loc=null; } }
+function dgCityCenter(city){ const C=window.DecisionContract; const cov=C&&C.CITY_COVERAGE[city]; if(cov){ _diag.loc={lat:cov.lat,lng:cov.lng}; $("dg_lat").value=cov.lat; $("dg_lng").value=cov.lng; if(_diagMap)_diagMap.setView([cov.lat,cov.lng],12); if(_diagMarker)_diagMarker.setLatLng([cov.lat,cov.lng]); computeDiag(); } }
+function admTodayYmd(city){ try{ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; var tz=m[city]||'Europe/Amsterdam'; return new Date().toLocaleDateString('en-CA',{timeZone:tz}); }catch(e){ return new Date().toISOString().slice(0,10); } }
+function computeDiag(){
+  const C=window.DecisionContract; const v=venueById(_diag.id); const out=$("diagOut"); if(!C||!v||!out)return;
+  _diag.mode=$("dg_mode").value; _diag.time=$("dg_time").value; _diag.resv=$("dg_resv").value; _diag.garden=$("dg_garden").value; dgSyncLoc();
+  const d=C.diagnoseVenue(v,{city:v.city,mode:_diag.mode,time:_diag.time,resv:_diag.resv,garden:_diag.garden,loc:_diag.loc,nowYmd:admTodayYmd(v.city)},DATA.venues);
+  let gh='<table style="border-collapse:collapse;font-size:11.5px"><thead><tr><th></th>'+C.VALID_TIME.map(t=>'<th style="padding:3px 5px">'+t+'</th>').join("")+'</tr></thead><tbody>';
+  C.VALID_MODE.forEach(m=>{ gh+='<tr><td style="padding:3px 6px;font-weight:600">'+m+'</td>'+C.VALID_TIME.map(t=>{ const c=d.grid.find(x=>x.mode===m&&x.slot===t); let bg="#f1efe9",tx="·"; if(c.cls==="na"){bg="#e9e9e9";tx="–";} else if(c.qualifies){bg="#d9efce";tx="✓";} else if(c.matchMode){bg="#fbeecb";tx="○";} const sel=(m===_diag.mode&&t===_diag.time)?";outline:2px solid #b8944f":""; return '<td style="text-align:center;padding:4px 6px;background:'+bg+sel+'">'+tx+'</td>'; }).join("")+'</tr>'; });
+  gh+='</tbody></table><div class="muted" style="font-size:11px;margin-top:3px">✓ uygun · ○ mod eşleşir, saat/uygunluk değil · · mod eşleşmez · – beklenmeyen (na)</div>';
+  let gg='<div style="margin-top:10px"><b>Kapılar ('+esc(_diag.mode)+' · '+esc(_diag.time)+')</b><ul style="margin:4px 0;padding-left:0;list-style:none">';
+  d.gates.forEach(g=>{ gg+='<li style="padding:2px 0">'+(g.pass?'<span style="color:#3a8a3a">✓</span>':'<span style="color:#a33">✗</span>')+' <b>'+esc(g.key)+'</b> — '+esc(g.reason)+'</li>'; });
+  gg+='</ul></div>';
+  const Lc=d.location; let lh='<div style="margin-top:8px"><b>Konum önizleme</b><div class="muted" style="font-size:12.5px;line-height:1.6">';
+  if(!Lc.provided){ lh+='Test konumu girilmedi.'; }
+  else { lh+='Kullanıcı şehir kapsamı: '+(Lc.cityCoverageOk===false?'<span style="color:#a33">DIŞINDA (out_of_area — sonuç çıkmaz)</span>':'içinde')+'<br>';
+    if(Lc.coverageNote) lh+=esc(Lc.coverageNote)+'<br>';
+    lh+='<b>Tam eşleşme sırası:</b> '+(Lc.exactMatchRank!=null?(Lc.exactMatchRank+"/"+Lc.exactMatchCount):"—")+'<br>';
+    lh+='<b>İlk '+(Lc.topN||5)+' tam eşleşmeye girer mi?</b> '+(Lc.appearsInTopNExact?'<span style="color:#3a8a3a">Evet</span>':"Hayır")+'<br>';
+    lh+='<span style="color:#8a5a12">'+esc(Lc.appearReason||"")+'</span><br><i>'+esc(Lc.alternativesNote)+'</i>'; }
+  lh+='</div></div>';
+  out.innerHTML=gh+gg+lh;
+}
 
 /* ---------- ŞEHİRLER (değiştirilmedi) ---------- */
 function renderCities(){

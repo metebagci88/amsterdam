@@ -12,7 +12,7 @@
   if (root) root.DecisionContract = C;
 })(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
-  var VERSION = 'engine-2026-08 (verbatim from DecisionEngine Faz1 v2 + AOÇ-2 tempClosed)';
+  var VERSION = 'engine-2026-08 (verbatim from DecisionEngine Faz1 v2 + AOÇ-2 tempClosed + AOÇ-3 diagnoseVenue)';
 
   // ---- taksonomi (app ile BİREBİR) ----
   var MODE_MAP = {
@@ -124,11 +124,88 @@
                      .filter(function(x){ return x.eligible===0; });        // decision_pool_empty
   }
 
+  // ---- AOÇ-3 · MEKAN-BAZLI TEŞHİS — canlı motorun DOĞRULANMIŞ AYNASI (app ile birebir) ----
+  var CONF_RANK={high:3,medium:2,low:1};
+  function toRad(x){return x*Math.PI/180;}
+  function haversine(aLat,aLng,bLat,bLng){var R=6371,dLa=toRad(bLat-aLat),dLo=toRad(bLng-aLng);var h=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(toRad(aLat))*Math.cos(toRad(bLat))*Math.sin(dLo/2)*Math.sin(dLo/2);return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
+  var CITY_COVERAGE={ 'Amsterdam':{lat:52.37043,lng:4.88901,radiusKm:30}, 'Kopenhag':{lat:55.68429,lng:12.57498,radiusKm:45} };
+  function matchResv(v,r){if(r==='Fark etmez')return true;if(r==='Yok')return v.resv==='no';if(r==='Var')return v.resv==='rec'||v.resv==='req';return true;}
+  function matchGarden(v,g){if(g==='Fark etmez')return true;if(g==='Bahçeli')return v.garden===true;if(g==='Bahçesiz')return v.garden===false;return true;}
+  function _cmp(a,b){if(a.km!==b.km)return a.km-b.km;var ca=CONF_RANK[a.v.conf]||0,cb=CONF_RANK[b.v.conf]||0;if(ca!==cb)return cb-ca;return String(a.v.id)<String(b.v.id)?-1:(String(a.v.id)>String(b.v.id)?1:0);}
+  function _slotOpen(v,slot){ return openInWindow(v.hours, TIME_WINDOWS[slot]||[0,0]); }
+  function _slotReason(v,mode,slot){ var ow=_slotOpen(v,slot); if(ow===null) return 'Saat bilgisi ayrıştırılamıyor'; if(ow===false) return 'Seçilen saatte kapalı'; if(!slotSuitable(v,mode,slot)) return mode+' için '+slot+' uygun değil'; return 'Uygun'; }
+
+  // v: teşhis edilen mekân; ctx:{city,mode,time,resv,garden,loc,targetCount}; allVenues: tüm mekânlar (V)
+  function diagnoseVenue(v, ctx, allVenues){
+    ctx=ctx||{}; allVenues=allVenues||[];
+    var city=ctx.city||v.city, mode=ctx.mode, time=ctx.time;
+    var resv=ctx.resv||'Fark etmez', garden=ctx.garden||'Fark etmez';
+    var loc=ctx.loc, targetN=ctx.targetCount||5, nowYmd=ctx.nowYmd;   // nowYmd: şehir tz'sinde bugün (admin sağlar)
+    var elig0 = (v && v.active!==false && !isTempClosed(v, nowYmd) && v.city===city && validCoord(v.lat,v.lng));
+
+    // (a) mod×zaman grid — yalnız mekân-içsel (konum/kullanıcı-filtresi HARİÇ)
+    var grid=[];
+    VALID_MODE.forEach(function(m){ VALID_TIME.forEach(function(s){
+      var mm=matchMode(v,m), ss=!!(elig0&&mm&&slotSuitable(v,m,s));
+      grid.push({mode:m, slot:s, cls:cellClass(m,s), eligible:elig0, matchMode:mm, slotSuitable:!!(mm&&slotSuitable(v,m,s)), qualifies:ss});
+    });});
+
+    // (b) SIRALI kapılar (decide zinciriyle aynı; venue_within_coverage ENGEL DEĞİL)
+    var gates=[]; function g(k,p,r){ gates.push({key:k,pass:!!p,reason:r}); return !!p; }
+    g('active', v.active!==false, v.active!==false?'Aktif':'Pasif (active=false)');
+    g('temporarily_closed', !isTempClosed(v, nowYmd), isTempClosed(v, nowYmd)?'Geçici kapalı':'Kapalı değil');
+    g('city', v.city===city, v.city===city?('Şehir eşleşti: '+city):('Farklı şehir: '+v.city));
+    g('validCoord', validCoord(v.lat,v.lng), validCoord(v.lat,v.lng)?'Geçerli koordinat':'Koordinat yok/geçersiz');
+    var mm=(mode!=null)?matchMode(v,mode):null;
+    if(mode!=null) g('matchMode', mm, mm?(mode+' kategorisiyle eşleşiyor'):(mode+' kategorisinde değil'));
+    if(mode!=null&&time!=null) g('slotSuitable', (elig0&&mm&&slotSuitable(v,mode,time)), _slotReason(v,mode,time));
+    g('matchResv', matchResv(v,resv), resv==='Fark etmez'?'Rezervasyon filtresi yok':(matchResv(v,resv)?'Rezervasyon filtresini geçti':'Geçemedi (resv='+(v.resv||'?')+')'));
+    g('matchGarden', matchGarden(v,garden), garden==='Fark etmez'?'Bahçe filtresi yok':(matchGarden(v,garden)?'Bahçe filtresini geçti':'Geçemedi (garden='+String(v.garden)+')'));
+    var venuePassesExact = elig0 && (mode!=null&&time!=null?(mm&&slotSuitable(v,mode,time)):false) && matchResv(v,resv) && matchGarden(v,garden);
+
+    // (c) konum önizleme — "tam eşleşme sırası" + "ilk N tam eşleşmeye girer mi?"
+    var cov=CITY_COVERAGE[city];
+    var location={ provided:!!(loc&&validCoord(loc.lat,loc.lng)) };
+    // BİLGİLENDİRİCİ: mekân–ŞEHİR MERKEZİ mesafesi (kullanıcı konumundan BAĞIMSIZ; engelleyici DEĞİL, sıra/kapı etkilemez)
+    location.venueDistanceFromCityCenter = (cov && validCoord(v.lat,v.lng))? haversine(v.lat,v.lng,cov.lat,cov.lng) : null;
+    location.coverageNote = (location.venueDistanceFromCityCenter!=null)
+      ? (location.venueDistanceFromCityCenter > cov.radiusKm
+          ? ('Bilgi: mekân şehir merkezinden '+location.venueDistanceFromCityCenter.toFixed(1)+' km (kapsama '+cov.radiusKm+' km) — motor bunu ENGEL olarak KULLANMAZ')
+          : ('Mekân şehir merkezine '+location.venueDistanceFromCityCenter.toFixed(1)+' km (kapsama içi)'))
+      : null;
+    if(location.provided){
+      location.cityCoverageOk = cov? (haversine(loc.lat,loc.lng,cov.lat,cov.lng) <= cov.radiusKm) : true;
+      location.distanceKm = validCoord(v.lat,v.lng)? haversine(loc.lat,loc.lng,v.lat,v.lng) : null;   // kullanıcı→mekân (yalnız gösterim)
+      if(mode!=null&&time!=null){
+        if(location.cityCoverageOk===false){
+          location.exactMatchRank=null; location.appearsInTopNExact=false; location.exactMatchCount=null; location.topN=targetN;
+          location.appearReason='Kullanıcı konumu şehir kapsamı dışında (out_of_area) — hiçbir sonuç çıkmaz';
+        } else {
+          var pool=allVenues.filter(function(x){ return x && x.active!==false && !isTempClosed(x, nowYmd) && x.city===city && validCoord(x.lat,x.lng)
+              && matchMode(x,mode) && slotSuitable(x,mode,time) && matchResv(x,resv) && matchGarden(x,garden); })
+            .map(function(x){ return {v:x, km:haversine(loc.lat,loc.lng,x.lat,x.lng)}; }).sort(_cmp);
+          var idx=-1; for(var i=0;i<pool.length;i++){ if(pool[i].v.id===v.id){ idx=i; break; } }
+          location.exactMatchCount=pool.length; location.topN=targetN;
+          location.exactMatchRank = idx>=0?(idx+1):null;
+          location.appearsInTopNExact = idx>=0 && idx<targetN;
+          location.appearReason = idx<0 ? 'Bu mekân tam eşleşme havuzunda değil (bir kapıyı geçemiyor)'
+            : (location.appearsInTopNExact ? ('İlk '+targetN+' tam eşleşmeye giriyor (sıra '+(idx+1)+'/'+pool.length+')')
+                                           : ('Tam eşleşme sırası '+(idx+1)+'/'+pool.length+'; ilk '+targetN+' dışında (daha yakın '+idx+' mekân)'));
+        }
+      }
+    }
+    location.alternativesNote='Alternatif/gevşetme sırasında görünme durumu bu fazda hesaplanmıyor';
+
+    return { venue:{id:v.id,name:v.name,city:v.city}, ctx:{city:city,mode:mode,time:time,resv:resv,garden:garden,loc:location.provided?loc:null},
+      grid:grid, gates:gates, venuePassesExact:!!venuePassesExact, location:location };
+  }
+
   return {
     version: VERSION,
     MODE_MAP: MODE_MAP, TIME_WINDOWS: TIME_WINDOWS, DAY: DAY, VALID_MODE: VALID_MODE, VALID_TIME: VALID_TIME,
     validCoord: validCoord, tks: tks, parseHours: parseHours, matchMode: matchMode, slotSuitable: slotSuitable,
     cellClass: cellClass, expectedCells: expectedCells, isTempClosed: isTempClosed,
-    eligibleBase: eligibleBase, modePool: modePool, poolCount: poolCount, healthCells: healthCells, modePoolEmpty: modePoolEmpty, tier: tier
+    eligibleBase: eligibleBase, modePool: modePool, poolCount: poolCount, healthCells: healthCells, modePoolEmpty: modePoolEmpty, tier: tier,
+    matchResv: matchResv, matchGarden: matchGarden, haversine: haversine, CITY_COVERAGE: CITY_COVERAGE, diagnoseVenue: diagnoseVenue
   };
 });
