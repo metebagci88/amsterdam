@@ -2017,6 +2017,14 @@ window.DecisionEngine=(function(){
 /* ---- Karar: GPS-only konum katmanı (deLoc) — konaklama/mahalle/pin/HOME KULLANILMAZ ---- */
 var deLoc=null, deLocState='idle', deTimeManual=false;
 function deCityTz(){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; var ck=(typeof CITY!=='undefined'?CITY:''); return (window.__cityTz&&window.__cityTz[ck])||m[ck]||'Europe/Amsterdam'; }
+/* AOÇ-2: şehir saat diliminde bugünün YMD'si (geçici kapanış otomatik açılması için) */
+function asaTodayYmd(){ try{ var tz=(typeof deCityTz==='function')?deCityTz():'Europe/Amsterdam'; return new Date().toLocaleDateString('en-CA',{timeZone:tz}); }catch(e){ return new Date().toISOString().slice(0,10); } }
+/* AOÇ-2: geçici kapanış — decision_contract.js isTempClosed ile BİREBİR AYNI mantık.
+   closed_until doluysa YALNIZ tarih geçerli (>=bugün→kapalı; geçmişse boolean'dan bağımsız otomatik açık).
+   closed_until boşsa temporarily_closed=true → manuel açılana kadar kapalı. */
+function asaTempClosed(v, nowYmd){ if(!v)return false; var cu=v.closed_until;
+  if(cu!=null&&cu!==""){ var n=nowYmd||asaTodayYmd(); return String(cu).slice(0,10) >= n; }
+  return (v.temporarily_closed===true || v.temporarily_closed==='true'); }
 function deAutoTime(){ try{ var h=parseInt(new Intl.DateTimeFormat('en-GB',{timeZone:deCityTz(),hour:'2-digit',hour12:false}).format(new Date()),10); if(h>=5&&h<11)return 'Sabah'; if(h>=11&&h<15)return 'Öğlen'; if(h>=15&&h<18)return 'Öğleden sonra'; if(h>=18&&h<22)return 'Akşam'; return 'Gece'; }catch(e){ return 'Öğleden sonra'; } }
 function deDist(km){return km<1?('~'+Math.round(km*1000)+' m'):('~'+km.toFixed(1)+' km');}
 function deRenderLocBar(){
@@ -2148,19 +2156,26 @@ async function mergeDbVenues(){
    const data=res.data; window.__mv.err=res.error?res.error.message:null; window.__mv.rows=data?data.length:0;
    if(!data||!data.length)return;
    let changed=false, photoN=0;
+   const _today=asaTodayYmd();
+   const _closed=(r)=>{ if(r.active===false)return true; return asaTempClosed(r,_today); };   // active=false ayrı/kalıcı; geçici kapanış AYNI fonksiyon
+   const _validCo=(a,b)=>typeof a==="number"&&isFinite(a)&&a>=-90&&a<=90&&typeof b==="number"&&isFinite(b)&&b>=-180&&b<=180;
    data.forEach(r=>{
      if(!r||!r.id)return;
+     const closed=_closed(r);
      const i=V.findIndex(x=>x.id===r.id);
      if(i>=0){
+       if(closed){ V.splice(i,1); changed=true; return; }   // AOÇ-2: pasif/geçici-kapalı → tüm ekranlardan gizle
        // mevcut mekan: admin'de doldurulmuş alanları uygula (boşları ezme)
        const src=mapDbVenue(r);
        ["photo_url","name","area","type","hours","web","ig","tip","desc","note"].forEach(k=>{ if(src[k]!==""&&src[k]!=null) V[i][k]=src[k]; });
        if(Array.isArray(r.tags)&&r.tags.length)V[i].tags=r.tags;
        if(Array.isArray(r.cats)&&r.cats.length)V[i].cats=r.cats;
+       if(_validCo(r.lat,r.lng)){ V[i].lat=r.lat; V[i].lng=r.lng; }   // AOÇ-2: DB koordinatı uygula (admin kaynak-doğru)
+       V[i].active=(r.active!==false);
        if(src.photo_url)photoN++;
        changed=true;
-     } else if(r.active!==false){
-       // yeni mekan: uygulamaya ekle
+     } else if(!closed){
+       // yeni mekan: uygulamaya ekle (pasif/geçici-kapalı hariç)
        const nv=mapDbVenue(r); V.push(nv); if(nv.photo_url)photoN++; changed=true;
      }
    });
