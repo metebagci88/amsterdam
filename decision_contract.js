@@ -12,7 +12,7 @@
   if (root) root.DecisionContract = C;
 })(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
-  var VERSION = 'engine-2026-08 (verbatim from DecisionEngine Faz1 v2)';
+  var VERSION = 'engine-2026-08 (verbatim from DecisionEngine Faz1 v2 + AOÇ-2 tempClosed)';
 
   // ---- taksonomi (app ile BİREBİR) ----
   var MODE_MAP = {
@@ -87,9 +87,21 @@
     var out=[]; VALID_MODE.forEach(function(m){ VALID_TIME.forEach(function(s){ var c=cellClass(m,s); if(c!=='na') out.push({mode:m, slot:s, cls:c}); }); }); return out;
   }
 
+  // ---- GEÇİCİ KAPANIŞ (AOÇ-2) — app ile BİREBİR ----
+  // tempClosed = temporarily_closed===true  VEYA  closed_until >= bugün(YMD). active=false AYRI/kalıcı.
+  function _ymd(x){ return String(x).slice(0,10); }
+  // ÖNCELİK: closed_until doluysa YALNIZ tarih geçerli (>= bugün → kapalı; geçmişse boolean'dan
+  // BAĞIMSIZ otomatik açık). closed_until boşsa temporarily_closed=true → manuel açılana kadar kapalı.
+  function isTempClosed(v, nowYmd){
+    if(!v) return false;
+    var cu=v.closed_until;
+    if(cu!=null && cu!=='') { var n=nowYmd || new Date().toISOString().slice(0,10); return _ymd(cu) >= n; }
+    return (v.temporarily_closed===true || v.temporarily_closed==='true');
+  }
+
   // ---- HAVUZLAR (sağlık) — motorun uygunluk zinciriyle AYNI ----
-  function eligibleBase(venues, city){
-    return (venues||[]).filter(function(v){ return v && v.active!==false && v.city===city && validCoord(v.lat, v.lng); });
+  function eligibleBase(venues, city, nowYmd){
+    return (venues||[]).filter(function(v){ return v && v.active!==false && !isTempClosed(v, nowYmd) && v.city===city && validCoord(v.lat, v.lng); });
   }
   function modePool(venues, city, mode){ return eligibleBase(venues, city).filter(function(v){ return matchMode(v, mode); }); }
   function poolCount(venues, city, mode, slot){ return modePool(venues, city, mode).filter(function(v){ return slotSuitable(v, mode, slot); }).length; }
@@ -116,7 +128,7 @@
     version: VERSION,
     MODE_MAP: MODE_MAP, TIME_WINDOWS: TIME_WINDOWS, DAY: DAY, VALID_MODE: VALID_MODE, VALID_TIME: VALID_TIME,
     validCoord: validCoord, tks: tks, parseHours: parseHours, matchMode: matchMode, slotSuitable: slotSuitable,
-    cellClass: cellClass, expectedCells: expectedCells,
+    cellClass: cellClass, expectedCells: expectedCells, isTempClosed: isTempClosed,
     eligibleBase: eligibleBase, modePool: modePool, poolCount: poolCount, healthCells: healthCells, modePoolEmpty: modePoolEmpty, tier: tier
   };
 });

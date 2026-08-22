@@ -74,7 +74,11 @@ tr:hover td{background:#faf8f3}
 .accrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 14px;font-size:13.5px}
 .accrow:not(:last-child){border-bottom:1px solid #f0ece3}
 @media(max-width:620px){.modal{padding:0}.sheet{border-radius:0;min-height:100vh;max-width:none}}
+#venueMap{height:230px;border-radius:8px;border:1px solid var(--line);margin-top:4px}
+.pill.tc{background:#fdeccf;color:#8a5a12;border:1px solid #f0cf95}
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 </head>
 <body>
 <div id="app"></div>
@@ -97,7 +101,7 @@ const FN_URL=CFG.url+"/functions/v1/admin-api";
    Şehir motorunun DOĞRULANMIŞ AYNASI; gerçek tek-kaynak AOÇ-1B/AOÇ-3'te app de bu dosyayı kullanınca tamamlanır.
    Yüklenemezse sağlık üretilmez (fail-closed). */
 let _contractLoad=null;
-const _CONTRACT_URL='/decision_contract.js?v=a6743474f0b5b5b9';   // contract SHA-256(16); her güncellemede yenile
+const _CONTRACT_URL='/decision_contract.js?v=3d213996e71a655d';   // contract SHA-256(16); her güncellemede yenile
 function ensureContract(){
   if(window.DecisionContract) return Promise.resolve(true);
   if(_contractLoad) return _contractLoad;                          // yalnız DEVAM EDEN yükleme paylaşılır
@@ -293,20 +297,26 @@ async function renderOzet(){
 }
 
 /* ---------- MEKANLAR (değiştirilmedi) ---------- */
-let vFilter={q:"",city:"",active:""};
+let vFilter={q:"",city:"",active:"",coord:""};
+function admTempClosed(v){ if(!v)return false; const cu=v.closed_until; if(cu!=null&&cu!==""){ return String(cu).slice(0,10) >= new Date().toISOString().slice(0,10); } return v.temporarily_closed===true; }
+function admCoordState(v){ if(v.lat==null||v.lng==null)return "missing"; if(v.lat< -90||v.lat>90||v.lng< -180||v.lng>180)return "invalid"; return "ok"; }
 function renderVenues(){
   const cities=[...new Set(DATA.venues.map(v=>v.city))];
   let list=DATA.venues.filter(v=>{
     if(vFilter.city&&v.city!==vFilter.city)return false;
     if(vFilter.active==="1"&&!v.active)return false;
     if(vFilter.active==="0"&&v.active)return false;
+    if(vFilter.active==="tc"&&!admTempClosed(v))return false;
+    if(vFilter.coord==="missing"&&admCoordState(v)!=="missing")return false;
+    if(vFilter.coord==="invalid"&&admCoordState(v)!=="invalid")return false;
     if(vFilter.q){ const q=vFilter.q.toLowerCase(); if(!((v.name||"").toLowerCase().includes(q)||(v.area||"").toLowerCase().includes(q)||(v.tags||[]).join(",").toLowerCase().includes(q)||(v.type||"").toLowerCase().includes(q)))return false; }
     return true;
   });
   const body='<div class="panel"><div class="toolbar">'
     +'<input class="search" id="vq" placeholder="Ara: ad, semt, etiket, tür…" value="'+esc(vFilter.q)+'">'
     +'<select id="vcity"><option value="">Tüm şehirler</option>'+cities.map(c=>'<option'+(vFilter.city===c?" selected":"")+'>'+esc(c)+'</option>').join("")+'</select>'
-    +'<select id="vact"><option value="">Hepsi</option><option value="1"'+(vFilter.active==="1"?" selected":"")+'>Aktif</option><option value="0"'+(vFilter.active==="0"?" selected":"")+'>Pasif</option></select>'
+    +'<select id="vact"><option value="">Durum: hepsi</option><option value="1"'+(vFilter.active==="1"?" selected":"")+'>Aktif</option><option value="0"'+(vFilter.active==="0"?" selected":"")+'>Pasif</option><option value="tc"'+(vFilter.active==="tc"?" selected":"")+'>Geçici kapalı</option></select>'
+    +'<select id="vcoord"><option value="">Koordinat: hepsi</option><option value="missing"'+(vFilter.coord==="missing"?" selected":"")+'>Koordinatsız</option><option value="invalid"'+(vFilter.coord==="invalid"?" selected":"")+'>Geçersiz</option></select>'
     +'<button class="btn primary" onclick="editVenue(null)">+ Yeni mekan</button>'
     +'<span class="muted">'+list.length+' / '+DATA.venues.length+'</span></div>'
     +'<div class="tablewrap"><table><thead><tr><th>Ad</th><th>Şehir · Semt</th><th>Tür</th><th>Etiketler</th><th>Saat</th><th>Durum</th><th></th></tr></thead><tbody>'
@@ -316,7 +326,9 @@ function renderVenues(){
       +'<td>'+esc(v.type||"")+'</td>'
       +'<td class="muted">'+esc((v.tags||[]).join(", "))+'</td>'
       +'<td class="muted">'+esc(v.hours||"")+'</td>'
-      +'<td>'+(v.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')+'</td>'
+      +'<td>'+(v.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')
+        +(admTempClosed(v)?' <span class="pill tc" title="Karar/Plan/Harita\'da gizli; tarih geçince otomatik açılır">geçici kapalı'+(v.closed_until?' · '+esc(String(v.closed_until).slice(0,10)):'')+'</span>':'')
+        +(admCoordState(v)==="missing"?' <span class="pill soon">koordinatsız</span>':(admCoordState(v)==="invalid"?' <span class="pill off">geçersiz koord</span>':''))+'</td>'
       +'<td style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm" onclick="toggleVenue(\''+esc(v.id)+'\')">'+(v.active?"Pasifle":"Aktifle")+'</button></td>'
       +'</tr>').join("")
     +'</tbody></table></div></div>';
@@ -324,11 +336,13 @@ function renderVenues(){
   $("vq").oninput=()=>{vFilter.q=$("vq").value; renderVenues(); $("vq").focus(); const el=$("vq"); el.setSelectionRange(el.value.length,el.value.length);};
   $("vcity").onchange=()=>{vFilter.city=$("vcity").value; renderVenues();};
   $("vact").onchange=()=>{vFilter.active=$("vact").value; renderVenues();};
+  $("vcoord").onchange=()=>{vFilter.coord=$("vcoord").value; renderVenues();};
 }
 function venueById(id){ return DATA.venues.find(v=>v.id===id); }
 function editVenue(id){
   const v=id?venueById(id):{id:"",city:"Amsterdam",active:true,garden:false,walk_in:false,work:false,sponsored:false,tags:[],cats:[],best:[]};
   const isNew=!id;
+  const ctype=(v.closed_until?"until_date":(v.temporarily_closed?"manual":"open"));
   const f=(k,l,val,type)=>'<div class="fld"><label>'+l+'</label><input id="f_'+k+'" '+(type?'type="'+type+'"':'')+' value="'+esc(val)+'"></div>';
   const ta=(k,l,val)=>'<div class="fld" style="flex:1 1 100%"><label>'+l+'</label><textarea id="f_'+k+'">'+esc(val)+'</textarea></div>';
   const chk=(k,l,val)=>'<div class="fld check"><input type="checkbox" id="f_'+k+'" '+(val?"checked":"")+'><label>'+l+'</label></div>';
@@ -340,6 +354,14 @@ function editVenue(id){
     +'<div class="frow">'+f("cats","Kategoriler (virgülle)",(v.cats||[]).join(", "))+f("best","Best (virgülle)",(v.best||[]).join(", "))+'</div>'
     +'<div class="frow">'+f("hours","Çalışma saatleri",v.hours||"")+self("resv","Rezervasyon",v.resv||"unknown",["no","rec","req","unknown"])+self("conf","Güven",v.conf||"high",["high","med","low"])+'</div>'
     +'<div class="frow">'+f("lat","Enlem (lat)",v.lat==null?"":v.lat)+f("lng","Boylam (lng)",v.lng==null?"":v.lng)+f("src","Kaynak",v.src||"")+'</div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Harita — tıkla veya pini sürükle; lat/lng kutuları otomatik güncellenir</label><div id="venueMap"></div><div class="muted" id="vcoordmsg" style="font-size:12px;margin-top:4px"></div></div>'
+    +'<div class="frow"><div class="fld"><label>Geçici kapanış</label><select id="f_closure_type" onchange="vClosureTypeChange()">'
+        +'<option value="open"'+(ctype==="open"?" selected":"")+'>Açık</option>'
+        +'<option value="until_date"'+(ctype==="until_date"?" selected":"")+'>Belirli tarihe kadar kapalı</option>'
+        +'<option value="manual"'+(ctype==="manual"?" selected":"")+'>Manuel açılana kadar kapalı</option>'
+      +'</select></div>'
+      +'<div class="fld" id="f_cu_wrap"><label>Kapalı — bu tarihe kadar (YYYY-MM-DD)</label><input type="date" id="f_closed_until" value="'+esc(v.closed_until?String(v.closed_until).slice(0,10):"")+'" oninput="vClosureTypeChange()"></div>'
+      +'<div class="fld"><label>&nbsp;</label><button type="button" class="btn sm" onclick="vCloseWeek()">1 hafta kapat</button></div></div>'
     +'<div class="frow">'+f("web","Web",v.web||"")+f("ig","Instagram",v.ig||"")+'</div>'
     +'<div class="fld" style="flex:1 1 100%"><label>Fotoğraf (boşsa kategori görseli kullanılır)</label>'
       +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
@@ -356,19 +378,61 @@ function editVenue(id){
     +'<div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button>'+(isNew?"":'<button class="btn danger" onclick="delVenue(\''+esc(v.id)+'\')">Sil</button>')+'<button class="btn primary" id="vsave">Kaydet</button></div>';
   openModal();
   try{venuePhotoPrev();}catch(e){}
+  try{initVenueMap(v);}catch(e){}
+  try{vClosureTypeChange();}catch(e){}
   $("vsave").onclick=()=>saveVenue(isNew);
 }
+let _vmap=null,_vmarker=null;
+function initVenueMap(v){
+  if(typeof L==="undefined")return;
+  if(_vmap){ try{_vmap.remove();}catch(e){} _vmap=null; _vmarker=null; }
+  const latEl=$("f_lat"),lngEl=$("f_lng"); if(!latEl||!lngEl)return;
+  const clat=parseFloat(latEl.value), clng=parseFloat(lngEl.value);
+  const hasCo=isFinite(clat)&&clat>=-90&&clat<=90&&isFinite(clng)&&clng>=-180&&clng<=180;
+  const cityRow=(DATA.cities||[]).find(c=>c.name===((latEl&&$("f_city")?$("f_city").value:"")||v.city));
+  const dlat=hasCo?clat:(cityRow&&cityRow.lat!=null?cityRow.lat:52.37);
+  const dlng=hasCo?clng:(cityRow&&cityRow.lng!=null?cityRow.lng:4.895);
+  _vmap=L.map('venueMap').setView([dlat,dlng], hasCo?15:12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_vmap);
+  _vmarker=L.marker([dlat,dlng],{draggable:true}).addTo(_vmap);
+  const setCoord=(la,ln)=>{ latEl.value=(+la).toFixed(6); lngEl.value=(+ln).toFixed(6); _vmarker.setLatLng([la,ln]); vCoordMsg(); };
+  _vmap.on('click',e=>setCoord(e.latlng.lat,e.latlng.lng));
+  _vmarker.on('dragend',()=>{ const p=_vmarker.getLatLng(); setCoord(p.lat,p.lng); });
+  const moveFromInputs=()=>{ const a=parseFloat(latEl.value),b=parseFloat(lngEl.value); if(isFinite(a)&&a>=-90&&a<=90&&isFinite(b)&&b>=-180&&b<=180){ _vmarker.setLatLng([a,b]); _vmap.panTo([a,b]); } vCoordMsg(); };
+  latEl.addEventListener('input',moveFromInputs); lngEl.addEventListener('input',moveFromInputs);
+  setTimeout(()=>{ try{_vmap.invalidateSize();}catch(e){} },200);
+  vCoordMsg();
+}
+function vCoordMsg(){ const m=$("vcoordmsg"); if(!m)return; const lv=$("f_lat").value.trim(),gv=$("f_lng").value.trim(); const a=parseFloat(lv),b=parseFloat(gv);
+  if(lv===""&&gv===""){ m.textContent="Koordinatsız (kuyrukta görünür). Haritaya tıklayarak ekleyebilirsin."; m.style.color="#8a5a12"; return; }
+  if(!(isFinite(a)&&a>=-90&&a<=90&&isFinite(b)&&b>=-180&&b<=180)){ m.textContent="⚠ Geçersiz koordinat aralığı (lat −90..90, lng −180..180) — kaydedilemez."; m.style.color="#a33"; return; }
+  m.textContent="✓ Koordinat geçerli: "+a.toFixed(5)+", "+b.toFixed(5); m.style.color="#2a7"; }
+function vClosureTypeChange(){ const t=$("f_closure_type"); const w=$("f_cu_wrap"); if(w)w.style.display=(t&&t.value==="until_date")?"":"none"; }
+function vCloseWeek(){ const d=new Date(); d.setDate(d.getDate()+7); const e=$("f_closed_until"); if(e)e.value=d.toISOString().slice(0,10); const t=$("f_closure_type"); if(t)t.value="until_date"; vClosureTypeChange(); }
 async function saveVenue(isNew){
   const g=k=>{const e=$("f_"+k);return e?e.value:"";};
   const gc=k=>{const e=$("f_"+k);return e?e.checked:false;};
   const id=g("id").trim();
   if(!id||!g("name").trim()){ $("verr").textContent="ID ve Ad zorunlu."; return; }
+  // AOÇ-2: koordinat aralık doğrulaması (boş=null izinli; varsa aralık zorunlu)
+  const latRaw=g("lat").trim(), lngRaw=g("lng").trim();
+  let latV=latRaw===""?null:parseFloat(latRaw), lngV=lngRaw===""?null:parseFloat(lngRaw);
+  if(latV!==null&&(!isFinite(latV)||latV< -90||latV>90)){ $("verr").textContent="Enlem (lat) −90..90 aralığında olmalı."; return; }
+  if(lngV!==null&&(!isFinite(lngV)||lngV< -180||lngV>180)){ $("verr").textContent="Boylam (lng) −180..180 aralığında olmalı."; return; }
+  if((latV===null)!==(lngV===null)){ $("verr").textContent="Enlem ve boylam birlikte dolu veya birlikte boş olmalı."; return; }
+  // AOÇ-2: kapanış tipi → iki net durum. Belirli tarih: yalnız closed_until. Manuel: yalnız temporarily_closed.
+  const ctype=g("closure_type"); let temporarily_closed=false, closed_until=null;
+  if(ctype==="until_date"){ const cd=g("closed_until").trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(cd)){ $("verr").textContent="Belirli tarihe kadar kapalı için geçerli tarih (YYYY-MM-DD) gir."; return; }
+    closed_until=cd; }
+  else if(ctype==="manual"){ temporarily_closed=true; }
   const row={id, name:g("name").trim(), city:g("city").trim()||"Amsterdam", area:g("area").trim(), type:g("type").trim(),
     tags:arr(g("tags")), cats:arr(g("cats")), best:arr(g("best")), hours:g("hours").trim()||null,
     resv:g("resv"), conf:g("conf"), src:g("src").trim()||null, web:g("web").trim()||null, ig:g("ig").trim()||null, photo_url:g("photo_url").trim()||null,
     tip:g("tip").trim()||null, description:g("description").trim()||null, note:g("note").trim()||null,
-    lat:g("lat")?parseFloat(g("lat")):null, lng:g("lng")?parseFloat(g("lng")):null,
+    lat:latV, lng:lngV,
     garden:gc("garden"), walk_in:gc("walk_in"), work:gc("work"), sponsored:gc("sponsored"), active:gc("active"),
+    temporarily_closed:temporarily_closed, closed_until:closed_until,
     updated_at:new Date().toISOString()};
   const btn=$("vsave"); btn.disabled=true; btn.textContent="Kaydediliyor…";
   try{ const {error}=await db.from("venues").upsert(row,{onConflict:"id"}); if(error)throw error; }catch(e){ $("verr").textContent="Hata: "+(e.message||e); btn.disabled=false; btn.textContent="Kaydet"; return; }
