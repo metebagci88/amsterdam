@@ -941,9 +941,10 @@ async function openMember360(uid){
   const id=d.identity||{}, mem=d.member||{}, sm=d.summary||{};
   const line=(l,val)=>'<div class="accrow"><span><b>'+esc(l)+'</b></span><span style="max-width:62%;text-align:right;word-break:break-word">'+esc(val==null||val===""?"—":val)+'</span></div>';
   const moreNote=s=>(s&&s.has_more)?'<div class="accrow"><span class="muted">…ilk 20 gösteriliyor (toplam '+esc(s.total||0)+')</span></div>':'';
-  const T=d.trips||{}, F=d.favorites||{}, C=d.comments||{}, P=d.point_events||{};
+  const T=d.trips||{}, F=d.favorites||{}, C=d.comments||{}, P=d.point_events||{}, PL=d.plans||{}, RX=d.reactions||{}, TL=d.timeline||{};
+  window.__m360={uid:uid, note:(mem.admin_note||""), segment:(mem.segment||""), timeline:(TL.items||[]), tlFilter:"all"};
   let h='<h2>Üye 360</h2>';
-  h+='<div class="accitem" style="margin-bottom:12px"><div class="acchead"><span><b>Kimlik &amp; profil</b></span>'+(mem.profile_exists?'<span class="pill on">profil var</span>':'<span class="pill off">profil yok</span>')+'</div><div class="accbody">'
+  h+='<div class="accitem" style="margin-bottom:12px"><div class="acchead"><span><b>Kimlik &amp; profil</b></span>'+(mem.segment?'<span class="pill sp">'+esc(mem.segment)+'</span> ':'')+(mem.profile_exists?'<span class="pill on">profil var</span>':'<span class="pill off">profil yok</span>')+'</div><div class="accbody">'
     +line("Ad", mem.display_name)+line("E-posta", id.email)
     +line("Seviye", mem.tier)+line("Puan", mem.points)
     +line("Şehir", mem.home_city)+line("Cinsiyet", mem.gender)+line("Bio", mem.bio)
@@ -957,6 +958,12 @@ async function openMember360(uid){
        : '<button class="btn" disabled>Bloke</button> <span class="muted">Topluluk profili bulunmuyor; bu işlem Auth hesabını kapatmaz.</span>')
     +(CAPS.superadmin && mem.profile_exists ? ' <button class="btn" id="m360pts">Puan düzelt</button>' : '')
     +'</div>';
+  // AOÇ-4: Admin notu + Segment (düzenlenebilir; super_admin/support)
+  h+='<div class="accitem" style="margin-bottom:12px"><div class="acchead"><span><b>Admin notu &amp; Segment</b></span><span class="muted" style="font-size:11px">yalnız yönetim; kullanıcıya/görünür profile sızmaz</span></div><div class="accbody">'
+    +'<div class="fld" style="flex:1 1 100%"><label>Segment etiketi (tek etiket)</label><input id="m360seg" value="'+esc(mem.segment||"")+'" placeholder="ör. vip, riskli, kampanya-a" style="width:100%"></div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Admin notu</label><textarea id="m360note" rows="3" placeholder="Yalnız yöneticilerin göreceği not…">'+esc(mem.admin_note||"")+'</textarea></div>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="m360savemeta">Not &amp; segmenti kaydet</button><span class="muted" id="m360metamsg" style="font-size:12px"></span></div>'
+    +'</div></div>';
   h+='<div class="cards">'+stat(sm.trips||0,"Seyahat")+stat(sm.favorites||0,"Favori")+stat(sm.comments||0,"Yorum")+stat(sm.point_events||0,"Puan olayı")+'</div>';
   h+='<div class="acc">';
   h+='<div class="accitem"><div class="acchead"><span><b>Son seyahatler</b></span><span class="pill">'+esc(T.total||0)+'</span></div><div class="accbody">'
@@ -967,12 +974,45 @@ async function openMember360(uid){
     +((C.items||[]).length?(C.items).map(c=>'<div class="accrow"><span style="max-width:70%;word-break:break-word">'+esc((c.body||"").slice(0,140))+' <span class="muted">· '+esc(c.venue_id||"")+(c.hidden?" · gizli":"")+'</span></span><span class="muted">'+fmtDate(c.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(C)+'</div></div>';
   h+='<div class="accitem"><div class="acchead"><span><b>Son puan olayları</b></span><span class="pill">'+esc(P.total||0)+'</span></div><div class="accbody">'
     +((P.items||[]).length?(P.items).map(p=>'<div class="accrow"><span><b>'+esc(p.event_type||"—")+'</b> <span class="muted">· '+esc(p.status||"")+'</span></span><span>'+esc(p.points)+' puan · '+fmtDate(p.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(P)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Oluşturulan planlar</b></span><span class="pill">'+esc(PL.total||0)+'</span></div><div class="accbody">'
+    +((PL.items||[]).length?(PL.items).map(p=>'<div class="accrow"><span><b>'+esc(p.city||"—")+'</b> <span class="muted">· plan v'+esc(p.version)+' · seyahat #'+esc(p.trip_id)+'</span></span><span class="muted">'+fmtDate(p.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(PL)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Reaksiyonlar</b></span><span class="pill">'+esc(RX.total||0)+'</span></div><div class="accbody">'
+    +((RX.items||[]).length?(RX.items).map(x=>'<div class="accrow"><span>'+esc(x.reaction||"—")+' <span class="muted">· yorum #'+esc(x.comment_id)+'</span></span><span class="muted">'+fmtDate(x.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(RX)+'</div></div>';
   h+='</div>';
+  // AOÇ-4: Zaman çizelgesi (birleşik, tarih sıralı, tür filtresi)
+  h+='<div class="accitem" style="margin-top:12px"><div class="acchead"><span><b>Zaman çizelgesi</b></span><span class="pill">'+esc(TL.total||0)+'</span></div><div class="accbody">'
+    +'<div class="toolbar" style="margin-bottom:8px"><select id="m360tlf"><option value="all">Tümü</option><option value="point">Puan</option><option value="trip">Seyahat</option><option value="plan">Plan</option><option value="favorite">Favori</option><option value="comment">Yorum</option><option value="reaction">Reaksiyon</option></select></div>'
+    +'<div id="m360tl"></div>'
+    +((TL.has_more)?'<div class="accrow"><span class="muted">…son 50 gösteriliyor (toplam '+esc(TL.total||0)+')</span></div>':'')
+    +'</div></div>';
   h+='<div class="hint" style="margin-top:10px">Bloke = topluluk içeriği bastırma (yorum/beğeni herkese açık yüzeylerden kalkar); Auth hesap yasağı değildir. Manuel puan düzeltme yalnız super_admin tarafından yapılabilir; ±100 sınırındadır, gerekçe ve ayrıntılı not zorunludur ve işlem denetim kaydına yazılır.</div>';
   h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
   $("sheet").innerHTML=h;
   if(canBlock && $("m360block")) $("m360block").onclick=()=>memBlock(uid, !mem.blocked, (mem.display_name||id.email||uid));
   if($("m360pts")) $("m360pts").onclick=()=>openPointsAdjust(uid, (mem.display_name||id.email||uid), mem.points);
+  renderM360Timeline();
+  if($("m360tlf")) $("m360tlf").onchange=()=>{ window.__m360.tlFilter=$("m360tlf").value; renderM360Timeline(); };
+  if($("m360savemeta")) $("m360savemeta").onclick=()=>saveMemberMeta(uid);
+}
+function renderM360Timeline(){
+  const el=$("m360tl"); if(!el||!window.__m360)return;
+  const f=window.__m360.tlFilter||"all";
+  const icon={point:"◆",trip:"✈",plan:"🗺",favorite:"★",comment:"💬",reaction:"👍"};
+  const rows=(window.__m360.timeline||[]).filter(x=>f==="all"||x.type===f);
+  el.innerHTML=rows.length? rows.map(x=>'<div class="accrow"><span style="max-width:70%;word-break:break-word">'+(icon[x.type]||"•")+' '+esc(x.label||"")+'</span><span class="muted">'+fmtDate(x.ts)+'</span></div>').join(""):'<div class="accrow"><span class="muted">kayıt yok</span></div>';
+}
+async function saveMemberMeta(uid){
+  const seg=($("m360seg")?$("m360seg").value:"")||"";
+  const note=($("m360note")?$("m360note").value:"")||"";
+  const msg=$("m360metamsg"), btn=$("m360savemeta"); if(btn){btn.disabled=true;btn.textContent="Kaydediliyor…";}
+  try{
+    const r1=await adminApi("member_set_segment",{target:uid,segment:seg,idempotency_key:uuid4()});
+    if(r1.status!==200) throw new Error("Segment: "+apiErrText(r1.status));
+    const r2=await adminApi("member_set_note",{target:uid,note:note,idempotency_key:uuid4()});
+    if(r2.status!==200) throw new Error("Not: "+apiErrText(r2.status));
+    if(msg){msg.textContent="✓ kaydedildi"; msg.style.color="#2a7";}
+  }catch(e){ if(msg){msg.textContent="Hata: "+(e.message||e); msg.style.color="#a33";} }
+  if(btn){btn.disabled=false;btn.textContent="Not & segmenti kaydet";}
 }
 
 /* ---------- 0C.2: manuel puan düzeltme (super_admin, ±100, gerekçe zorunlu, idempotent) ---------- */
