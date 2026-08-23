@@ -2082,10 +2082,27 @@ function deRenderResults(res){
   if(!res.full.length && !res.alternatives.length){ html+='<div class="seg-card">Bu filtre ve mesafe aralığında uygun sonuç bulamadık.</div>'; }
   return html;
 }
+/* CDP-1: Karar kullanımı davranış olayı — yalnız giriş yapmış kullanıcı; yalnız KATEGORİK allowlist
+   (city,mode,time,status,result_count_bucket). Koordinat/arama/serbest metin GÖNDERİLMEZ.
+   İdempotent: aynı logical karar için istemci UUID; çift tıklama 5sn içinde tekrar yazmaz (server unique event_id). */
+async function asaLogDecision(res){
+  try{
+    var cli=(window.asaDB&&window.asaDB())||null; if(!cli)return;
+    var s=await cli.auth.getSession(); var u=s&&s.data&&s.data.session&&s.data.session.user; if(!u)return;   // yalnız giriş yapmış
+    var n=(res&&res.full)?res.full.length:0; var bucket=(n===0?'0':(n<=2?'1-2':(n<=5?'3-5':'6+')));
+    var props={ city:(typeof CITY!=='undefined'?CITY:null), mode:(deSel&&deSel.mode)||null, time:(deSel&&deSel.time)||null, status:(res&&res.status)||null, result_count_bucket:bucket };
+    var key=[props.city,props.mode,props.time,props.status,bucket].join('|'); var now=Date.now();
+    if(window.__lastDecKey===key && (now-(window.__lastDecTs||0))<5000) return;   // çift tıklama/hızlı tekrar dedupe
+    window.__lastDecKey=key; window.__lastDecTs=now;
+    var eid=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(function(){var b=new Uint8Array(16);(crypto.getRandomValues||function(x){for(var i=0;i<x.length;i++)x[i]=Math.floor(Math.random()*256);})(b);b[6]=(b[6]&0x0f)|0x40;b[8]=(b[8]&0x3f)|0x80;var h=[];for(var i=0;i<16;i++)h.push(b[i].toString(16).padStart(2,'0'));return h.slice(0,4).join('')+'-'+h.slice(4,6).join('')+'-'+h.slice(6,8).join('')+'-'+h.slice(8,10).join('')+'-'+h.slice(10,16).join('');})();
+    await cli.rpc('log_behavior_event',{ p_event_id:eid, p_type:'decision_used', p_props:props });
+  }catch(e){}   // fail-safe
+}
 function runDE(){
   var out=document.getElementById('deOut'); if(!out)return;
   if(!deLoc){ out.innerHTML=''; return; }
   var res=window.DecisionEngine.decide({loc:deLoc,city:CITY,filters:deSel,inventory:V,favIds:[...favSet],targetCount:5});
+  try{ asaLogDecision(res); }catch(e){}   /* CDP-1: davranış olayı (fail-safe; app'i asla bozmaz) */
   if(res.status==='out_of_area'){
     deLocState='out_of_area'; deRenderLocBar();
     out.innerHTML='<div class="seg-card"><b>Şu anda '+CITY+'’ın keşif alanı dışındasın.</b><div style="margin-top:4px;color:var(--ink2)">Karar motoru '+CITY+'’dayken mevcut konumuna en yakın yerleri gösterecek.</div></div>';
