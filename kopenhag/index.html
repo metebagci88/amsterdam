@@ -2089,9 +2089,11 @@ async function asaLogDecision(res){
   try{
     var cli=(window.asaDB&&window.asaDB())||null; if(!cli)return;
     var s=await cli.auth.getSession(); var u=s&&s.data&&s.data.session&&s.data.session.user; if(!u)return;   // yalnız giriş yapmış
-    var n=(res&&res.full)?res.full.length:0; var bucket=(n===0?'0':(n<=2?'1-2':(n<=5?'3-5':'6+')));
-    var props={ city:(typeof CITY!=='undefined'?CITY:null), mode:(deSel&&deSel.mode)||null, time:(deSel&&deSel.time)||null, status:(res&&res.status)||null, result_count_bucket:bucket };
-    var key=[props.city,props.mode,props.time,props.status,bucket].join('|'); var now=Date.now();
+    var bk=function(x){ return x===0?'0':(x<=2?'1-2':(x<=5?'3-5':'6+')); };
+    var nf=(res&&res.full)?res.full.length:0; var nd=nf+((res&&res.alternatives)?res.alternatives.length:0);
+    var props={ city:(typeof CITY!=='undefined'?CITY:null), mode:(deSel&&deSel.mode)||null, time:(deSel&&deSel.time)||null, status:(res&&res.status)||null,
+                full_match_count_bucket:bk(nf), displayed_result_count_bucket:bk(nd) };
+    var key=[props.city,props.mode,props.time,props.status,props.full_match_count_bucket,props.displayed_result_count_bucket].join('|'); var now=Date.now();
     if(window.__lastDecKey===key && (now-(window.__lastDecTs||0))<5000) return;   // çift tıklama/hızlı tekrar dedupe
     window.__lastDecKey=key; window.__lastDecTs=now;
     var eid=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(function(){var b=new Uint8Array(16);(crypto.getRandomValues||function(x){for(var i=0;i<x.length;i++)x[i]=Math.floor(Math.random()*256);})(b);b[6]=(b[6]&0x0f)|0x40;b[8]=(b[8]&0x3f)|0x80;var h=[];for(var i=0;i<16;i++)h.push(b[i].toString(16).padStart(2,'0'));return h.slice(0,4).join('')+'-'+h.slice(4,6).join('')+'-'+h.slice(6,8).join('')+'-'+h.slice(8,10).join('')+'-'+h.slice(10,16).join('');})();
