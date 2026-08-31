@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="asa-city-code" content="dk-cph" />
 <title>Amsterdam · Lokal Yaşam Rehberi (11–31 Temmuz)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,0,700;9..144,1,400;9..144,1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -2085,7 +2086,29 @@ function deRenderResults(res){
 /* CDP-1: Karar kullanımı davranış olayı — yalnız giriş yapmış kullanıcı; yalnız KATEGORİK allowlist
    (city,mode,time,status,result_count_bucket). Koordinat/arama/serbest metin GÖNDERİLMEZ.
    İdempotent: aynı logical karar için istemci UUID; çift tıklama 5sn içinde tekrar yazmaz (server unique event_id). */
+/* CDP-2C: sehir goruntuleme olayi — yalniz girisli; kategorik allowlist; server collapse otoritesi; fail-safe */
+async function asaLogCityView(){
+  var _code=null;
+  try{
+    var meta=document.querySelector('meta[name="asa-city-code"]'); var code=meta&&meta.getAttribute('content'); if(!code) return;
+    // MEVCUT document yasami boyunca in-memory guard (sessionStorage YOK; sekme kapanana kadar DEGIL).
+    // SENKRON kurulur (await'lerden ONCE) -> ayni document'ta iki es zamanli cagri getSession await'inde bulusup CIFT RPC atmaz.
+    // Sayfa yenilenince yeni document -> guard sifir -> RPC tekrar gider; server 6h collapse KARAR verir.
+    window.__asaCityViewSent=window.__asaCityViewSent||{}; if(window.__asaCityViewSent[code]) return;
+    window.__asaCityViewSent[code]=1; _code=code;   // optimistik guard (basarisizlikta asagida geri alinir)
+    var cli=(window.asaDB&&window.asaDB())||null; if(!cli){ window.__asaCityViewSent[code]=0; return; }
+    var s=await cli.auth.getSession(); var u=s&&s.data&&s.data.session&&s.data.session.user; if(!u){ window.__asaCityViewSent[code]=0; return; }   // yalniz girisli
+    var es='direct'; try{ var ref=document.referrer||''; if(ref){ es=(new URL(ref).origin===location.origin)?'internal':'referral'; } }catch(e){ es='direct'; }
+    var eid=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(function(){var b=new Uint8Array(16);(crypto.getRandomValues||function(x){for(var i=0;i<x.length;i++)x[i]=Math.floor(Math.random()*256);})(b);b[6]=(b[6]&0x0f)|0x40;b[8]=(b[8]&0x3f)|0x80;var h=[];for(var i=0;i<16;i++)h.push(b[i].toString(16).padStart(2,'0'));return h.slice(0,4).join('')+'-'+h.slice(4,6).join('')+'-'+h.slice(6,8).join('')+'-'+h.slice(8,10).join('')+'-'+h.slice(10,16).join('');})();
+    var r=await cli.rpc('log_city_view',{ p_event_id:eid, p_city_code:code, p_entry_source:es });
+    var d=r&&r.data, err=r&&r.error;
+    // {data,error} OKUNUR: yalniz GERCEK basari guard'i tutar (error yok + ok===true + recorded|collapsed|idempotent). Aksi halde GERI AL -> sonraki uygun cagri yeniden dener.
+    var ok=(!err && d && d.ok===true && (d.recorded===true || d.reason==='collapsed' || d.reason==='idempotent'));
+    if(!ok){ window.__asaCityViewSent[code]=0; }
+  }catch(e){ try{ if(_code) window.__asaCityViewSent[_code]=0; }catch(_){} }
+}
 async function asaLogDecision(res){
+  var key=null;   // dış kapsam: exception halinde catch dedupe'u temizleyebilsin
   try{
     var cli=(window.asaDB&&window.asaDB())||null; if(!cli)return;
     var s=await cli.auth.getSession(); var u=s&&s.data&&s.data.session&&s.data.session.user; if(!u)return;   // yalnız giriş yapmış
@@ -2093,12 +2116,18 @@ async function asaLogDecision(res){
     var nf=(res&&res.full)?res.full.length:0; var nd=nf+((res&&res.alternatives)?res.alternatives.length:0);
     var props={ city:(typeof CITY!=='undefined'?CITY:null), mode:(deSel&&deSel.mode)||null, time:(deSel&&deSel.time)||null, status:(res&&res.status)||null,
                 full_match_count_bucket:bk(nf), displayed_result_count_bucket:bk(nd) };
-    var key=[props.city,props.mode,props.time,props.status,props.full_match_count_bucket,props.displayed_result_count_bucket].join('|'); var now=Date.now();
-    if(window.__lastDecKey===key && (now-(window.__lastDecTs||0))<5000) return;   // çift tıklama/hızlı tekrar dedupe
-    window.__lastDecKey=key; window.__lastDecTs=now;
+    key=[props.city,props.mode,props.time,props.status,props.full_match_count_bucket,props.displayed_result_count_bucket].join('|'); var now=Date.now();
+    if(window.__lastDecKey===key && (now-(window.__lastDecTs||0))<5000) return;   // çift tıklama/hızlı tekrar dedupe (yalnız başarılı son yazımdan sonra)
+    window.__lastDecKey=key; window.__lastDecTs=now;   // optimistik: aynı sync anda ikinci çağrı tek RPC'ye düşer
     var eid=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(function(){var b=new Uint8Array(16);(crypto.getRandomValues||function(x){for(var i=0;i<x.length;i++)x[i]=Math.floor(Math.random()*256);})(b);b[6]=(b[6]&0x0f)|0x40;b[8]=(b[8]&0x3f)|0x80;var h=[];for(var i=0;i<16;i++)h.push(b[i].toString(16).padStart(2,'0'));return h.slice(0,4).join('')+'-'+h.slice(4,6).join('')+'-'+h.slice(6,8).join('')+'-'+h.slice(8,10).join('')+'-'+h.slice(10,16).join('');})();
-    await cli.rpc('log_behavior_event',{ p_event_id:eid, p_type:'decision_used', p_props:props });
-  }catch(e){}   // fail-safe
+    var r=await cli.rpc('log_behavior_event',{ p_event_id:eid, p_type:'decision_used', p_props:props });
+    // GERÇEK sözleşme (log_behavior_event -> {ok:true,duplicate}) doğrulanır: yalnız r var + error yok + data.ok===true başarıdır.
+    // {error:null} tek başına başarı SAYILMAZ; r boş/null veya data.ok!==true ise dedupe GERİ ALINIR -> aynı karar hemen yeniden denenebilir.
+    var ok=(r && !r.error && r.data && r.data.ok===true);
+    if(!ok && window.__lastDecKey===key){ window.__lastDecKey=null; window.__lastDecTs=0; }
+  }catch(e){   // rpc exception dahil: dedupe temizlenir -> retry mümkün (fail-safe; app'i asla bozmaz)
+    if(key && window.__lastDecKey===key){ window.__lastDecKey=null; window.__lastDecTs=0; }
+  }
 }
 function runDE(){
   var out=document.getElementById('deOut'); if(!out)return;
@@ -2317,6 +2346,7 @@ const ASA = (function(){
     try{ const {data:mrow}=await db.from("members").select("blocked").eq("user_id",uid).maybeSingle(); if(mrow&&mrow.blocked){ try{await db.auth.signOut();}catch(e){} session=null;member=null;render(); return {ok:false,msg:"Bu hesap engellendi. Erişimin kısıtlı."}; } }catch(e){}
     await syncOnLogin(uid,email,false);
     try{ await importGuestTrip(); }catch(e){}
+    try{ await asaLogCityView(); }catch(e){}
     return {ok:true};
   }
 
