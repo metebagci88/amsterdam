@@ -1065,7 +1065,7 @@ const SEG_FIELDS=[
   {f:"city_viewed",label:"Şehre baktı (yakında — CDP-2C)",grp:"soon",kind:"soon",disabled:true}
 ];
 function segMeta(f){ return SEG_FIELDS.find(x=>x.f===f)||SEG_FIELDS[0]; }
-let _seg={match:"all",groups:[{match:"all",rules:[{field:"has_trip"}]}]}, _segEditId=null, _segName="", _segDesc="", _segEditActive=null;
+let _seg={match:"all",groups:[{match:"all",rules:[{field:"has_trip"}]}]}, _segEditId=null, _segName="", _segDesc="", _segEditActive=null, _segFlash=null;
 function segDefault(field){ const m=segMeta(field);
   switch(m.kind){
     case "bool": return "true";
@@ -1214,6 +1214,8 @@ async function renderSegments(){
   $("segSave").onclick=segSave;
   if($("segNew"))$("segNew").onclick=()=>{ _segEditId=null;_segName="";_segDesc="";_segEditActive=null;_seg={match:"all",groups:[{match:"all",rules:[{field:"has_trip",value:"true"}]}]}; renderSegments(); };
   segListLoad();
+  // Başarı mesajı (flash) — tam yeniden render sonrası builder DIŞINDA status alanında gösterilir
+  if(_segFlash){ const fe=$("segSaveMsg"); if(fe){ fe.innerHTML=_segFlash.text; fe.style.color=_segFlash.color||""; } _segFlash=null; }
 }
 let _evRef=null;
 async function segMemberSearch(){
@@ -1269,11 +1271,18 @@ async function segSave(){
   const r=await adminApi("segment_upsert",{ id:_segEditId, name:name, description:desc||null, definition:segBuildDef(), active:activeParam });
   if(r.status!==200){ msg.textContent="Hata: "+apiErrText(r.status); msg.style.color="#a33"; return; }
   const d=(r.body&&r.body.data)||{};
+  // Mesajı hazırla (flash olarak tam yeniden render sonrası gösterilecek)
+  let ftext, fcolor;
+  if(d.needs_review===true){ ftext='⚠ Gözden geçirilmeli olarak kaydedildi (pasif). Eski/riskli kuralı kaldırıp güvenli tanımla tekrar kaydedin.'; fcolor="#8a5a00"; }
+  else if(d.review_cleared===true){ ftext='✓ Gözden geçirme tamamlandı; segment <b>pasif</b> olarak kaydedildi. Kontrol ettikten sonra "Aktifle" ile aktifleştirebilirsiniz.'; fcolor="#2a7"; }
+  else { ftext='✓ kaydedildi'; fcolor="#2a7"; }
+  // (A) Başarılı kayıttan sonra formu tamamen "Yeni segment" durumuna sıfırla + TAM yeniden render.
+  // Böylece iç state (_segEditId=null) ile ekran (buton "Segmenti kaydet", alanlar boş) birebir aynı olur;
+  // ikinci kaydetmede yanlışlıkla id:null ile yeni segment oluşması engellenir.
   _segEditId=null; _segName=""; _segDesc=""; _segEditActive=null;
-  if(d.needs_review===true){ msg.innerHTML='⚠ Gözden geçirilmeli olarak kaydedildi (pasif). Eski/riskli kuralı kaldırıp güvenli tanımla tekrar kaydedin.'; msg.style.color="#8a5a00"; }
-  else if(d.review_cleared===true){ msg.innerHTML='✓ Gözden geçirme tamamlandı; segment <b>pasif</b> olarak kaydedildi. Kontrol ettikten sonra "Aktifle" ile aktifleştirebilirsiniz.'; msg.style.color="#2a7"; }
-  else { msg.textContent="✓ kaydedildi"; msg.style.color="#2a7"; }
-  segListLoad();
+  _seg={match:"all",groups:[{match:"all",rules:[{field:"has_trip",value:"true"}]}]};
+  _segFlash={text:ftext,color:fcolor};
+  await renderSegments();
 }
 async function segListLoad(){
   const el=$("segList"); const r=await adminApi("segment_list",{});
@@ -1295,12 +1304,14 @@ async function segListLoad(){
     +(segs.length?segs.map(rowHtml).join(""):'<tr><td colspan="5" class="muted">yok</td></tr>')
     +'</tbody></table></div></div>';
 }
+async function segRefresh(){ const el=$("segList"); if(el) el.innerHTML='<div class="panel"><span class="muted">Güncelleniyor…</span></div>'; await segListLoad(); }
 async function segRun(id){
-  const cell=$("segrun_"+id); if(cell)cell.firstChild.innerHTML='<span class="muted" style="padding:6px;display:block">Çalıştırılıyor…</span>';
+  const cell=$("segrun_"+id); if(cell&&cell.firstChild)cell.firstChild.innerHTML='<span class="muted" style="padding:6px;display:block">Çalıştırılıyor…</span>';
   const r=await adminApi("segment_run",{id:id});
-  if(r.status!==200){ if(cell)cell.firstChild.innerHTML='<div class="notice err" style="margin:6px">'+esc(apiErrText(r.status))+'</div>'; return; }
-  const d=r.body.data||{}; if(cell){ const wrap=document.createElement("div"); wrap.style.padding="6px"; cell.firstChild.innerHTML=""; cell.firstChild.appendChild(wrap); segShowResult(d, wrap); }
-  segListLoad();
+  if(r.status!==200){ if(cell&&cell.firstChild)cell.firstChild.innerHTML='<div class="notice err" style="margin:6px">'+esc(apiErrText(r.status))+'</div>'; return; }
+  const d=r.body.data||{};
+  await segRefresh();                     // liste güncel last_count ile yenilenir (sekmeye yeniden girmek gerekmez)
+  const c2=$("segrun_"+id); if(c2&&c2.firstChild){ const wrap=document.createElement("div"); wrap.style.padding="6px"; c2.firstChild.innerHTML=""; c2.firstChild.appendChild(wrap); segShowResult(d, wrap); }
 }
 function segEditVal(field,value){ const m=segMeta(field);
   if(m.kind==="bool") return (value===false||value==="false")?"false":"true";
@@ -1312,8 +1323,8 @@ function segEditVal(field,value){ const m=segMeta(field);
   return value; // citypresent/opn/catopn/catoppct/dommode/scalars API şekli UI ile uyumlu
 }
 function segEdit(js){ try{ const s=JSON.parse(js); _segEditId=s.id; _segName=s.name||""; _segDesc=s.description||""; _segEditActive=(typeof s.active==="boolean")?s.active:null; const def=s.definition||{match:"all",groups:[]}; _seg={match:def.match||"all", groups:(def.groups||[]).map(g=>({match:g.match||"all", rules:(g.rules||[]).map(r=>({field:r.field, value:segEditVal(r.field,r.value)}))}))}; if(!_seg.groups.length)_seg.groups=[{match:"all",rules:[{field:"has_trip",value:"true"}]}]; renderSegments(); }catch(e){ alert("Düzenlenemedi"); } }
-async function segDup(id){ const r=await adminApi("segment_duplicate",{id:id}); if(r.status!==200){ alert("Hata: "+apiErrText(r.status)); return; } segListLoad(); }
-async function segToggle(id,act){ const r=await adminApi("segment_set_active",{id:id,active:act}); if(r.status!==200){ alert("Hata: "+apiErrText(r.status)); return; } segListLoad(); }
+async function segDup(id){ const el=$("segList"); if(el)el.innerHTML='<div class="panel"><span class="muted">Güncelleniyor…</span></div>'; const r=await adminApi("segment_duplicate",{id:id}); if(r.status!==200){ alert("Hata: "+apiErrText(r.status)); } await segListLoad(); }
+async function segToggle(id,act){ const el=$("segList"); if(el)el.innerHTML='<div class="panel"><span class="muted">Güncelleniyor…</span></div>'; const r=await adminApi("segment_set_active",{id:id,active:act}); if(r.status!==200){ alert("Hata: "+apiErrText(r.status)); } await segListLoad(); }
 
 /* ---------- 0C.2: manuel puan düzeltme (super_admin, ±100, gerekçe zorunlu, idempotent) ---------- */
 function openPointsAdjust(uid, label, curPoints){
