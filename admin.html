@@ -1054,15 +1054,15 @@ const SEG_FIELDS=[
   // ---- Geçmiş olay (kalıcı) ----
   {f:"behavior_block",label:"Davranış bloğu (Karar: şehir+mod+zaman+pencere+sayı/oran)",grp:"event",kind:"behavior"},
   {f:"dominant_decision_mode",label:"Baskın Karar modu",grp:"event",kind:"dommode"},
+  {f:"city_viewed_last_days",label:"Şehre baktı (son 1–180 gün) · 180g saklanır",grp:"event",kind:"citydays"},
+  {f:"city_viewed_count",label:"Şehre baktı — kaç kez (son 1–180 gün)",grp:"event",kind:"citydayscount"},
   // ---- Eski tekil (geriye uyum; mümkünse Davranış bloğu kullanın) ----
   {f:"decision_used_last_days",label:"[eski] Son X günde Karar kullandı",grp:"legacy",kind:"num"},
   {f:"decision_mode",label:"[eski] Karar modu",grp:"legacy",kind:"select",src:"decision_modes",fb:["Çalışmak","Kahve","Yemek","İçki","Yürüyüş","Park","Alışveriş"]},
   {f:"decision_time",label:"[eski] Karar zamanı",grp:"legacy",kind:"select",src:"decision_times",fb:["Sabah","Öğlen","Öğleden sonra","Akşam","Gece"]},
   {f:"decision_full_bucket",label:"[eski] Tam eşleşme bucket",grp:"legacy",kind:"select",src:"buckets",fb:["0","1-2","3-5","6+"]},
   {f:"decision_displayed_bucket",label:"[eski] Gösterilen bucket",grp:"legacy",kind:"select",src:"buckets",fb:["0","1-2","3-5","6+"]},
-  {f:"trip_city",label:"[eski] Seyahat şehri (serbest metin)",grp:"legacy",kind:"text"},
-  // ---- Yakında (henüz toplanmıyor) ----
-  {f:"city_viewed",label:"Şehre baktı (yakında — CDP-2C)",grp:"soon",kind:"soon",disabled:true}
+  {f:"trip_city",label:"[eski] Seyahat şehri (serbest metin)",grp:"legacy",kind:"text"}
 ];
 function segMeta(f){ return SEG_FIELDS.find(x=>x.f===f)||SEG_FIELDS[0]; }
 let _seg={match:"all",groups:[{match:"all",rules:[{field:"has_trip"}]}]}, _segEditId=null, _segName="", _segDesc="", _segEditActive=null, _segFlash=null;
@@ -1079,6 +1079,8 @@ function segDefault(field){ const m=segMeta(field);
     case "catopn": return {category:(segOpts("venue_cats")[0]||""), op:"gte", n:""};
     case "catoppct": return {category:(segOpts("venue_cats")[0]||""), op:"gte", pct:""};
     case "dommode": return {mode:(segOpts("decision_modes",["Kahve"])[0]||"Kahve"), last_days:""};
+    case "citydays": { const c=segCityOpts()[0]; return {city_code:c?c.code:"", days:30}; }
+    case "citydayscount": { const c=segCityOpts()[0]; return {city_code:c?c.code:"", days:30, op:"gte", n:""}; }
     case "behavior": return {scope:{city_code:"",time:"",window:{last_days:30}}, count_on:true, ratio_on:false, count:{mode:"",op:"gte",n:""}, ratio:{value:(segOpts("decision_modes",["Kahve"])[0]||"Kahve"),op:"gte",pct:""}};
     default: return "";
   }
@@ -1096,7 +1098,14 @@ function segFieldSel(gi,ri,cur){
   return h+'</select>';
 }
 function selOpts(list,cur){ return list.map(o=>'<option'+(String(cur)===String(o)?" selected":"")+'>'+esc(o)+'</option>').join(""); }
-function citySel(id,cur,withAll){ const cs=segCityOpts(); return '<select id="'+id+'">'+(withAll?'<option value="">(hepsi)</option>':'')+cs.map(c=>'<option value="'+esc(c.code)+'"'+(cur===c.code?" selected":"")+'>'+esc(c.name)+'</option>').join("")+'</select>'; }
+function segCityAllName(code){ if(!code)return null; const all=(TAX&&Array.isArray(TAX.cities_all))?TAX.cities_all:[]; const m=all.find(c=>c.code===code); return m?m.name:null; }
+function citySel(id,cur,withAll){
+  const cs=segCityOpts();                                   // yalnız AKTİF şehirler seçilebilir (yeni kural)
+  const inActive = !!cur && cs.some(c=>c.code===cur);
+  // Düzenlenen kaydın mevcut city_code'u PASİF ise: dropdown'da seçili biçimde KORU; kullanıcı başka aktif şehir seçmedikçe değişmez
+  let extra=''; if(cur && !inActive){ const nm=segCityAllName(cur)||cur; extra='<option value="'+esc(cur)+'" selected>'+esc(nm)+' (pasif — mevcut kayıt)</option>'; }
+  return '<select id="'+id+'">'+(withAll?'<option value="">(hepsi)</option>':'')+extra+cs.map(c=>'<option value="'+esc(c.code)+'"'+(cur===c.code?" selected":"")+'>'+esc(c.name)+'</option>').join("")+'</select>';
+}
 function opSel(id,cur){ const m={gte:"≥",lte:"≤",eq:"="}; return '<select id="'+id+'">'+["gte","lte","eq"].map(o=>'<option value="'+o+'"'+(cur===o?" selected":"")+'>'+m[o]+'</option>').join("")+'</select>'; }
 function segValInput(gi,ri,field){
   const m=segMeta(field), id='segv_'+gi+'_'+ri, v=(_seg.groups[gi].rules[ri].value);
@@ -1114,6 +1123,8 @@ function segValInput(gi,ri,field){
   if(m.kind==="catopn"){ const o=(v&&typeof v==="object")?v:{category:"",op:"gte",n:""}; return '<select id="'+id+'_cat">'+selOpts(segOpts("venue_cats"),o.category)+'</select> '+opSel(id+"_op",o.op)+' <input id="'+id+'_n" type="number" value="'+esc(o.n==null?"":o.n)+'" style="width:90px">'; }
   if(m.kind==="catoppct"){ const o=(v&&typeof v==="object")?v:{category:"",op:"gte",pct:""}; return '<select id="'+id+'_cat">'+selOpts(segOpts("venue_cats"),o.category)+'</select> '+opSel(id+"_op",o.op)+' <input id="'+id+'_pct" type="number" min="0" max="100" value="'+esc(o.pct==null?"":o.pct)+'" style="width:80px">%'; }
   if(m.kind==="dommode"){ const o=(v&&typeof v==="object")?v:{mode:"",last_days:""}; return '<select id="'+id+'_mode">'+selOpts(segOpts("decision_modes",m.fb||[]),o.mode)+'</select> <span class="muted">son</span> <input id="'+id+'_ld" type="number" value="'+esc(o.last_days==null?"":o.last_days)+'" style="width:70px" placeholder="gün(ops)"> <span class="muted">gün</span>'; }
+  if(m.kind==="citydays"){ const o=(v&&typeof v==="object")?v:{city_code:"",days:30}; return citySel(id+"_c",o.city_code,false)+' <span class="muted">son</span> <input id="'+id+'_d" type="number" min="1" max="180" value="'+esc(o.days==null?30:o.days)+'" style="width:70px"> <span class="muted">gün (1–180)</span>'; }
+  if(m.kind==="citydayscount"){ const o=(v&&typeof v==="object")?v:{city_code:"",days:30,op:"gte",n:""}; return citySel(id+"_c",o.city_code,false)+' <span class="muted">son</span> <input id="'+id+'_d" type="number" min="1" max="180" value="'+esc(o.days==null?30:o.days)+'" style="width:60px"> <span class="muted">gün</span> '+opSel(id+"_op",o.op)+' <input id="'+id+'_n" type="number" min="0" value="'+esc(o.n==null?"":o.n)+'" style="width:70px" placeholder="kez">'; }
   if(m.kind==="behavior"){ const o=(v&&typeof v==="object")?v:segDefault("behavior");
     const sc=o.scope||{window:{}}; const cnt=o.count||{}; const rat=o.ratio||{}; const cOn=o.count_on!==false, rOn=o.ratio_on===true;
     let h='<div style="border:1px solid #e3d9c6;border-radius:8px;padding:8px;background:#fff;min-width:340px">';
@@ -1139,6 +1150,8 @@ function segReadDom(){ _seg.groups.forEach((g,gi)=>g.rules.forEach((r,ri)=>{ con
   else if(m.kind==="catopn"){ const cat=val(id+"_cat"),op=val(id+"_op"),n=val(id+"_n"); if(op!==undefined)r.value={category:cat,op:op,n:n}; }
   else if(m.kind==="catoppct"){ const cat=val(id+"_cat"),op=val(id+"_op"),pct=val(id+"_pct"); if(op!==undefined)r.value={category:cat,op:op,pct:pct}; }
   else if(m.kind==="dommode"){ const mode=val(id+"_mode"),ld=val(id+"_ld"); if(mode!==undefined)r.value={mode:mode,last_days:ld}; }
+  else if(m.kind==="citydays"){ const c=val(id+"_c"),dd=val(id+"_d"); if(c!==undefined)r.value={city_code:c,days:dd}; }
+  else if(m.kind==="citydayscount"){ const c=val(id+"_c"),dd=val(id+"_d"),op=val(id+"_op"),n=val(id+"_n"); if(c!==undefined)r.value={city_code:c,days:dd,op:op,n:n}; }
   else if(m.kind==="behavior"){ const chk=x=>{const e=$(x);return e?!!e.checked:undefined;}; const prev=(r.value&&typeof r.value==="object")?r.value:{};
     const cOn=chk(id+"_con"); const rOn=chk(id+"_ron");
     r.value={ scope:{city_code:val(id+"_city")||"", time:val(id+"_time")||"", window:{last_days:val(id+"_days")}},
@@ -1162,6 +1175,8 @@ function segBuildValue(field,raw){ const m=segMeta(field);
   if(m.kind==="catopn"){ const o=raw||{}; return {category:o.category, op:o.op, n:numOrNull(o.n)}; }
   if(m.kind==="catoppct"){ const o=raw||{}; return {category:o.category, op:o.op, pct:numOrNull(o.pct)}; }
   if(m.kind==="dommode"){ const o=raw||{}; const out={mode:o.mode}; if(o.last_days!==""&&o.last_days!=null)out.last_days=Number(o.last_days); return out; }
+  if(m.kind==="citydays"){ const o=raw||{}; return {city_code:o.city_code, days:numOrNull(o.days)}; }
+  if(m.kind==="citydayscount"){ const o=raw||{}; return {city_code:o.city_code, days:numOrNull(o.days), op:o.op, n:numOrNull(o.n)}; }
   if(m.kind==="behavior"){ const o=raw||{}; const sc=o.scope||{}; const scope={event_type:"decision_used", window:{last_days:numOrNull((sc.window||{}).last_days)}};
     if(sc.city_code) scope.city_code=sc.city_code; if(sc.time) scope.time=sc.time;
     const out={scope:scope};
@@ -1186,7 +1201,7 @@ async function renderSegments(){
   if(!(await isPrivAuthed())){ shell(privLoginHTML()); wirePrivLogin(()=>renderSegments()); return; }
   if(!TAX){ const t=await adminApi("segment_taxonomy",{}); if(t.status===200)TAX=t.body.data||{}; }
   const body='<div class="panel"><h3 style="margin-bottom:6px">Segmentler (CDP-lite)</h3>'
-    +'<p class="muted" style="margin-bottom:8px">Kural-tabanlı otomatik segmentler. <b>Mevcut durum</b> sinyalleri (ör. favorisi var) kaynak kayıttan türetilir — kayıt silinirse kaybolur. <b>Geçmiş olay</b> sinyalleri (ör. son 30g Karar) kalıcıdır. Şehir/mod/zaman/kategori kapalı listelerden seçilir (serbest metin yok). Sonuç yalnız sayı + maskeli önizleme. (Üye 360 manuel etiketinden ayrıdır.)</p>'
+    +'<p class="muted" style="margin-bottom:8px">Kural-tabanlı otomatik segmentler. <b>Mevcut durum</b> sinyalleri (ör. favorisi var) kaynak kayıttan türetilir — kayıt silinirse kaybolur. <b>Geçmiş olay</b> sinyalleri (ör. son 30g Karar, Şehre baktı) 180 gün saklanır. Şehir/mod/zaman/kategori kapalı listelerden seçilir (serbest metin yok). Sonuç yalnız sayı + maskeli önizleme. (Üye 360 manuel etiketinden ayrıdır.)</p>'
     +'<div class="acc"><div class="accitem"><div class="acchead"><span><b>Davranış olayı gezgini</b></span></div><div class="accbody">'
       +'<div class="toolbar" style="flex-wrap:wrap;gap:6px">'
         +'<input id="evFrom" type="date" title="Başlangıç"> <input id="evTo" type="date" title="Bitiş">'
