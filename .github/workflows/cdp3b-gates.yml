@@ -1,0 +1,128 @@
+name: CDP-3B Gates (ephemeral local Supabase — production'a DOKUNMAZ)
+on: { workflow_dispatch: {}, pull_request: { paths: ["CDP3B/**"] } }
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: CDP3B, shell: bash } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with: { deno-version: v1.x }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+
+      - name: jsdom (admin reopen testi) kur
+        run: npm init -y >/dev/null 2>&1 && npm i jsdom@24 >/dev/null 2>&1 && echo "jsdom kuruldu"
+
+      - name: Supabase init (deterministik local config) + function'ı beklenen dizine kopyala + E2E env-file
+        run: |
+          set -euo pipefail
+          [ -f supabase/config.toml ] || supabase init --force
+          mkdir -p supabase/functions/email-api
+          cp edge/email-api/index.ts            supabase/functions/email-api/index.ts
+          cp edge/email-api/email_sanitizer.js  supabase/functions/email-api/email_sanitizer.js
+          test -f supabase/functions/email-api/index.ts
+          test -f supabase/functions/email-api/email_sanitizer.js
+          # E2E test-seam (yalnız CI; prod'da bu değişkenler ASLA set edilmez -> allowlist DEĞİŞMEZ)
+          cat > gates/e2e.env <<'ENV'
+          EMAIL_API_E2E=1
+          E2E_IMAGE_HOSTS=host.docker.internal,127.0.0.1,localhost
+          E2E_ALLOW_HTTP=1
+          ENV
+          echo "function files in place"
+
+      - name: Test görsel sunucusu (import_host_images accept alt-durumu için)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/imgsrv
+          # geçerli 1x1 PNG
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' | base64 -d > /tmp/imgsrv/img.png
+          nohup python3 -m http.server 8799 --bind 0.0.0.0 --directory /tmp/imgsrv >/tmp/imgsrv.log 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:8799/img.png -o /dev/null && break; sleep 0.5; done
+          # edge fonksiyonu (docker) host'a host.docker.internal ile erişir
+          echo "E2E_IMG_URL=http://host.docker.internal:8799/img.png" >> "$GITHUB_ENV"
+
+      - name: Supabase start (ephemeral)
+        run: supabase start
+
+      - name: Export local stack env (KEY=value -> GITHUB_ENV)
+        run: |
+          set -euo pipefail
+          ST="$(supabase status -o env)"
+          echo "SUPABASE_DB_URL=$(echo "$ST" | sed -n 's/^DB_URL="\?\([^"]*\)"\?$/\1/p')" >> "$GITHUB_ENV"
+          echo "SERVICE_KEY=$(echo "$ST" | sed -n 's/^SERVICE_ROLE_KEY="\?\([^"]*\)"\?$/\1/p')" >> "$GITHUB_ENV"
+          echo "JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long" >> "$GITHUB_ENV"
+          echo "EMAIL_API_URL=http://127.0.0.1:54321/functions/v1/email-api" >> "$GITHUB_ENV"
+
+      - name: Seed (baseline + up + users + buckets) — KEY=value env üret
+        run: |
+          set -euo pipefail
+          bash gates/ci_setup.sh /tmp/gate_env
+          cat /tmp/gate_env >> "$GITHUB_ENV"
+
+      - name: Env assertion (4 değişken gerçekten mevcut mu)
+        run: |
+          set -euo pipefail
+          for k in SUPABASE_DB_URL EMAIL_API_URL SUPER_JWT CRM_JWT; do
+            v="$(printenv "$k" || true)"; [ -n "$v" ] || { echo "GATE_FAILED:env_${k}"; exit 1; }
+          done
+          echo "env OK"
+
+      - name: Serve email-api (background) + readiness loop (sabit sleep YOK)
+        run: |
+          set -euo pipefail
+          nohup supabase functions serve email-api --env-file gates/e2e.env >/tmp/serve.log 2>&1 &
+          for i in $(seq 1 60); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$EMAIL_API_URL" -H 'content-type: application/json' -d '{"action":"taxonomy"}' || true)"
+            # 401 (auth gerekli) = serve AYAKTA; 000 = henüz değil
+            if [ "$code" = "401" ] || [ "$code" = "200" ] || [ "$code" = "400" ]; then echo "serve ready ($code)"; ok=1; break; fi
+            sleep 1
+          done
+          [ "${ok:-}" = "1" ] || { echo '--- serve.log ---'; cat /tmp/serve.log || true; echo "GATE_FAILED:serve_not_ready"; exit 1; }
+
+      - name: Run gates (fail-closed)
+        run: bash run_gates.sh | tee /tmp/gates_out.txt
+
+      # Teardown ÖNCE (fail-closed), artifact SONRA. Teardown başarısızlığı maskelenmez.
+      - name: Teardown (fail-closed) + residue assertion
+        if: always()
+        run: |
+          set -uo pipefail
+          : > /tmp/teardown.log
+          # 1) Bu job'ın GEÇİCİ Supabase yerel stack'ini durdur — başarısızlığı YUTMA (|| true YOK)
+          if ! supabase stop --no-backup >>/tmp/teardown.log 2>&1; then
+            echo "supabase_stop=failed" | tee -a /tmp/teardown.log
+            echo "GATE_FAILED:teardown_stop"
+            exit 1
+          fi
+          echo "supabase_stop=ok" >> /tmp/teardown.log
+          # 2) Bu job'ın oluşturduğu hedefler: Supabase yerel stack container/volume'ları 'supabase_' öneklidir
+          container_count="$(docker ps -aq --filter 'name=supabase_' | wc -l | tr -d ' ')"
+          volume_count="$(docker volume ls -q --filter 'name=supabase_' | wc -l | tr -d ' ')"
+          echo "container_count=$container_count" | tee -a /tmp/teardown.log
+          echo "volume_count=$volume_count"       | tee -a /tmp/teardown.log
+          # 3) Kalıntı varsa adım NON-ZERO -> workflow KIRMIZI
+          if [ "$container_count" != "0" ] || [ "$volume_count" != "0" ]; then
+            echo "residue=nonzero" | tee -a /tmp/teardown.log
+            echo "GATE_FAILED:teardown_residue"
+            exit 1
+          fi
+          echo "residue=zero" | tee -a /tmp/teardown.log
+
+      - name: Upload gate + teardown logs (secret'sız) — teardown'dan SONRA, her durumda
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdp3b-gate-logs
+          path: |
+            /tmp/gates_out.txt
+            /tmp/serve.log
+            /tmp/ci_setup_psql.log
+            /tmp/cdp3b_gate_step.log
+            /tmp/teardown.log
+          if-no-files-found: warn
+# NOT: Yalnız GEÇİCİ yerel stack; hiçbir production kaynağına dokunmaz, ücretli kaynak açmaz.
+# Başarı çıktısı YALNIZ run_gates.sh'ten "LOCAL_GATES_PASS_STAGING_PENDING" ise geçerlidir.
+# Teardown adımı gate'lerden sonra HER DURUMDA çalışır; kalıntı!=0 ya da 'supabase stop' hatası -> job KIRMIZI.
