@@ -22,11 +22,29 @@ Deno.test("deno: unknown/custom element unwrap", () => {
   assert(r.removed.some((x: string) => x.startsWith("unknown_custom_element:my-x")));
   assert(/t1/.test(r.sanitized_html) && /t2/.test(r.sanitized_html));
 });
-Deno.test("deno: attribute allowlist (on*, srcset, xlink, background)", () => {
-  const r = run(`<body><a href="https://x" onclick="h()">L</a><img src="https://cdn.asalocal.club/a.png" alt="x" srcset="a 2x"><td background="http://e">c</td><div>{{unsubscribe_url}}</div></body>`, { emailClass: "marketing", remoteImageAllowlist: ["cdn.asalocal.club"] });
-  assert(r.removed.some((x: string) => x === "attr:a.onclick"));
-  assert(r.removed.some((x: string) => x === "attr:img.srcset"));
-  assert(r.removed.some((x: string) => x === "attr:td.background"));
+Deno.test("deno: attribute allowlist (on*, srcset, background)", () => {
+  // td GEÇERLI tablo hiyerarşisinde olmalı; sahipsiz <td> deno-dom parse aşamasında DÜŞER (fixture hatası).
+  // Not: parseHTML zaten <body> wrapper ekler; fixture'ta dış <body> YOK.
+  const fixture = `<a href="https://x" onclick="h()">L</a>`
+    + `<img src="https://cdn.asalocal.club/a.png" alt="x" srcset="a 2x">`
+    + `<table><tbody><tr><td background="http://e">c</td></tr></tbody></table>`
+    + `<div>{{unsubscribe_url}}</div>`;
+  // 1) Parser varsayımını KANITLA: geçerli fixture'da td parse ediliyor ve background attribute'u taşıyor.
+  //    (Parser attribute'u baştan düşürürse test yanlışlıkla PASS olmasın.)
+  const pre = parseHTML(fixture);
+  const tdPre = pre && pre.querySelector("td");
+  assert(tdPre, "fixture parse: <td> bulunmalı (parser düşürmemeli)");
+  assert(tdPre!.hasAttribute("background"), "fixture parse: td[background] mevcut olmalı");
+  // 2) Sanitize -> non-allowlist attribute'lar 'removed' kaydı üretir.
+  const r = run(fixture, { emailClass: "marketing", remoteImageAllowlist: ["cdn.asalocal.club"] });
+  assert(r.removed.some((x: string) => x === "attr:a.onclick"), "onclick removed bekleniyor");
+  assert(r.removed.some((x: string) => x === "attr:img.srcset"), "srcset removed bekleniyor");
+  assert(r.removed.some((x: string) => x === "attr:td.background"), "td.background removed bekleniyor");
+  // 3) sanitized_html'de td üzerinde background attribute'u KALMAMALI.
+  const post = parseHTML(r.sanitized_html);
+  const tdPost = post && post.querySelector("td");
+  if (tdPost) assert(!tdPost.hasAttribute("background"), "sanitized td[background] taşımamalı");
+  assert(!/background\s*=/.test(r.sanitized_html), "sanitized_html'de background attribute olmamalı");
 });
 Deno.test("deno: hidden js url + protocol-relative", () => {
   const r1 = run(`<body><a href="&#106;avascript:x()">a</a><div>{{unsubscribe_url}}</div></body>`, { emailClass: "marketing" });
