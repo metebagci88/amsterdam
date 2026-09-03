@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>asalocal · Yönetim Paneli</title>
+<style>
+:root{--bg:#f4f2ec;--card:#fff;--ink:#23211c;--ink2:#5f5a50;--line:#e2ddd2;--accent:#9a6a4e;--accent2:#7d8c6a;--gold:#b8944f;--danger:#b03a2e;--shadow:0 1px 3px rgba(40,35,25,.08),0 6px 20px rgba(40,35,25,.05)}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Inter",-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+h1,h2,h3{font-family:Georgia,serif;margin:0}
+.topbar{background:#2f2a22;color:#f4efe6;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+.topbar .b{font-family:Georgia,serif;font-size:19px}.topbar .b b{color:#e3c98f}
+.topbar .s{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;opacity:.7}
+.logout{background:none;border:1px solid rgba(255,255,255,.25);color:#f4efe6;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+.wrap{max-width:1200px;margin:0 auto;padding:16px}
+.nav{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+.nav button{border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:999px;padding:8px 15px;font-size:13.5px;font-weight:600;cursor:pointer}
+.nav button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.stat b{font-size:26px;display:block;font-family:Georgia,serif}
+.stat span{font-size:12px;color:var(--ink2)}
+.skel{background:linear-gradient(90deg,#efeae1 25%,#f6f3ec 37%,#efeae1 63%);background-size:400% 100%;animation:sk 1.2s ease infinite;border-radius:8px}
+@keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input,.toolbar select{border:1px solid var(--line);background:#fbfaf7;border-radius:9px;padding:8px 11px;font-size:14px;color:var(--ink)}
+.toolbar input.search{flex:1;min-width:180px}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 13px;font-size:13.5px;cursor:pointer;font-weight:600}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.danger{background:#fdf3f1;color:var(--danger);border-color:#efd6d0}
+.btn.sm{padding:5px 9px;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink2)}
+tr:hover td{background:#faf8f3}
+.tablewrap{overflow:auto}
+.pill{display:inline-block;font-size:11px;border-radius:99px;padding:2px 8px;border:1px solid var(--line)}
+.pill.on{background:#eef3e6;color:#4e6a2e;border-color:#d6e3bf}
+.pill.off{background:#f3efe9;color:#8a8172}
+.pill.soon{background:#fbf3e6;color:#8a6d2f;border-color:#ecdcc0}
+.pill.sp{background:#f3e6c9;color:#8a6d2f}
+.muted{color:var(--ink2);font-size:12px}
+.err{color:var(--danger);font-size:13px;min-height:16px}
+.notice{border:1px solid var(--line);background:#fbfaf7;border-radius:10px;padding:12px 14px;font-size:13.5px}
+.notice.warn{background:#fbf3e6;border-color:#ecdcc0;color:#8a6d2f}
+.notice.err{background:#fdf3f1;border-color:#efd6d0;color:var(--danger)}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(30,25,15,.5);display:flex;align-items:flex-start;justify-content:center;padding:24px;overflow:auto;z-index:60}
+.modal.hide{display:none}
+.sheet{background:var(--card);border-radius:16px;max-width:660px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.sheet h2{font-size:20px;margin-bottom:14px}
+.frow{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.fld{display:flex;flex-direction:column;gap:4px;flex:1;min-width:150px}
+.fld label{font-size:11.5px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.3px}
+.fld input,.fld select,.fld textarea{border:1px solid var(--line);background:#fbfaf7;border-radius:9px;padding:9px 11px;font-size:14px;color:var(--ink);font-family:inherit}
+.fld textarea{min-height:60px;resize:vertical}
+.fld.check{flex-direction:row;align-items:center;gap:8px;min-width:auto}
+.fld.check input{width:16px;height:16px}
+.fld.check label{text-transform:none;font-size:13.5px}
+.sheet .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+/* login */
+.login{max-width:360px;margin:80px auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;box-shadow:var(--shadow);text-align:center}
+.login h1{font-size:24px;margin-bottom:4px}.login h1 b{color:var(--accent)}
+.login p{font-size:13px;color:var(--ink2);margin:6px 0 16px}
+.login input{width:100%;border:1px solid var(--line);background:#fbfaf7;border-radius:11px;padding:12px;font-size:15px;margin-bottom:10px}
+.hint{font-size:11.5px;color:var(--ink2);margin-top:12px;line-height:1.5}
+.acc{display:flex;flex-direction:column;gap:8px}
+.accitem{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.acchead{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;user-select:none}
+.accbody{border-top:1px solid var(--line);padding:6px 0}
+.accrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 14px;font-size:13.5px}
+.accrow:not(:last-child){border-bottom:1px solid #f0ece3}
+@media(max-width:620px){.modal{padding:0}.sheet{border-radius:0;min-height:100vh;max-width:none}}
+#venueMap{height:230px;border-radius:8px;border:1px solid var(--line);margin-top:4px}
+.pill.tc{background:#fdeccf;color:#8a5a12;border:1px solid #f0cf95}
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<div class="modal hide" id="modal"><div class="sheet" id="sheet"></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* =====================================================================
+   ASALOCAL Yönetim Paneli · FAZ 0B.1 — Salt-Okunur Admin UI Entegrasyonu
+   - Özet sayaçları, Üye arama/listesi, Üye 360 → admin-api (privileged).
+   - Bu 3 alan Supabase Auth JWT ister (super_admin/support).
+   - Diğer sekmeler (Mekanlar/Şehirler/Etiketler/İçerik/Moderasyon/Reklamlar)
+     mevcut anon akışıyla AYNEN korunur.
+   - Ortak yönetici şifresi 0D'ye kadar dış kapı olarak kalır.
+   - Güvenlik: yalnız anon anahtar; service_role YOK; iç RPC çağrısı YOK;
+     yalnız admin-api Edge Function; tüm kullanıcı metni esc() ile basılır.
+   ===================================================================== */
+const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"};
+const FN_URL=CFG.url+"/functions/v1/admin-api";
+const FN_EMAIL_URL=CFG.url+"/functions/v1/email-api";  // CDP-3B
+/* AOÇ-1: teşhis sözleşmesi ORTAK dosyadan yüklenir (admin'e KOPYALANMAZ) — /decision_contract.js
+   Şehir motorunun DOĞRULANMIŞ AYNASI; gerçek tek-kaynak AOÇ-1B/AOÇ-3'te app de bu dosyayı kullanınca tamamlanır.
+   Yüklenemezse sağlık üretilmez (fail-closed). */
+let _contractLoad=null;
+const _CONTRACT_URL='/decision_contract.js?v=f8ea1634cff7090f';   // contract SHA-256(16); her güncellemede yenile
+function ensureContract(){
+  if(window.DecisionContract) return Promise.resolve(true);
+  if(_contractLoad) return _contractLoad;                          // yalnız DEVAM EDEN yükleme paylaşılır
+  _contractLoad=new Promise(function(res){
+    var s=document.createElement('script'); s.src=_CONTRACT_URL; s.async=true; s.setAttribute('data-contract','1');
+    function fail(){ try{ s.remove(); }catch(e){} _contractLoad=null; res(false); }   // retry gerçekten yeniden yükleyebilsin
+    s.onload=function(){ if(window.DecisionContract) res(true); else fail(); };        // yüklendi ama global yoksa da başarısız say
+    s.onerror=fail;
+    document.head.appendChild(s);
+  });
+  return _contractLoad;
+}
+// FAZ 0D: ortak şifre KALDIRILDI. TEK Supabase istemcisi — authenticated admin oturumu,
+// sessionStorage (sekme oturumu; localStorage'a JWT yazılmaz). Editör okuma/yazma da bu oturumdan
+// geçer (RLS capability'e göre süzer). Tek GoTrueClient → çakışma yok.
+let authClient=null; try{ authClient=window.supabase.createClient(CFG.url,CFG.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:"asa-admin-auth",storage:window.sessionStorage}}); }catch(e){}
+let db=authClient;
+const $=id=>document.getElementById(id);
+const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+const arr=s=>(s||"").split(",").map(x=>x.trim()).filter(Boolean);
+let DATA={venues:[],cities:[],comments:[],ads:[],content:[]};
+const CONTENT_DEFAULTS={
+ "home.hero.title":"Özenle seçilmiş şehir keşfi, bilinçli gezginler için.",
+ "home.hero.desc":"Google haritalarında binlerce pin var, ama hangisi gerçekten iyi? asalocal, şehirde yaşayan yerlilerin önerileriyle doluyor — turist gibi değil, bir yerli gibi plan yaparsın.",
+ "home.cta":"Keşfet",
+ "app.pano.h":"Bugün ne yapmak istiyorsun?",
+ "app.pano.p":"Rembrandtpark'taki dairen merkez. Klasik turist değil, lokal yaşam modundasın…",
+ "app.list.h":"Mekan envanteri",
+ "app.map.h":"Harita",
+ "app.de.h":"Karar motoru",
+ "app.member.h":"Üyelik"
+};
+let seg="ozet";
+
+let CAPS={admin:false,venues:false,cities:false,content:false,ads:false,moderate:false,members:false,superadmin:false,crm:false};
+function resetCaps(){ CAPS={admin:false,venues:false,cities:false,content:false,ads:false,moderate:false,members:false,superadmin:false,crm:false}; }
+
+// FAZ 0D: giriş = Supabase e-posta/şifre (ortak şifre yok). Sonra aktif admin + rol doğrulanır.
+function renderLogin(msg){
+  $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Yönetici hesabınla giriş yap</p>'
+   +'<input id="le" type="email" placeholder="E-posta" autocomplete="username">'
+   +'<input id="lp" type="password" placeholder="Şifre" autocomplete="current-password">'
+   +'<div class="err" id="aerr">'+esc(msg||"")+'</div>'
+   +'<button class="btn primary" id="abtn" style="width:100%">Giriş</button>'
+   +'<div class="hint">Yalnız Supabase hesabı olan ve admin rolü verilmiş kişiler erişebilir.</div></div>';
+  const submit=async()=>{
+    const email=($("le").value||"").trim(), pw=$("lp").value||"";
+    if(!email||!pw){ $("aerr").textContent="E-posta ve şifre gerekli."; return; }
+    $("abtn").disabled=true; $("abtn").textContent="Giriş yapılıyor…";
+    const {error}=await authClient.auth.signInWithPassword({email, password:pw});
+    if(error){ $("aerr").textContent="Giriş başarısız. Bilgileri kontrol et."; $("abtn").disabled=false; $("abtn").textContent="Giriş"; return; }
+    bootGate();
+  };
+  $("abtn").onclick=submit;
+  $("lp").onkeydown=e=>{ if(e.key==="Enter")submit(); };
+  $("le").onkeydown=e=>{ if(e.key==="Enter")$("lp").focus(); };
+}
+
+async function loadCaps(){
+  const rc=async(fn)=>{ try{ const {data}=await authClient.rpc(fn); return data===true; }catch(e){ return false; } };
+  CAPS.admin=await rc('is_current_user_admin');
+  if(!CAPS.admin){ resetCaps(); return; }
+  CAPS.venues=await rc('_can_edit_venues');  CAPS.cities=await rc('_can_edit_cities');
+  CAPS.content=await rc('_can_edit_content'); CAPS.ads=await rc('_can_edit_ads');
+  CAPS.moderate=await rc('_can_moderate');    CAPS.members=await rc('_can_manage_members');
+  try{ const {data}=await authClient.rpc('current_user_has_admin_role',{role_name:'super_admin'}); CAPS.superadmin=(data===true); }catch(e){ CAPS.superadmin=false; }
+  try{ const {data}=await authClient.rpc('current_user_has_admin_role',{role_name:'crm'}); CAPS.crm=(data===true)||CAPS.superadmin; }catch(e){ CAPS.crm=CAPS.superadmin; }
+}
+
+async function bootGate(){
+  let session=null; try{ const r=await authClient.auth.getSession(); session=r.data.session; }catch(e){}
+  if(!session){ renderLogin(); return; }
+  $("app").innerHTML='<div class="login"><p class="muted" style="padding:24px">Yetki kontrol ediliyor…</p></div>';
+  await loadCaps();
+  if(!CAPS.admin){
+    $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Bu panele erişim yetkiniz yok.</p>'
+     +'<div class="hint">Hesabınız aktif admin rolüne sahip değil. Yetki için sistem yöneticisiyle görüşün.</div>'
+     +'<button class="btn" id="lo2" style="width:100%;margin-top:14px">Çıkış</button></div>';
+    $("lo2").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} resetCaps(); renderLogin(); };
+    return;
+  }
+  boot();
+}
+
+/* ---------- admin-api (privileged, Auth JWT) ---------- */
+async function isPrivAuthed(){ try{ const {data:{session}}=await authClient.auth.getSession(); return !!session; }catch(e){ return false; } }
+async function adminApi(action, params){
+  try{
+    const {data:{session}}=await authClient.auth.getSession();
+    if(!session) return {status:401, body:{error:"no_session"}};
+    const res=await fetch(FN_URL,{ method:"POST", cache:"no-store",
+      headers:{"Content-Type":"application/json","apikey":CFG.key,"Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify({action, params:params||{}}) });
+    let body=null; try{ body=await res.json(); }catch(e){}
+    return {status:res.status, body};
+  }catch(e){ return {status:0, body:{error:"network"}}; } // hata mesajında PII yok; console'a yazma yok
+}
+function apiErrText(status){
+  if(status===401) return "Oturum gerekli — yönetici olarak tekrar giriş yap.";
+  if(status===403) return "Bu veriye erişim yetkiniz yok.";
+  if(status===409) return "İşlem çakışması — sayfayı yenileyip tekrar deneyin.";
+  if(status===429) return "Çok fazla istek — kısa süre bekleyip tekrar dene.";
+  if(status===503) return "Admin servisi geçici olarak kapalı.";
+  if(status===0)   return "Ağ hatası — bağlantını kontrol et.";
+  return "Beklenmeyen hata ("+status+").";
+}
+function privLoginHTML(hint){
+  return '<div class="panel" style="max-width:440px"><h3 style="margin-bottom:6px">Yönetici girişi (Supabase)</h3>'
+   +'<p class="muted" style="margin-bottom:12px">Üye ve seyahat verileri güvenli admin veri katmanından gelir; super_admin/support girişi gerekir.</p>'
+   +'<div class="fld" style="margin-bottom:8px"><label>E-posta</label><input id="pa_email" type="email" autocomplete="username"></div>'
+   +'<div class="fld" style="margin-bottom:8px"><label>Şifre</label><input id="pa_pw" type="password" autocomplete="current-password"></div>'
+   +'<div class="err" id="pa_err">'+esc(hint||"")+'</div>'
+   +'<button class="btn primary" id="pa_btn" style="width:100%">Giriş yap</button></div>';
+}
+function wirePrivLogin(after){
+  $("pa_btn").onclick=async()=>{
+    const email=($("pa_email").value||"").trim(), pw=$("pa_pw").value||"";
+    if(!email||!pw){ $("pa_err").textContent="E-posta ve şifre gerekli."; return; }
+    $("pa_btn").disabled=true; $("pa_btn").textContent="Giriş yapılıyor…";
+    const {error}=await authClient.auth.signInWithPassword({email, password:pw});
+    if(error){ $("pa_err").textContent="Giriş başarısız. Bilgileri kontrol et."; $("pa_btn").disabled=false; $("pa_btn").textContent="Giriş yap"; return; }
+    after();
+  };
+  $("pa_pw").onkeydown=e=>{ if(e.key==="Enter")$("pa_btn").click(); };
+}
+
+async function loadAll(){
+  // Yalnız PUBLIC tablolar (mevcut sekmeler). members/trips artık admin-api'den gelir.
+  try{ const {data}=await db.from("venues").select("*").order("name"); DATA.venues=data||[]; }catch(e){}
+  try{ const {data}=await db.from("cities").select("*").order("name"); DATA.cities=data||[]; }catch(e){}
+  try{ const {data}=await db.from("comments").select("*").order("created_at",{ascending:false}); DATA.comments=data||[]; }catch(e){}
+  try{ const {data}=await db.from("ads").select("*").order("id"); DATA.ads=data||[]; }catch(e){}
+  try{ const {data}=await db.from("site_content").select("*").order("key"); DATA.content=data||[]; }catch(e){}
+}
+
+function shell(body){
+  $("app").innerHTML=
+   '<div class="topbar"><div><div class="b"><b>asa</b>local · Yönetim</div><div class="s">Merkezi kontrol paneli</div></div><button class="logout" id="lo">Çıkış</button></div>'
+   +'<div class="wrap"><div class="nav" id="nav"></div><div id="body"></div></div>';
+  $("lo").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} resetCaps(); seg="ozet"; renderLogin(); };
+  const segs=[["ozet","Özet"]];
+  if(CAPS.venues){ segs.push(["venues","Mekanlar"]); segs.push(["tags","Etiketler"]); }
+  if(CAPS.cities)   segs.push(["cities","Şehirler"]);
+  if(CAPS.cities)   segs.push(["dhealth","Veri Sağlığı"]);
+  if(CAPS.content)  segs.push(["content","İçerik"]);
+  if(CAPS.ads)      segs.push(["ads","Reklamlar"]);
+  if(CAPS.moderate) segs.push(["comments","Moderasyon"]);
+  if(CAPS.members)  segs.push(["members","Üyeler"]);
+  if(CAPS.crm)      segs.push(["segments","Segmentler"]);
+  if(CAPS.crm)      segs.push(["email","E-posta"]);   // CDP-3B
+  if(CAPS.superadmin) segs.push(["changelog","Değişiklik Günlüğü"]);
+  if(!segs.some(s=>s[0]===seg)) seg=segs[0][0];
+  $("nav").innerHTML=segs.map(s=>'<button class="'+(seg===s[0]?"on":"")+'" onclick="go(\''+s[0]+'\')">'+s[1]+'</button>').join("");
+  $("body").innerHTML=body;
+}
+function go(s){ seg=s; render(); }
+function render(){
+  const need={venues:'venues',tags:'venues',cities:'cities',dhealth:'cities',content:'content',ads:'ads',comments:'moderate',members:'members',changelog:'superadmin',email:'crm'};
+  if(need[seg] && !CAPS[need[seg]]) seg='ozet';   // yetkisiz sekme → Özet (UI koruması; RLS/sunucu asıl kapı)
+  if(seg==="ozet") return renderOzet();
+  if(seg==="venues") return renderVenues();
+  if(seg==="cities") return renderCities();
+  if(seg==="tags") return renderTags();
+  if(seg==="content") return renderContent();
+  if(seg==="comments") return renderComments();
+  if(seg==="ads") return renderAds();
+  if(seg==="members") return renderMembers();
+  if(seg==="segments") return renderSegments();
+  if(seg==="email") return renderEmail();
+  if(seg==="changelog") return renderChangeLog();
+  if(seg==="dhealth") return renderDataHealth();
+}
+function stat(n,l){ return '<div class="stat"><b>'+esc(n)+'</b><span>'+esc(l)+'</span></div>'; }
+
+/* ---------- ÖZET (dashboard) — counts action ---------- */
+async function renderOzet(){
+  const v=DATA.venues, act=v.filter(x=>x.active).length, ck=v.filter(x=>x.conf==="low").length;
+  const staticCards='<div class="cards">'+stat(v.length,"Mekan")+stat(act,"Aktif mekan")
+    +stat(DATA.cities.filter(c=>c.status==="active").length+"/"+DATA.cities.length,"Aktif/Toplam şehir")
+    +stat(DATA.ads.filter(a=>a.active).length,"Aktif reklam")+stat(ck,"Kontrol gereken")+'</div>';
+  const skel='<div class="cards">'+Array(6).fill('<div class="stat skel" style="height:64px"></div>').join("")+'</div>';
+  shell('<div id="ozetBody">'+staticCards+skel+'</div>');
+  if(!(await isPrivAuthed())){ $("ozetBody").innerHTML=staticCards+privLoginHTML(); wirePrivLogin(()=>renderOzet()); return; }
+  const r=await adminApi("counts",{});
+  if(r.status===401){ $("ozetBody").innerHTML=staticCards+privLoginHTML("Oturum sona erdi, tekrar giriş yap."); wirePrivLogin(()=>renderOzet()); return; }
+  if(r.status!==200){
+    $("ozetBody").innerHTML=staticCards+'<div class="notice err">'+esc(apiErrText(r.status))+' <button class="btn sm" onclick="renderOzet()">Tekrar dene</button></div>';
+    return;
+  }
+  const c=(r.body&&r.body.data)||{}; const n=x=>(x==null?"—":x);
+  $("ozetBody").innerHTML=staticCards
+    +'<div class="cards">'
+    +stat(n(c.users),"Kullanıcı")+stat(n(c.members),"Üye profili")+stat(n(c.trips_total),"Toplam seyahat")
+    +stat(n(c.trips_draft),"Taslak")+stat(n(c.trips_upcoming),"Yaklaşan")+stat(n(c.trips_active),"Aktif")
+    +stat(n(c.trips_past),"Geçmiş")+stat(n(c.trips_archived),"Arşiv")
+    +stat(n(c.favorites),"Favori")+stat(n(c.comments),"Yorum")+stat(n(c.point_events),"Puan olayı")
+    +'</div><div class="panel"><p class="muted">Kullanıcı/üye/seyahat sayıları güvenli admin veri katmanından (canlı) gelir.</p></div>';
+}
+
+/* ---------- MEKANLAR (değiştirilmedi) ---------- */
+let vFilter={q:"",city:"",active:"",coord:""};
+function admTempClosed(v){ if(!v)return false; const cu=v.closed_until; if(cu!=null&&cu!==""){ return String(cu).slice(0,10) >= new Date().toISOString().slice(0,10); } return v.temporarily_closed===true; }
+function admCoordState(v){ if(v.lat==null||v.lng==null)return "missing"; if(v.lat< -90||v.lat>90||v.lng< -180||v.lng>180)return "invalid"; return "ok"; }
+function renderVenues(){
+  const cities=[...new Set(DATA.venues.map(v=>v.city))];
+  let list=DATA.venues.filter(v=>{
+    if(vFilter.city&&v.city!==vFilter.city)return false;
+    if(vFilter.active==="1"&&!v.active)return false;
+    if(vFilter.active==="0"&&v.active)return false;
+    if(vFilter.active==="tc"&&!admTempClosed(v))return false;
+    if(vFilter.coord==="missing"&&admCoordState(v)!=="missing")return false;
+    if(vFilter.coord==="invalid"&&admCoordState(v)!=="invalid")return false;
+    if(vFilter.q){ const q=vFilter.q.toLowerCase(); if(!((v.name||"").toLowerCase().includes(q)||(v.area||"").toLowerCase().includes(q)||(v.tags||[]).join(",").toLowerCase().includes(q)||(v.type||"").toLowerCase().includes(q)))return false; }
+    return true;
+  });
+  const body='<div class="panel"><div class="toolbar">'
+    +'<input class="search" id="vq" placeholder="Ara: ad, semt, etiket, tür…" value="'+esc(vFilter.q)+'">'
+    +'<select id="vcity"><option value="">Tüm şehirler</option>'+cities.map(c=>'<option'+(vFilter.city===c?" selected":"")+'>'+esc(c)+'</option>').join("")+'</select>'
+    +'<select id="vact"><option value="">Durum: hepsi</option><option value="1"'+(vFilter.active==="1"?" selected":"")+'>Aktif</option><option value="0"'+(vFilter.active==="0"?" selected":"")+'>Pasif</option><option value="tc"'+(vFilter.active==="tc"?" selected":"")+'>Geçici kapalı</option></select>'
+    +'<select id="vcoord"><option value="">Koordinat: hepsi</option><option value="missing"'+(vFilter.coord==="missing"?" selected":"")+'>Koordinatsız</option><option value="invalid"'+(vFilter.coord==="invalid"?" selected":"")+'>Geçersiz</option></select>'
+    +'<button class="btn primary" onclick="editVenue(null)">+ Yeni mekan</button>'
+    +'<span class="muted">'+list.length+' / '+DATA.venues.length+'</span></div>'
+    +'<div class="tablewrap"><table><thead><tr><th>Ad</th><th>Şehir · Semt</th><th>Tür</th><th>Etiketler</th><th>Saat</th><th>Durum</th><th></th></tr></thead><tbody>'
+    +list.map(v=>'<tr>'
+      +'<td><b>'+esc(v.name)+'</b>'+(v.conf==="low"?' <span class="pill soon">kontrol</span>':'')+(v.sponsored?' <span class="pill sp">sponsor</span>':'')+'</td>'
+      +'<td>'+esc(v.city)+'<div class="muted">'+esc(v.area||"")+'</div></td>'
+      +'<td>'+esc(v.type||"")+'</td>'
+      +'<td class="muted">'+esc((v.tags||[]).join(", "))+'</td>'
+      +'<td class="muted">'+esc(v.hours||"")+'</td>'
+      +'<td>'+(v.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')
+        +(admTempClosed(v)?' <span class="pill tc" title="Karar/Plan/Harita\'da gizli; tarih geçince otomatik açılır">geçici kapalı'+(v.closed_until?' · '+esc(String(v.closed_until).slice(0,10)):'')+'</span>':'')
+        +(admCoordState(v)==="missing"?' <span class="pill soon">koordinatsız</span>':(admCoordState(v)==="invalid"?' <span class="pill off">geçersiz koord</span>':''))+'</td>'
+      +'<td style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm" onclick="diagVenue(\''+esc(v.id)+'\')">Teşhis</button> <button class="btn sm" onclick="toggleVenue(\''+esc(v.id)+'\')">'+(v.active?"Pasifle":"Aktifle")+'</button></td>'
+      +'</tr>').join("")
+    +'</tbody></table></div></div>';
+  shell(body);
+  $("vq").oninput=()=>{vFilter.q=$("vq").value; renderVenues(); $("vq").focus(); const el=$("vq"); el.setSelectionRange(el.value.length,el.value.length);};
+  $("vcity").onchange=()=>{vFilter.city=$("vcity").value; renderVenues();};
+  $("vact").onchange=()=>{vFilter.active=$("vact").value; renderVenues();};
+  $("vcoord").onchange=()=>{vFilter.coord=$("vcoord").value; renderVenues();};
+}
+function venueById(id){ return DATA.venues.find(v=>v.id===id); }
+function editVenue(id){
+  const v=id?venueById(id):{id:"",city:"Amsterdam",active:true,garden:false,walk_in:false,work:false,sponsored:false,tags:[],cats:[],best:[]};
+  const isNew=!id;
+  const ctype=(v.closed_until?"until_date":(v.temporarily_closed?"manual":"open"));
+  const f=(k,l,val,type)=>'<div class="fld"><label>'+l+'</label><input id="f_'+k+'" '+(type?'type="'+type+'"':'')+' value="'+esc(val)+'"></div>';
+  const ta=(k,l,val)=>'<div class="fld" style="flex:1 1 100%"><label>'+l+'</label><textarea id="f_'+k+'">'+esc(val)+'</textarea></div>';
+  const chk=(k,l,val)=>'<div class="fld check"><input type="checkbox" id="f_'+k+'" '+(val?"checked":"")+'><label>'+l+'</label></div>';
+  const self=(k,l,val,opts)=>'<div class="fld"><label>'+l+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(val===o?" selected":"")+'>'+o+'</option>').join("")+'</select></div>';
+  $("sheet").innerHTML='<h2>'+(isNew?"Yeni mekan":"Mekanı düzenle")+'</h2>'
+    +'<div class="frow">'+f("id","ID (kısa, benzersiz)",v.id)+f("name","Ad",v.name||"")+'</div>'
+    +'<div class="frow">'+f("city","Şehir",v.city||"")+f("area","Semt",v.area||"")+f("type","Tür",v.type||"")+'</div>'
+    +'<div class="frow">'+f("tags","Etiketler (virgülle)",(v.tags||[]).join(", "))+'</div>'
+    +'<div class="frow">'+f("cats","Kategoriler (virgülle)",(v.cats||[]).join(", "))+f("best","Best (virgülle)",(v.best||[]).join(", "))+'</div>'
+    +'<div class="frow">'+f("hours","Çalışma saatleri",v.hours||"")+self("resv","Rezervasyon",v.resv||"unknown",["no","rec","req","unknown"])+self("conf","Güven",v.conf||"high",["high","med","low"])+'</div>'
+    +'<div class="frow">'+f("lat","Enlem (lat)",v.lat==null?"":v.lat)+f("lng","Boylam (lng)",v.lng==null?"":v.lng)+f("src","Kaynak",v.src||"")+'</div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Harita — tıkla veya pini sürükle; lat/lng kutuları otomatik güncellenir</label><div id="venueMap"></div><div class="muted" id="vcoordmsg" style="font-size:12px;margin-top:4px"></div></div>'
+    +'<div class="frow"><div class="fld"><label>Geçici kapanış</label><select id="f_closure_type" onchange="vClosureTypeChange()">'
+        +'<option value="open"'+(ctype==="open"?" selected":"")+'>Açık</option>'
+        +'<option value="until_date"'+(ctype==="until_date"?" selected":"")+'>Belirli tarihe kadar kapalı</option>'
+        +'<option value="manual"'+(ctype==="manual"?" selected":"")+'>Manuel açılana kadar kapalı</option>'
+      +'</select></div>'
+      +'<div class="fld" id="f_cu_wrap"><label>Kapalı — bu tarihe kadar (YYYY-MM-DD)</label><input type="date" id="f_closed_until" value="'+esc(v.closed_until?String(v.closed_until).slice(0,10):"")+'" oninput="vClosureTypeChange()"></div>'
+      +'<div class="fld"><label>&nbsp;</label><button type="button" class="btn sm" onclick="vCloseWeek()">1 hafta kapat</button></div></div>'
+    +'<div class="frow">'+f("web","Web",v.web||"")+f("ig","Instagram",v.ig||"")+'</div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Fotoğraf (boşsa kategori görseli kullanılır)</label>'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        +'<input id="f_photo_url" value="'+esc(v.photo_url||"")+'" oninput="venuePhotoPrev()" placeholder="Foto URL (veya soldan yükle)" style="flex:1;min-width:220px">'
+        +'<label class="btn" style="cursor:pointer">Fotoğraf yükle<input type="file" accept="image/*" hidden onchange="venuePhotoUpload(event)"></label>'
+        +'<span id="f_upmsg" class="muted" style="font-size:12px"></span>'
+      +'</div>'
+      +'<div id="vPhotoPrev" style="margin-top:8px"></div></div>'
+    +ta("tip","Yerli tüyosu (tip)",v.tip||"")
+    +ta("description","Açıklama",v.description||"")
+    +ta("note","Not",v.note||"")
+    +'<div class="frow">'+chk("garden","Bahçeli / dış mekan",v.garden)+chk("walk_in","Rezervasyonsuz girilebilir",v.walk_in)+chk("work","Çalışmaya uygun",v.work)+chk("sponsored","Sponsorlu",v.sponsored)+chk("active","Aktif (yayında)",v.active)+'</div>'
+    +'<div class="err" id="verr"></div>'
+    +'<div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button>'+(isNew?"":'<button class="btn danger" onclick="delVenue(\''+esc(v.id)+'\')">Sil</button>')+'<button class="btn primary" id="vsave">Kaydet</button></div>';
+  openModal();
+  try{venuePhotoPrev();}catch(e){}
+  try{initVenueMap(v);}catch(e){}
+  try{vClosureTypeChange();}catch(e){}
+  $("vsave").onclick=()=>saveVenue(isNew);
+}
+let _vmap=null,_vmarker=null;
+function initVenueMap(v){
+  if(typeof L==="undefined")return;
+  if(_vmap){ try{_vmap.remove();}catch(e){} _vmap=null; _vmarker=null; }
+  const latEl=$("f_lat"),lngEl=$("f_lng"); if(!latEl||!lngEl)return;
+  const clat=parseFloat(latEl.value), clng=parseFloat(lngEl.value);
+  const hasCo=isFinite(clat)&&clat>=-90&&clat<=90&&isFinite(clng)&&clng>=-180&&clng<=180;
+  const cityRow=(DATA.cities||[]).find(c=>c.name===((latEl&&$("f_city")?$("f_city").value:"")||v.city));
+  const dlat=hasCo?clat:(cityRow&&cityRow.lat!=null?cityRow.lat:52.37);
+  const dlng=hasCo?clng:(cityRow&&cityRow.lng!=null?cityRow.lng:4.895);
+  _vmap=L.map('venueMap').setView([dlat,dlng], hasCo?15:12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_vmap);
+  _vmarker=L.marker([dlat,dlng],{draggable:true}).addTo(_vmap);
+  const setCoord=(la,ln)=>{ latEl.value=(+la).toFixed(6); lngEl.value=(+ln).toFixed(6); _vmarker.setLatLng([la,ln]); vCoordMsg(); };
+  _vmap.on('click',e=>setCoord(e.latlng.lat,e.latlng.lng));
+  _vmarker.on('dragend',()=>{ const p=_vmarker.getLatLng(); setCoord(p.lat,p.lng); });
+  const moveFromInputs=()=>{ const a=parseFloat(latEl.value),b=parseFloat(lngEl.value); if(isFinite(a)&&a>=-90&&a<=90&&isFinite(b)&&b>=-180&&b<=180){ _vmarker.setLatLng([a,b]); _vmap.panTo([a,b]); } vCoordMsg(); };
+  latEl.addEventListener('input',moveFromInputs); lngEl.addEventListener('input',moveFromInputs);
+  setTimeout(()=>{ try{_vmap.invalidateSize();}catch(e){} },200);
+  vCoordMsg();
+}
+function vCoordMsg(){ const m=$("vcoordmsg"); if(!m)return; const lv=$("f_lat").value.trim(),gv=$("f_lng").value.trim(); const a=parseFloat(lv),b=parseFloat(gv);
+  if(lv===""&&gv===""){ m.textContent="Koordinatsız (kuyrukta görünür). Haritaya tıklayarak ekleyebilirsin."; m.style.color="#8a5a12"; return; }
+  if(!(isFinite(a)&&a>=-90&&a<=90&&isFinite(b)&&b>=-180&&b<=180)){ m.textContent="⚠ Geçersiz koordinat aralığı (lat −90..90, lng −180..180) — kaydedilemez."; m.style.color="#a33"; return; }
+  m.textContent="✓ Koordinat geçerli: "+a.toFixed(5)+", "+b.toFixed(5); m.style.color="#2a7"; }
+function vClosureTypeChange(){ const t=$("f_closure_type"); const w=$("f_cu_wrap"); if(w)w.style.display=(t&&t.value==="until_date")?"":"none"; }
+function vCloseWeek(){ const d=new Date(); d.setDate(d.getDate()+7); const e=$("f_closed_until"); if(e)e.value=d.toISOString().slice(0,10); const t=$("f_closure_type"); if(t)t.value="until_date"; vClosureTypeChange(); }
+async function saveVenue(isNew){
+  const g=k=>{const e=$("f_"+k);return e?e.value:"";};
+  const gc=k=>{const e=$("f_"+k);return e?e.checked:false;};
+  const id=g("id").trim();
+  if(!id||!g("name").trim()){ $("verr").textContent="ID ve Ad zorunlu."; return; }
+  // AOÇ-2: koordinat aralık doğrulaması (boş=null izinli; varsa aralık zorunlu)
+  const latRaw=g("lat").trim(), lngRaw=g("lng").trim();
+  let latV=latRaw===""?null:parseFloat(latRaw), lngV=lngRaw===""?null:parseFloat(lngRaw);
+  if(latV!==null&&(!isFinite(latV)||latV< -90||latV>90)){ $("verr").textContent="Enlem (lat) −90..90 aralığında olmalı."; return; }
+  if(lngV!==null&&(!isFinite(lngV)||lngV< -180||lngV>180)){ $("verr").textContent="Boylam (lng) −180..180 aralığında olmalı."; return; }
+  if((latV===null)!==(lngV===null)){ $("verr").textContent="Enlem ve boylam birlikte dolu veya birlikte boş olmalı."; return; }
+  // AOÇ-2: kapanış tipi → iki net durum. Belirli tarih: yalnız closed_until. Manuel: yalnız temporarily_closed.
+  const ctype=g("closure_type"); let temporarily_closed=false, closed_until=null;
+  if(ctype==="until_date"){ const cd=g("closed_until").trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(cd)){ $("verr").textContent="Belirli tarihe kadar kapalı için geçerli tarih (YYYY-MM-DD) gir."; return; }
+    closed_until=cd; }
+  else if(ctype==="manual"){ temporarily_closed=true; }
+  const row={id, name:g("name").trim(), city:g("city").trim()||"Amsterdam", area:g("area").trim(), type:g("type").trim(),
+    tags:arr(g("tags")), cats:arr(g("cats")), best:arr(g("best")), hours:g("hours").trim()||null,
+    resv:g("resv"), conf:g("conf"), src:g("src").trim()||null, web:g("web").trim()||null, ig:g("ig").trim()||null, photo_url:g("photo_url").trim()||null,
+    tip:g("tip").trim()||null, description:g("description").trim()||null, note:g("note").trim()||null,
+    lat:latV, lng:lngV,
+    garden:gc("garden"), walk_in:gc("walk_in"), work:gc("work"), sponsored:gc("sponsored"), active:gc("active"),
+    temporarily_closed:temporarily_closed, closed_until:closed_until,
+    updated_at:new Date().toISOString()};
+  const btn=$("vsave"); btn.disabled=true; btn.textContent="Kaydediliyor…";
+  try{ const {error}=await db.from("venues").upsert(row,{onConflict:"id"}); if(error)throw error; }catch(e){ $("verr").textContent="Hata: "+(e.message||e); btn.disabled=false; btn.textContent="Kaydet"; return; }
+  const i=DATA.venues.findIndex(x=>x.id===id); if(i>=0)DATA.venues[i]=Object.assign(DATA.venues[i],row); else DATA.venues.push(row);
+  closeModal(); renderVenues();
+}
+function venuePhotoPrev(){ const el=$("vPhotoPrev"); if(!el)return; const u=($("f_photo_url").value||"").trim(); el.innerHTML=u?'<img src="'+esc(u)+'" style="max-height:140px;border-radius:6px;border:1px solid #ddd" onerror="this.parentNode.innerHTML=\'<span style=color:#a33;font-size:12px>Görsel yüklenemedi — link doğrudan bir görsel dosyası mı?</span>\'">':''; }
+async function venuePhotoUpload(ev){ const file=ev.target.files&&ev.target.files[0]; if(!file)return; const msg=$("f_upmsg"); if(msg)msg.textContent="Yükleniyor…"; try{ const url=await uploadToMedia(file,"venues"); $("f_photo_url").value=url; venuePhotoPrev(); if(msg)msg.textContent="✓ yüklendi"; }catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); } }
+async function toggleVenue(id){ const v=venueById(id); if(!v)return; const na=!v.active; try{ await db.from("venues").update({active:na,updated_at:new Date().toISOString()}).eq("id",id); v.active=na; }catch(e){} renderVenues(); }
+async function delVenue(id){ if(!confirm("Bu mekanı silmek istediğine emin misin?"))return; try{ await db.from("venues").delete().eq("id",id); }catch(e){} DATA.venues=DATA.venues.filter(v=>v.id!==id); closeModal(); renderVenues(); }
+
+/* ---------- AOÇ-3 · KARAR TEŞHİSİ (yalnız okuma; decision_contract.js) ---------- */
+let _diag={id:null,mode:"Kahve",time:"Sabah",resv:"Fark etmez",garden:"Fark etmez",loc:null};
+let _diagMap=null,_diagMarker=null;
+async function diagVenue(id){
+  const v=venueById(id); if(!v)return;
+  const ok=await ensureContract(); const C=window.DecisionContract;
+  if(!ok||!C||!C.diagnoseVenue){ $("sheet").innerHTML='<h2>Karar Teşhisi</h2><div style="background:#fbeaea;border:1px solid #e6bcbc;padding:10px;border-radius:8px">Motor sözleşmesi yüklenemedi — teşhis üretilemez.</div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>'; openModal(); return; }
+  _diag={id:id,mode:"Kahve",time:"Sabah",resv:"Fark etmez",garden:"Fark etmez",loc:null};
+  const cov=C.CITY_COVERAGE[v.city]; if(cov)_diag.loc={lat:cov.lat,lng:cov.lng};
+  const opt=(arr,cur)=>arr.map(o=>'<option'+(o===cur?" selected":"")+'>'+o+'</option>').join("");
+  $("sheet").innerHTML='<h2>Karar Teşhisi — '+esc(v.name)+' <span class="muted" style="font-size:13px">('+esc(v.city)+')</span></h2>'
+   +'<div class="frow">'
+     +'<div class="fld"><label>Mod</label><select id="dg_mode">'+opt(C.VALID_MODE,_diag.mode)+'</select></div>'
+     +'<div class="fld"><label>Zaman</label><select id="dg_time">'+opt(C.VALID_TIME,_diag.time)+'</select></div>'
+     +'<div class="fld"><label>Rezervasyon</label><select id="dg_resv">'+opt(["Fark etmez","Yok","Var"],_diag.resv)+'</select></div>'
+     +'<div class="fld"><label>Bahçe</label><select id="dg_garden">'+opt(["Fark etmez","Bahçeli","Bahçesiz"],_diag.garden)+'</select></div>'
+   +'</div>'
+   +'<div class="frow"><div class="fld"><label>Test konumu (lat)</label><input id="dg_lat" value="'+(_diag.loc?_diag.loc.lat:"")+'"></div>'
+     +'<div class="fld"><label>Test konumu (lng)</label><input id="dg_lng" value="'+(_diag.loc?_diag.loc.lng:"")+'"></div>'
+     +'<div class="fld"><label>&nbsp;</label><button type="button" class="btn sm" onclick="dgCityCenter(\''+esc(v.city)+'\')">Şehir merkezi</button></div></div>'
+   +'<div class="fld" style="flex:1 1 100%"><label>Test konumu — haritada tıkla (turuncu = mekân)</label><div id="diagMap" style="height:200px;border-radius:8px;border:1px solid var(--line)"></div></div>'
+   +'<div id="diagOut" style="margin-top:10px"></div>'
+   +'<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  openModal();
+  ["dg_mode","dg_time","dg_resv","dg_garden"].forEach(k=>{ const e=$(k); if(e)e.onchange=computeDiag; });
+  ["dg_lat","dg_lng"].forEach(k=>{ const e=$(k); if(e)e.oninput=computeDiag; });
+  try{ dgInitMap(v); }catch(e){}
+  computeDiag();
+}
+function dgInitMap(v){
+  if(typeof L==="undefined")return; if(_diagMap){try{_diagMap.remove();}catch(e){} _diagMap=null;}
+  const c=_diag.loc||{lat:(v.lat!=null?v.lat:52.37),lng:(v.lng!=null?v.lng:4.895)};
+  _diagMap=L.map('diagMap').setView([c.lat,c.lng],12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_diagMap);
+  _diagMarker=L.marker([c.lat,c.lng],{draggable:true}).addTo(_diagMap);
+  if(v.lat!=null&&v.lng!=null) L.circleMarker([v.lat,v.lng],{radius:6,color:"#b8944f",weight:2,fillColor:"#b8944f",fillOpacity:.9}).addTo(_diagMap).bindPopup("Mekân: "+esc(v.name));
+  const setL=(la,ln)=>{ _diag.loc={lat:la,lng:ln}; $("dg_lat").value=la.toFixed(6); $("dg_lng").value=ln.toFixed(6); _diagMarker.setLatLng([la,ln]); computeDiag(); };
+  _diagMap.on('click',e=>setL(e.latlng.lat,e.latlng.lng));
+  _diagMarker.on('dragend',()=>{ const p=_diagMarker.getLatLng(); setL(p.lat,p.lng); });
+  setTimeout(()=>{try{_diagMap.invalidateSize();}catch(e){}},200);
+}
+function dgSyncLoc(){ const a=parseFloat($("dg_lat").value),b=parseFloat($("dg_lng").value); if(isFinite(a)&&a>=-90&&a<=90&&isFinite(b)&&b>=-180&&b<=180){ _diag.loc={lat:a,lng:b}; if(_diagMarker)_diagMarker.setLatLng([a,b]); } else { _diag.loc=null; } }
+function dgCityCenter(city){ const C=window.DecisionContract; const cov=C&&C.CITY_COVERAGE[city]; if(cov){ _diag.loc={lat:cov.lat,lng:cov.lng}; $("dg_lat").value=cov.lat; $("dg_lng").value=cov.lng; if(_diagMap)_diagMap.setView([cov.lat,cov.lng],12); if(_diagMarker)_diagMarker.setLatLng([cov.lat,cov.lng]); computeDiag(); } }
+function admTodayYmd(city){ try{ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Europe/Copenhagen','Copenhagen':'Europe/Copenhagen'}; var tz=m[city]||'Europe/Amsterdam'; return new Date().toLocaleDateString('en-CA',{timeZone:tz}); }catch(e){ return new Date().toISOString().slice(0,10); } }
+function computeDiag(){
+  const C=window.DecisionContract; const v=venueById(_diag.id); const out=$("diagOut"); if(!C||!v||!out)return;
+  _diag.mode=$("dg_mode").value; _diag.time=$("dg_time").value; _diag.resv=$("dg_resv").value; _diag.garden=$("dg_garden").value; dgSyncLoc();
+  const d=C.diagnoseVenue(v,{city:v.city,mode:_diag.mode,time:_diag.time,resv:_diag.resv,garden:_diag.garden,loc:_diag.loc,nowYmd:admTodayYmd(v.city)},DATA.venues);
+  let gh='<table style="border-collapse:collapse;font-size:11.5px"><thead><tr><th></th>'+C.VALID_TIME.map(t=>'<th style="padding:3px 5px">'+t+'</th>').join("")+'</tr></thead><tbody>';
+  C.VALID_MODE.forEach(m=>{ gh+='<tr><td style="padding:3px 6px;font-weight:600">'+m+'</td>'+C.VALID_TIME.map(t=>{ const c=d.grid.find(x=>x.mode===m&&x.slot===t); let bg="#f1efe9",tx="·"; if(c.cls==="na"){bg="#e9e9e9";tx="–";} else if(c.qualifies){bg="#d9efce";tx="✓";} else if(c.matchMode){bg="#fbeecb";tx="○";} const sel=(m===_diag.mode&&t===_diag.time)?";outline:2px solid #b8944f":""; return '<td style="text-align:center;padding:4px 6px;background:'+bg+sel+'">'+tx+'</td>'; }).join("")+'</tr>'; });
+  gh+='</tbody></table><div class="muted" style="font-size:11px;margin-top:3px">✓ uygun · ○ mod eşleşir, saat/uygunluk değil · · mod eşleşmez · – beklenmeyen (na)</div>';
+  let gg='<div style="margin-top:10px"><b>Kapılar ('+esc(_diag.mode)+' · '+esc(_diag.time)+')</b><ul style="margin:4px 0;padding-left:0;list-style:none">';
+  d.gates.forEach(g=>{ gg+='<li style="padding:2px 0">'+(g.pass?'<span style="color:#3a8a3a">✓</span>':'<span style="color:#a33">✗</span>')+' <b>'+esc(g.key)+'</b> — '+esc(g.reason)+'</li>'; });
+  gg+='</ul></div>';
+  const Lc=d.location; let lh='<div style="margin-top:8px"><b>Konum önizleme</b><div class="muted" style="font-size:12.5px;line-height:1.6">';
+  if(!Lc.provided){ lh+='Test konumu girilmedi.'; }
+  else { lh+='Kullanıcı şehir kapsamı: '+(Lc.cityCoverageOk===false?'<span style="color:#a33">DIŞINDA (out_of_area — sonuç çıkmaz)</span>':'içinde')+'<br>';
+    if(Lc.coverageNote) lh+=esc(Lc.coverageNote)+'<br>';
+    lh+='<b>Tam eşleşme sırası:</b> '+(Lc.exactMatchRank!=null?(Lc.exactMatchRank+"/"+Lc.exactMatchCount):"—")+'<br>';
+    lh+='<b>İlk '+(Lc.topN||5)+' tam eşleşmeye girer mi?</b> '+(Lc.appearsInTopNExact?'<span style="color:#3a8a3a">Evet</span>':"Hayır")+'<br>';
+    lh+='<span style="color:#8a5a12">'+esc(Lc.appearReason||"")+'</span><br><i>'+esc(Lc.alternativesNote)+'</i>'; }
+  lh+='</div></div>';
+  out.innerHTML=gh+gg+lh;
+}
+
+/* ---------- ŞEHİRLER (değiştirilmedi) ---------- */
+function renderCities(){
+  const body='<div class="panel"><div class="toolbar"><button class="btn primary" onclick="editCity(null)">+ Yeni şehir</button></div>'
+    +'<div class="tablewrap"><table><thead><tr><th>Şehir</th><th>Ülke</th><th>Durum</th><th>Mekan</th><th></th></tr></thead><tbody>'
+    +DATA.cities.map(c=>{const vn=DATA.venues.filter(v=>v.city===c.name).length;return '<tr><td>'+esc(c.flag||"")+' <b>'+esc(c.name)+'</b></td><td>'+esc(c.country||"")+'</td><td><span class="pill '+(c.status==="active"?"on":(c.status==="soon"?"soon":"off"))+'">'+esc(c.status)+'</span></td><td class="muted">'+vn+'</td><td><button class="btn sm" onclick="editCity(\''+esc(c.code)+'\')">Düzenle</button></td></tr>';}).join("")
+    +'</tbody></table></div></div>';
+  shell(body);
+}
+function editCity(code){
+  const c=code?DATA.cities.find(x=>x.code===code):{code:"",name:"",country:"",flag:"",status:"draft",lat:null,lng:null,zoom:null,blurb:"",cover_url:"",timezone:"",coverage_radius_km:60};
+  const isNew=!code;
+  const f=(k,l,val,ro)=>'<div class="fld"><label>'+l+'</label><input id="c_'+k+'" value="'+esc(val==null?"":val)+'"'+(ro?' readonly style="opacity:.6;background:#f2f1ee"':'')+'></div>';
+  const NL='<span class="pill" style="background:#efe7d6;color:#7c5a12;font-size:10px">canlı app\'te henüz kullanılmıyor (AOÇ-1B)</span>';
+  $("sheet").innerHTML='<h2>'+(isNew?"Yeni şehir":"Şehri düzenle")+'</h2>'
+    +'<div class="frow">'+f("code","Kod (benzersiz"+(isNew?"":", salt-okunur")+")",c.code,!isNew)+f("name","Ad",c.name)+'</div>'
+    +(isNew?"":'<div class="muted" style="font-size:11px;margin:-6px 0 8px">Kod kimliktir; mevcut şehirde değiştirilemez (ayrı kontrollü migration gerektirir).</div>')
+    +'<div class="frow">'+f("country","Ülke",c.country||"")+f("flag","Bayrak (emoji)",c.flag||"")+'</div>'
+    +'<div class="frow"><div class="fld"><label>Durum</label><select id="c_status">'+["draft","soon","active","inactive"].map(o=>'<option'+(c.status===o?" selected":"")+'>'+o+'</option>').join("")+'</select></div></div>'
+    +'<div style="border-top:1px solid var(--line);margin:10px 0 6px;padding-top:8px"><b style="font-size:13px">Harita & bağlam</b> '+NL+'</div>'
+    +'<div class="frow">'+f("lat","Merkez enlem (lat)",c.lat)+f("lng","Merkez boylam (lng)",c.lng)+f("zoom","Zoom (1–22)",c.zoom)+'</div>'
+    +'<div class="frow">'+f("timezone","IANA saat dilimi (örn. Europe/Berlin)",c.timezone||"")+f("coverage_radius_km","Kapsama yarıçapı (km, 1–250)",c.coverage_radius_km==null?60:c.coverage_radius_km)+'</div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Blurb (şehir kısa tanıtımı)</label><textarea id="c_blurb">'+esc(c.blurb||"")+'</textarea></div>'
+    +'<div class="frow">'+f("cover_url","Kapak görseli URL (yalnız https://)",c.cover_url||"")+'</div>'
+    +'<div class="err" id="cerr"></div><div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button><button class="btn primary" id="csave">Kaydet</button></div>';
+  openModal();
+  $("csave").onclick=async()=>{
+    const g=k=>($("c_"+k)?$("c_"+k).value:"");
+    const code2=(isNew?g("code").trim():c.code), name=g("name").trim();
+    const num=(s)=>{ s=(s||"").trim(); if(s==="")return null; const n=Number(s); return isFinite(n)?n:NaN; };
+    const lat=num(g("lat")), lng=num(g("lng")), zoom=num(g("zoom")), cov=num(g("coverage_radius_km"));
+    const tz=g("timezone").trim(), cover=g("cover_url").trim();
+    if(!code2||!name){ $("cerr").textContent="Kod ve Ad zorunlu."; return; }
+    if(isNew && !/^[a-z0-9-]{2,40}$/.test(code2)){ $("cerr").textContent="Kod: küçük harf/rakam/tire, 2–40."; return; }
+    if(lat!==null&&(Number.isNaN(lat)||lat< -90||lat>90)){ $("cerr").textContent="Enlem −90..90 arası olmalı."; return; }
+    if(lng!==null&&(Number.isNaN(lng)||lng< -180||lng>180)){ $("cerr").textContent="Boylam −180..180 arası olmalı."; return; }
+    if(zoom!==null&&(Number.isNaN(zoom)||zoom<1||zoom>22||zoom%1!==0)){ $("cerr").textContent="Zoom 1–22 tam sayı olmalı."; return; }
+    if(cov!==null&&(Number.isNaN(cov)||cov<1||cov>250||cov%1!==0)){ $("cerr").textContent="Kapsama 1–250 km tam sayı olmalı."; return; }
+    if(cover&&!/^https:\/\//i.test(cover)){ $("cerr").textContent="Kapak URL yalnız https:// olabilir."; return; }
+    if(tz&&!/^[A-Za-z]+\/[A-Za-z0-9_+\-\/]+$/.test(tz)){ $("cerr").textContent="Saat dilimi biçimi geçersiz (örn. Europe/Berlin). Sunucu ayrıca doğrular."; return; }
+    const row={code:code2,name:name,country:g("country").trim(),flag:g("flag").trim(),status:g("status"),
+      lat:lat,lng:lng,zoom:zoom,blurb:g("blurb").trim()||null,cover_url:cover||null,timezone:tz||null,
+      coverage_radius_km:(cov==null?60:cov),updated_at:new Date().toISOString()};
+    const btn=$("csave"); btn.disabled=true; btn.textContent="Kaydediliyor…";
+    try{ const {error}=await db.from("cities").upsert(row,{onConflict:"code"}); if(error)throw error; }
+    catch(e){ const m=(e.message||e)+""; $("cerr").textContent = m.includes("invalid_timezone")?"Sunucu: geçersiz saat dilimi.":(m.includes("chk_cities")||m.includes("code_immutable")?"Sunucu doğrulaması reddetti: "+m:"Hata: "+m); btn.disabled=false; btn.textContent="Kaydet"; return; }
+    const i=DATA.cities.findIndex(x=>x.code===code2); if(i>=0)DATA.cities[i]=Object.assign(DATA.cities[i],row); else DATA.cities.push(row);
+    closeModal(); renderCities();
+  };
+}
+
+/* ---------- AOÇ-1: VERİ SAĞLIĞI (salt-okunur teşhis) ---------- */
+let DH={city:""};
+function renderDataHealth(){
+  const cityNames=DATA.cities.map(c=>c.name).sort((a,b)=>a.localeCompare(b,'tr'));
+  const b='<div class="panel"><h3 style="margin-bottom:6px">Veri Sağlığı (salt-okunur teşhis)</h3><p class="muted" style="margin-bottom:10px">Şehir seç → sunucu sayımları + karar motoru havuzları (motorla birebir). Otomatik düzeltme/CSV yok; her uyarı editöre yönlendirir.</p>'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><select id="dhCity"><option value="">— şehir seç —</option>'+cityNames.map(n=>'<option'+(DH.city===n?' selected':'')+'>'+esc(n)+'</option>').join("")+'</select><button class="btn sm primary" onclick="dhLoad()">Kontrol et</button></div>'
+    +'<div id="dhBody"><p class="muted">Bir şehir seçip "Kontrol et"e bas. (Henüz kontrol edilmedi.)</p></div></div>';
+  shell(b);
+  if(DH.city) setTimeout(dhLoad,50);
+}
+async function dhLoad(){
+  const sel=$("dhCity"); if(sel)DH.city=sel.value;
+  const box=$("dhBody"); if(!box)return;
+  if(!DH.city){ box.innerHTML='<p class="muted">Önce şehir seç.</p>'; return; }
+  box.innerHTML='<p class="muted">Yükleniyor…</p>';
+  const r=await adminApi("city_health",{city:DH.city});
+  if(r.status!==200){ box.innerHTML='<div class="notice err">Veri alınamadı: '+esc(apiErrText(r.status))+' <button class="btn sm" onclick="dhLoad()">Tekrar</button></div>'; return; }
+  const d=(r.body&&r.body.data)||{}; const cs=d.city_settings||{}, cnt=d.counts||{}, vs=d.venues||[];
+  const okC=await ensureContract();
+  if(!okC || !window.DecisionContract){ box.innerHTML='<div class="notice err">Motor sözleşmesi (/decision_contract.js) yüklenemedi — sağlık teşhisi üretilemiyor (fail-closed). decision_contract.js yayınlandı mı?</div>'; return; }
+  cnt.unparseable_hours = vs.filter(function(v){ return v.hours && String(v.hours).trim()!=='' && window.DecisionContract.parseHours(v.hours)===null; }).length;  // motorla birebir (SQL regex değil)
+  let h='', anyIssue=false;
+  h+='<div class="cards">'+stat(cnt.venues_total||0,"Mekan")+stat(cnt.venues_active||0,"Aktif")+stat(cnt.venues_inactive||0,"Pasif")+stat(cs.settings_complete?"✓":"eksik","Şehir ayarı")+'</div>';
+  if(!cs.city_exists){ anyIssue=true; h+='<div class="notice warn">Bu isimde cities kaydı yok (mekanlar var ama şehir tanımı eksik). Şehir editöründen ekleyin.</div>'; }
+  else if(!cs.settings_complete){
+    const miss=[['lat',cs.lat],['lng',cs.lng],['zoom',cs.zoom],['timezone',cs.timezone]].filter(x=>x[1]==null).map(x=>x[0]).join(", ");
+    const editBtn=' <button class="btn sm" onclick="editCityByName(\''+esc(DH.city).replace(/'/g,"\\'")+'\')">Şehri düzenle</button>';
+    if(cs.status==='active'){ anyIssue=true; h+='<div class="notice warn"><b>Yayında ama ayar eksik:</b> '+esc(miss)+editBtn+'</div>'; }
+    else { h+='<div class="notice" style="background:#eef3fa;border-color:#b3c7e6">Şehir henüz yayında değil ('+esc(cs.status||'—')+'); açılmadan önce tamamlanmalı: '+esc(miss)+editBtn+'</div>'; }
+  }
+  const RULES=[['missing_coord','Koordinatsız mekan','high'],['invalid_coord','Geçersiz koordinat','high'],['out_of_coverage','Kapsama dışı pin ('+(cs.coverage_radius_km||60)+' km)','med'],['missing_cats','Kategori yok','med'],['missing_tags','Etiket yok','med'],['missing_best','Best yok','med'],['missing_hours','Saat yok','low'],['unparseable_hours','Ayrıştırılamayan saat','low'],['missing_photo','Foto yok','low'],['missing_description','Açıklama yok','low'],['conf_low','Güven düşük','med']];
+  const rows=RULES.map(function(r){ const v=cnt[r[0]]; if(v==null)return '<tr><td>'+esc(r[1])+'</td><td class="muted">kontrol edilmedi</td><td></td></tr>'; if(v>0)anyIssue=true; const cls=r[2]==='high'?'off':(r[2]==='med'?'soon':'muted'); return '<tr><td>'+esc(r[1])+'</td><td>'+(v>0?'<span class="pill '+cls+'">'+v+'</span>':'<span class="pill on">0</span>')+'</td><td>'+(v>0?'<button class="btn sm" onclick="dhGoVenues(\''+esc(DH.city).replace(/'/g,"\\'")+'\')">Mekanlar</button>':'')+'</td></tr>'; }).join("");
+  h+='<div style="margin-top:12px"><b>Veri kalitesi</b><div class="tablewrap"><table><thead><tr><th>Kural</th><th>Sayı</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  const empties=DecisionContract.modePoolEmpty(vs,DH.city);
+  const cells=DecisionContract.healthCells(vs,DH.city);
+  let poolH='';
+  if(empties.length){ anyIssue=true; poolH+='<div class="notice warn">Karar havuzu BOŞ mod(lar): '+empties.map(e=>esc(e.mode)).join(", ")+' — bu modda hiç uygun mekan yok.</div>'; }
+  if(cells.filter(c=>c.cls==='core'&&(c.severity==='critical'||c.severity==='weak')).length) anyIssue=true;
+  poolH+='<div class="tablewrap"><table><thead><tr><th>Mod</th><th>Zaman</th><th>Uygun</th><th>Durum</th></tr></thead><tbody>'
+    +cells.map(c=>'<tr><td>'+esc(c.mode)+'</td><td>'+esc(c.slot)+'</td><td>'+c.count+'</td><td>'+dhSev(c.severity)+(c.cls==='optional'?' <span class="muted" style="font-size:10px">(dar)</span>':'')+'</td></tr>').join("")
+    +'</tbody></table></div>';
+  h+='<div style="margin-top:12px"><b>Karar motoru havuzları (motorla birebir)</b> <span class="muted" style="font-size:11px">0–2 kritik · 3–4 zayıf · 5+ yeterli; beklenmeyen (na) hücreler hariç</span>'+poolH+'</div>';
+  if(!anyIssue) h='<div class="notice" style="background:#e8f5e9;border-color:#a5d6a7">✓ '+esc(DH.city)+' için sorun bulunamadı (0 sorun).</div>'+h;
+  box.innerHTML=h;
+}
+function dhSev(s){ if(s==='critical')return '<span class="pill off">kritik</span>'; if(s==='weak')return '<span class="pill soon">zayıf</span>'; if(s==='info')return '<span class="pill muted">info</span>'; return '<span class="pill on">yeterli</span>'; }
+function dhGoVenues(city){ vFilter={q:"",city:city,active:""}; seg="venues"; render(); }
+function editCityByName(name){ const c=DATA.cities.find(x=>x.name===name); if(c){ seg="cities"; render(); setTimeout(()=>editCity(c.code),60);} }
+
+/* ---------- ETIKETLER (değiştirilmedi) ---------- */
+let openTag=null;
+function renderTags(){
+  const map={}; DATA.venues.forEach(v=>(v.tags||[]).forEach(t=>{map[t]=(map[t]||0)+1;}));
+  const rows=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  const body='<div class="panel"><h3 style="margin-bottom:10px">Etiketler ('+rows.length+')</h3><p class="muted" style="margin-bottom:12px">Bir etikete tıkla → o etiketteki mekanlar açılır; oradan düzenle ya da etiketi mekandan kaldır.</p>'
+    +'<div class="acc">'+rows.map(r=>{
+      const t=r[0], open=(openTag===t);
+      let inner='';
+      if(open){
+        const vs=DATA.venues.filter(v=>(v.tags||[]).indexOf(t)>-1).sort((a,b)=>(a.name||"").localeCompare(b.name||"","tr"));
+        inner='<div class="accbody">'+vs.map(v=>'<div class="accrow"><span><b>'+esc(v.name)+'</b> <span class="muted">· '+esc(v.city||"")+(v.area?" · "+esc(v.area):"")+'</span></span>'
+          +'<span style="white-space:nowrap"><button class="btn sm" onclick="editVenue(\''+esc(v.id)+'\')">Düzenle</button> <button class="btn sm danger" onclick="removeTag(\''+esc(v.id)+'\',\''+esc(t)+'\')">Etiketi kaldır</button></span></div>').join("")+'</div>';
+      }
+      return '<div class="accitem"><div class="acchead" style="cursor:pointer" onclick="toggleTag(\''+esc(t)+'\')"><span>'+(open?"▾":"▸")+' <b>'+esc(t)+'</b></span><span class="pill">'+r[1]+' mekan</span></div>'+inner+'</div>';
+    }).join("")+'</div></div>';
+  shell(body);
+}
+function toggleTag(t){ openTag=(openTag===t?null:t); renderTags(); }
+async function removeTag(id,t){
+  const v=venueById(id); if(!v)return;
+  const nt=(v.tags||[]).filter(x=>x!==t);
+  try{ await db.from("venues").update({tags:nt,updated_at:new Date().toISOString()}).eq("id",id); }catch(e){ alert("Hata: "+(e.message||e)); return; }
+  v.tags=nt; renderTags();
+}
+
+/* ---------- MODERASYON (0C.1: admin-api comment_search + gizle/göster) ---------- */
+let modState={city:"",venue:"",visibility:"all",limit:25,offset:0,total:0,has_more:false};
+let modTimer=null;
+async function renderComments(){
+  if(!(await isPrivAuthed())){ shell(privLoginHTML()); wirePrivLogin(()=>renderComments()); return; }
+  shell('<div class="panel"><div class="toolbar">'
+    +'<select id="cvis"><option value="all"'+(modState.visibility==="all"?" selected":"")+'>Tümü</option><option value="visible"'+(modState.visibility==="visible"?" selected":"")+'>Görünür</option><option value="hidden"'+(modState.visibility==="hidden"?" selected":"")+'>Gizli</option></select>'
+    +'<input class="search" id="ccity" placeholder="Şehir (opsiyonel)" value="'+esc(modState.city)+'">'
+    +'<input class="search" id="cvenue" placeholder="Mekan ID (opsiyonel)" value="'+esc(modState.venue)+'">'
+    +'<button class="btn sm" id="crefresh">Yenile</button><span class="muted" id="ccount"></span></div>'
+    +'<div id="modResults"><p class="muted">Yükleniyor…</p></div>'
+    +'<div id="modPager" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>'
+    +'<div class="hint">Gizleme yorumu SİLMEZ; puan ve beğeniler korunur, yalnız herkese açık görünürlük kalkar. Yalnız super_admin/moderator.</div></div>');
+  $("cvis").onchange=()=>{ modState.visibility=$("cvis").value; modState.offset=0; loadModerationPage(); };
+  $("ccity").oninput=()=>{ modState.city=$("ccity").value; clearTimeout(modTimer); modTimer=setTimeout(()=>{modState.offset=0;loadModerationPage();},350); };
+  $("cvenue").oninput=()=>{ modState.venue=$("cvenue").value; clearTimeout(modTimer); modTimer=setTimeout(()=>{modState.offset=0;loadModerationPage();},350); };
+  $("crefresh").onclick=()=>{ modState.offset=0; loadModerationPage(); };
+  loadModerationPage();
+}
+async function loadModerationPage(){
+  const rEl=$("modResults"), pEl=$("modPager"), cEl=$("ccount");
+  if(!rEl) return;
+  const params={ visibility:modState.visibility, limit:modState.limit, offset:modState.offset };
+  if(modState.city.trim()) params.city=modState.city.trim();
+  if(modState.venue.trim()) params.venue=modState.venue.trim();
+  rEl.innerHTML='<p class="muted">Yükleniyor…</p>';
+  const r=await adminApi("comment_search", params);
+  if(r.status===401){ shell(privLoginHTML("Oturum sona erdi.")); wirePrivLogin(()=>renderComments()); return; }
+  if(r.status===403){ rEl.innerHTML='<div class="notice err">Bu alana erişim yetkiniz yok (moderator/super_admin gerekir).</div>'; pEl.innerHTML=""; cEl.textContent=""; return; }
+  if(r.status!==200){ rEl.innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; pEl.innerHTML=""; cEl.textContent=""; return; }
+  const d=(r.body&&r.body.data)||{total:0,rows:[],has_more:false};
+  modState.total=d.total||0; modState.has_more=!!d.has_more;
+  const rows=d.rows||[];
+  cEl.textContent=modState.total+' yorum';
+  if(!rows.length){ rEl.innerHTML='<p class="muted">Sonuç yok.</p>'; }
+  else{
+    rEl.innerHTML='<div class="tablewrap"><table><thead><tr><th>Üye</th><th>E-posta</th><th>Mekan</th><th>Şehir</th><th>Yorum</th><th>Durum</th><th>Tarih</th><th></th></tr></thead><tbody>'
+     +rows.map(c=>{
+        const lbl=(c.venue_id||"")+" · "+((c.body||"").slice(0,60));
+        return '<tr>'
+          +'<td>'+esc(c.display_name||"Üye")+'</td>'
+          +'<td class="muted">'+esc(c.email_masked||"—")+'</td>'
+          +'<td class="muted">'+esc(c.venue_id||"—")+'</td>'
+          +'<td class="muted">'+esc(c.city||"—")+'</td>'
+          +'<td style="max-width:320px;word-break:break-word">'+esc((c.body||"").slice(0,300))+'</td>'
+          +'<td>'+(c.hidden?'<span class="pill off">gizli</span>':'<span class="pill on">görünür</span>')+'</td>'
+          +'<td class="muted">'+fmtDate(c.created_at)+'</td>'
+          +'<td><button class="btn sm '+(c.hidden?"":"danger")+' mod-hide" data-id="'+c.id+'" data-desired="'+(c.hidden?"0":"1")+'" data-label="'+esc(lbl)+'">'+(c.hidden?"Göster":"Gizle")+'</button></td>'
+          +'</tr>';
+      }).join("")+'</tbody></table></div>';
+    Array.from(document.querySelectorAll(".mod-hide")).forEach(b=>{ b.onclick=()=>modHide(Number(b.dataset.id), b.dataset.desired==="1", b.dataset.label||""); });
+  }
+  const from=rows.length?modState.offset+1:0, to=modState.offset+rows.length;
+  pEl.innerHTML='<button class="btn sm" id="cprev"'+(modState.offset<=0?" disabled":"")+'>‹ Önceki</button>'
+   +'<span class="muted">'+from+'–'+to+' / '+modState.total+'</span>'
+   +'<button class="btn sm" id="cnext"'+(modState.has_more?"":" disabled")+'>Sonraki ›</button>';
+  if($("cprev"))$("cprev").onclick=()=>{ modState.offset=Math.max(0,modState.offset-modState.limit); loadModerationPage(); };
+  if($("cnext"))$("cnext").onclick=()=>{ if(modState.has_more){ modState.offset+=modState.limit; loadModerationPage(); } };
+}
+
+/* ---------- Kontrollü yazma: onay + gerekçe diyaloğu (0C.1) ---------- */
+function writeErrText(r){
+  const code=(r.body&&r.body.error)||"";
+  if(r.status===409&&code==="idempotency_conflict") return "İşlem çakışması — sayfayı yenileyip tekrar deneyin.";
+  if(r.status===409&&code==="cannot_target_self") return "Kendi hesabını hedefleyemezsin.";
+  if(r.status===409&&code==="cannot_target_admin") return "Bir yönetici hesabı hedeflenemez.";
+  if(r.status===404) return "Hedef bulunamadı (profil olmayabilir).";
+  if(r.status===503&&code==="writes_temporarily_disabled") return "Yazma işlemleri geçici olarak kapalı.";
+  return apiErrText(r.status);
+}
+const WC_REASONS=[["spam","Spam"],["inappropriate","Uygunsuz içerik"],["harassment","Taciz"],["misleading","Yanıltıcı bilgi"],["user_request","Kullanıcı talebi"],["security","Güvenlik"],["other","Diğer"]];
+function uuid4(){
+  if(window.crypto&&crypto.randomUUID) return crypto.randomUUID();
+  const b=new Uint8Array(16); crypto.getRandomValues(b);
+  b[6]=(b[6]&0x0f)|0x40; b[8]=(b[8]&0x3f)|0x80;
+  const h=[]; for(let i=0;i<16;i++) h.push(b[i].toString(16).padStart(2,"0"));
+  return h[0]+h[1]+h[2]+h[3]+"-"+h[4]+h[5]+"-"+h[6]+h[7]+"-"+h[8]+h[9]+"-"+h[10]+h[11]+h[12]+h[13]+h[14]+h[15];
+}
+function openWriteConfirm(cfg){
+  openModal();
+  const idem=uuid4();
+  $("sheet").innerHTML='<h2>'+esc(cfg.title)+'</h2>'
+    +'<div class="notice'+(cfg.danger?" warn":"")+'" style="margin-bottom:12px">'+esc(cfg.actionDesc)+'<br><b>'+esc(cfg.targetDesc)+'</b></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Gerekçe (zorunlu)</label><select id="wc_reason"><option value="">— seçin —</option>'+WC_REASONS.map(x=>'<option value="'+x[0]+'">'+esc(x[1])+'</option>').join("")+'</select></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Not (isteğe bağlı, en fazla 280)</label><textarea id="wc_note" maxlength="280" placeholder="Kısa açıklama…"></textarea></div>'
+    +'<div class="err" id="wc_err"></div>'
+    +'<div class="foot"><button class="btn" id="wc_cancel">Vazgeç</button><button class="btn '+(cfg.danger?"danger":"primary")+'" id="wc_ok">Onayla</button></div>';
+  $("wc_cancel").onclick=()=>{ closeModal(); if(cfg.onDone)cfg.onDone(false); };
+  $("wc_ok").onclick=async()=>{
+    const reason=$("wc_reason").value, note=($("wc_note").value||"").trim();
+    if(!reason){ $("wc_err").textContent="Gerekçe seçin."; return; }
+    $("wc_ok").disabled=true; $("wc_cancel").disabled=true; $("wc_ok").textContent="İşleniyor…";
+    const r=await cfg.run(reason, note||null, idem);
+    if(r.status===200){ closeModal(); if(cfg.onDone)cfg.onDone(true); return; }
+    $("wc_err").textContent=writeErrText(r); $("wc_ok").disabled=false; $("wc_cancel").disabled=false; $("wc_ok").textContent="Onayla";
+  };
+}
+function modHide(id, desired, label){
+  openWriteConfirm({
+    title: desired?"Yorumu gizle":"Yorumu göster",
+    actionDesc: desired?"Bu yorum tüm herkese açık yüzeylerden ve beğeni sayaçlarından gizlenecek (silinmez; puan/beğeni korunur).":"Bu yorum yeniden herkese açık olacak.",
+    targetDesc: label, danger: !!desired,
+    run:(reason,note,idem)=>adminApi("comment_set_hidden",{target:id,desired:desired,reason:reason,note:note,idempotency_key:idem}),
+    onDone:(ok)=>{ if(ok) loadModerationPage(); }
+  });
+}
+function memBlock(uid, desired, label){
+  openWriteConfirm({
+    title: desired?"Topluluk profilini bloke et":"Blokeyi kaldır",
+    actionDesc: desired?"Bu üyenin tüm yorum ve beğenileri herkese açık yüzeylerden gizlenecek. Bu bir Auth hesap yasağı DEĞİLDİR.":"Üyenin topluluk içeriği yeniden görünür olacak.",
+    targetDesc: label, danger: !!desired,
+    run:(reason,note,idem)=>adminApi("member_set_blocked",{target:uid,desired:desired,reason:reason,note:note,idempotency_key:idem}),
+    onDone:()=>{ openMember360(uid); }
+  });
+}
+
+/* ---------- İÇERİK (değiştirilmedi) ---------- */
+function contentRow(key){ return DATA.content.find(c=>c.key===key); }
+function renderContent(){
+  const keys=Object.keys(CONTENT_DEFAULTS);
+  let body='<div class="panel"><h3 style="margin-bottom:6px">Site metinleri</h3><p class="muted" style="margin-bottom:14px">Başlık/metin/buton adlarını buradan değiştir. Boş bırakırsan varsayılan metin kullanılır.</p>';
+  body+=keys.map(k=>{
+    const r=contentRow(k)||{}; const label=(r.label||k); const val=r.value||""; const en=(r.enabled!==false);
+    const def=CONTENT_DEFAULTS[k]||"";
+    return '<div class="cblock" style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px"><b>'+esc(label)+'</b><span class="muted" style="font-size:11px">'+esc(k)+'</span></div>'
+      +'<textarea id="c_'+k+'" style="width:100%;min-height:52px" placeholder="Varsayılan: '+esc(def)+'">'+esc(val)+'</textarea>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">'
+        +'<label class="check" style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="ce_'+k+'" '+(en?"checked":"")+'> Sitede göster</label>'
+        +'<div style="display:flex;gap:6px"><button class="btn sm" onclick="openContentHistory(\''+k+'\')">Geçmiş / Geri Al</button><button class="btn sm primary" onclick="saveContent(\''+k+'\')">Kaydet</button></div>'
+      +'</div>'
+      +'<div class="muted" id="cmsg_'+k+'" style="font-size:12px;min-height:14px;margin-top:4px"></div>'
+    +'</div>';
+  }).join("");
+  body+='</div>';
+  shell(body);
+}
+async function saveContent(key){
+  const val=($("c_"+key).value||"").trim();
+  const en=$("ce_"+key).checked;
+  const label=(contentRow(key)||{}).label||key;
+  const row={key, label, value:val||null, enabled:en, updated_at:new Date().toISOString()};
+  const msg=$("cmsg_"+key); if(msg)msg.textContent="Kaydediliyor…";
+  try{ const {error}=await db.from("site_content").upsert(row,{onConflict:"key"}); if(error)throw error; }
+  catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); return; }
+  const i=DATA.content.findIndex(c=>c.key===key); if(i>=0)DATA.content[i]=Object.assign(DATA.content[i],row); else DATA.content.push(row);
+  if(msg)msg.textContent="✓ kaydedildi — sitede Ctrl+Shift+R ile görürsün";
+}
+
+/* ---------- REKLAMLAR (değiştirilmedi) ---------- */
+const AD_SLOTS=["masthead","leaderboard","sidebar","inline","venue_card","decision","map_pin"];
+const AD_TYPES=["display","native_venue","native_decision","html"];
+const AD_FORMATS=["970x250","728x90","300x250","300x600","320x100","320x50"];
+const SLOT_INFO={masthead:"Ana sayfa üstü geniş banner (Pano)",leaderboard:"Şehir banner / Plan üstü",sidebar:"Mekanlar yan sütun",inline:"Liste içi",venue_card:"Mekanlar arasına sponsorlu mekan kartı",decision:"Karar motoru sponsorlu öneri",map_pin:"Haritada sponsorlu pin (lat/lng gerekir)"};
+function adById(id){ return DATA.ads.find(a=>a.id===id); }
+function renderAds(){
+  const body='<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3>Reklam kampanyaları ('+DATA.ads.length+')</h3><button class="btn primary" onclick="editAd(0)">+ Yeni reklam</button></div>'
+    +'<p class="muted" style="margin-bottom:12px">Görsel yükle veya URL yapıştır, slotu seç, canlı önizle, aktif/pasif yap.</p>'
+    +(DATA.ads.length?'<div class="tablewrap"><table><thead><tr><th>Önizleme</th><th>Slot</th><th>Boyut</th><th>Tür</th><th>Sponsor</th><th>Durum</th><th></th></tr></thead><tbody>'
+    +DATA.ads.map(a=>'<tr>'
+      +'<td>'+(a.image_url?'<img src="'+esc(a.image_url)+'" style="width:70px;height:40px;object-fit:cover;border-radius:4px;border:1px solid #ddd">':'<span class="muted">—</span>')+'</td>'
+      +'<td><b>'+esc(a.slot)+'</b></td><td>'+esc(a.format||"")+'</td><td>'+esc(a.creative_type||"")+'</td><td>'+esc(a.sponsor||"")+'</td>'
+      +'<td>'+(a.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>')+'</td>'
+      +'<td style="white-space:nowrap"><button class="btn sm" onclick="editAd('+a.id+')">Düzenle</button> <button class="btn sm" onclick="toggleAd('+a.id+')">'+(a.active?"Pasifle":"Aktifle")+'</button></td></tr>').join("")
+    +'</tbody></table></div>':'<p class="muted">Henüz reklam yok. "+ Yeni reklam" ile ekle.</p>')+'</div>';
+  shell(body);
+}
+async function toggleAd(id){ const a=adById(id); if(!a)return; const na=!a.active; try{await db.from("ads").update({active:na}).eq("id",id);}catch(e){} a.active=na; renderAds(); }
+function editAd(id){
+  const a=id?adById(id):{id:0,slot:"masthead",creative_type:"display",format:"970x250",active:true,weight:1};
+  const isNew=!id;
+  const f=(k,l,val,type)=>'<div class="fld"><label>'+l+'</label><input id="a_'+k+'" '+(type?'type="'+type+'"':'')+' value="'+esc(val==null?"":val)+'" oninput="adPreview()"></div>';
+  const ta=(k,l,val)=>'<div class="fld" style="flex:1 1 100%"><label>'+l+'</label><textarea id="a_'+k+'" oninput="adPreview()">'+esc(val||"")+'</textarea></div>';
+  const chk=(k,l,val)=>'<div class="fld check"><input type="checkbox" id="a_'+k+'" '+(val?"checked":"")+'><label>'+l+'</label></div>';
+  const sel=(k,l,val,opts)=>'<div class="fld"><label>'+l+'</label><select id="a_'+k+'" onchange="adPreview()">'+opts.map(o=>'<option'+(val===o?" selected":"")+'>'+o+'</option>').join("")+'</select></div>';
+  $("sheet").innerHTML='<h2>'+(isNew?"Yeni reklam":"Reklamı düzenle")+'</h2>'
+    +'<div class="frow">'+sel("creative_type","Kreatif türü",a.creative_type||"display",AD_TYPES)+sel("slot","Slot (yer)",a.slot||"masthead",AD_SLOTS)+sel("format","Boyut (display)",a.format||"970x250",AD_FORMATS)+'</div>'
+    +'<div class="muted" id="slotHint" style="margin:-4px 0 10px;font-size:12px"></div>'
+    +'<div class="frow">'+f("sponsor","Sponsor / marka",a.sponsor||"")+f("scope_city","Şehir (boş = tümü)",a.scope_city||"")+f("weight","Ağırlık (sıra)",a.weight==null?1:a.weight,"number")+'</div>'
+    +'<div class="frow">'+f("title","Başlık",a.title||"")+'</div>'
+    +ta("body","Metin",a.body||"")
+    +'<div class="fld" style="flex:1 1 100%"><label>Görsel</label>'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        +'<input id="a_image_url" value="'+esc(a.image_url||"")+'" oninput="adPreview()" placeholder="Görsel URL (veya soldan yükle)" style="flex:1;min-width:220px">'
+        +'<label class="btn" style="cursor:pointer">Görsel yükle<input type="file" accept="image/*" hidden onchange="adUpload(event)"></label>'
+        +'<span id="a_upmsg" class="muted" style="font-size:12px"></span>'
+      +'</div></div>'
+    +'<div class="frow">'+f("cta_url","Tıklama linki (CTA URL)",a.cta_url||"")+'</div>'
+    +'<div class="frow">'+f("width","Genişlik (px, ops.)",a.width==null?"":a.width,"number")+f("height","Yükseklik (px, ops.)",a.height==null?"":a.height,"number")+'</div>'
+    +'<div class="frow">'+f("lat","Enlem (map_pin için)",a.lat==null?"":a.lat)+f("lng","Boylam (map_pin için)",a.lng==null?"":a.lng)+'</div>'
+    +'<div class="frow">'+chk("active","Aktif (yayında)",a.active!==false)+'</div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Canlı önizleme</label><div id="adPrev" style="background:#faf9f5;border:1px dashed #cfc9bd;border-radius:8px;padding:14px;min-height:70px;display:flex;align-items:center;justify-content:center"></div></div>'
+    +'<div class="err" id="aerr"></div>'
+    +'<div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button>'+(isNew?"":'<button class="btn danger" onclick="delAd('+a.id+')">Sil</button>')+'<button class="btn primary" id="asave">Kaydet</button></div>';
+  openModal();
+  $("asave").onclick=()=>saveAd(isNew,id);
+  adPreview();
+}
+function adPreview(){
+  const g=k=>{const e=$("a_"+k);return e?e.value:"";};
+  const hint=$("slotHint"); if(hint)hint.textContent=SLOT_INFO[g("slot")]||"";
+  const p=$("adPrev"); if(!p)return;
+  const img=g("image_url").trim(), title=esc(g("title")), body=esc(g("body")), sponsor=esc(g("sponsor")), ct=g("creative_type");
+  if(ct==="native_venue"||ct==="native_decision"){
+    p.innerHTML='<div style="text-align:left;max-width:360px;font-family:Georgia,serif"><span style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:#a63936;font-weight:700">Sponsorlu · '+sponsor+'</span><div style="font-size:18px;font-weight:600;margin:4px 0">'+(title||"Başlık")+'</div><div style="font-size:13px;color:#555;font-family:sans-serif">'+(body||"")+'</div></div>';
+  } else if(img){
+    p.innerHTML='<img src="'+esc(img)+'" style="max-width:100%;max-height:220px;border-radius:4px" onerror="this.parentNode.innerHTML=\'<span style=color:#a33>Görsel yüklenemedi\'">';
+  } else {
+    p.innerHTML='<div style="text-align:center;color:#888"><b>'+(title||"Görsel yok")+'</b><div style="font-size:12px">'+(body||"Görsel URL gir ya da yükle")+'</div></div>';
+  }
+}
+async function adUpload(ev){ const file=ev.target.files&&ev.target.files[0]; if(!file)return; const msg=$("a_upmsg"); if(msg)msg.textContent="Yükleniyor…"; try{ const url=await uploadToMedia(file,"ads"); $("a_image_url").value=url; adPreview(); if(msg)msg.textContent="✓ yüklendi"; }catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); } }
+async function uploadToMedia(file, prefix){
+  const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
+  const path=(prefix||"img")+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext;
+  const {error}=await db.storage.from("media").upload(path,file,{cacheControl:"3600",upsert:false,contentType:file.type||"image/jpeg"});
+  if(error)throw error;
+  const {data}=db.storage.from("media").getPublicUrl(path);
+  return data.publicUrl;
+}
+async function saveAd(isNew,id){
+  const g=k=>{const e=$("a_"+k);return e?e.value.trim():"";};
+  const gc=k=>{const e=$("a_"+k);return e?e.checked:false;};
+  const num=v=>v===""?null:(isNaN(+v)?null:+v);
+  const row={ slot:g("slot"), creative_type:g("creative_type"), format:g("format")||null, scope_city:g("scope_city")||null,
+    sponsor:g("sponsor")||null, title:g("title")||null, body:g("body")||null, image_url:g("image_url")||null, cta_url:g("cta_url")||null,
+    weight:num(g("weight"))||1, width:num(g("width")), height:num(g("height")), lat:num(g("lat")), lng:num(g("lng")), active:gc("active") };
+  const btn=$("asave"); btn.disabled=true; btn.textContent="Kaydediliyor…";
+  try{
+    if(isNew){ const {data,error}=await db.from("ads").insert(row).select().single(); if(error)throw error; DATA.ads.push(data); }
+    else { row.id=id; const {error}=await db.from("ads").update(row).eq("id",id); if(error)throw error; const i=DATA.ads.findIndex(x=>x.id===id); if(i>=0)DATA.ads[i]=Object.assign(DATA.ads[i],row); }
+  }catch(e){ $("aerr").textContent="Hata: "+(e.message||e); btn.disabled=false; btn.textContent="Kaydet"; return; }
+  closeModal(); renderAds();
+}
+async function delAd(id){ if(!confirm("Bu reklamı silmek istediğine emin misin?"))return; try{ await db.from("ads").delete().eq("id",id); }catch(e){} DATA.ads=DATA.ads.filter(a=>a.id!==id); closeModal(); renderAds(); }
+
+/* ---------- ÜYELER (0B.1: admin-api member_search + member_360, salt-okunur) ---------- */
+function fmtDate(s){ try{ if(!s)return"—"; const d=new Date(s); return d.toLocaleDateString("tr-TR",{year:"numeric",month:"short",day:"numeric"}); }catch(e){ return "—"; } }
+let mState={q:"",type:"filter",blocked:"",limit:25,offset:0,total:0,has_more:false};
+let mTimer=null;
+async function renderMembers(){
+  if(!(await isPrivAuthed())){ shell(privLoginHTML()); wirePrivLogin(()=>renderMembers()); return; }
+  shell('<div class="panel"><div class="toolbar">'
+    +'<input class="search" id="mq" placeholder="Ara (ad / e-posta)…" value="'+esc(mState.q)+'">'
+    +'<select id="mtype"><option value="filter"'+(mState.type==="filter"?" selected":"")+'>Filtre (tümü)</option><option value="name"'+(mState.type==="name"?" selected":"")+'>Ad</option><option value="email"'+(mState.type==="email"?" selected":"")+'>E-posta</option></select>'
+    +'<select id="mblk"><option value=""'+(mState.blocked===""?" selected":"")+'>Aktif+Bloke</option><option value="false"'+(mState.blocked==="false"?" selected":"")+'>Yalnız aktif</option><option value="true"'+(mState.blocked==="true"?" selected":"")+'>Yalnız bloke</option></select>'
+    +'<span class="muted" id="mcount"></span></div>'
+    +'<div id="memResults"><p class="muted">Yükleniyor…</p></div>'
+    +'<div id="memPager" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>'
+    +'<div class="hint">Bloke/blokeyi kaldır işlemi Üye 360 içinde (onay + gerekçe ile). Puan düzeltme / silme 0C.2\'de.</div></div>');
+  $("mq").oninput=()=>{ mState.q=$("mq").value; clearTimeout(mTimer); mTimer=setTimeout(()=>{ mState.offset=0; loadMembersPage(); },350); };
+  $("mtype").onchange=()=>{ mState.type=$("mtype").value; mState.offset=0; loadMembersPage(); };
+  $("mblk").onchange=()=>{ mState.blocked=$("mblk").value; mState.offset=0; loadMembersPage(); };
+  loadMembersPage();
+}
+async function loadMembersPage(){
+  const rEl=$("memResults"), pEl=$("memPager"), cEl=$("mcount");
+  if(!rEl) return;
+  if(mState.type!=="filter" && (!mState.q || mState.q.trim().length<2)){
+    rEl.innerHTML='<p class="muted">Ad/E-posta araması için en az 2 karakter girin (ya da "Filtre" ile tümünü listele).</p>'; pEl.innerHTML=""; cEl.textContent=""; return;
+  }
+  const params={ search_type:mState.type, limit:mState.limit, offset:mState.offset };
+  if(mState.type!=="filter") params.q=mState.q.trim();
+  if(mState.blocked!=="") params.blocked=(mState.blocked==="true");
+  rEl.innerHTML='<p class="muted">Yükleniyor…</p>';
+  const r=await adminApi("member_search", params);
+  if(r.status===401){ shell(privLoginHTML("Oturum sona erdi.")); wirePrivLogin(()=>renderMembers()); return; }
+  if(r.status!==200){ rEl.innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; pEl.innerHTML=""; cEl.textContent=""; return; }
+  const d=(r.body&&r.body.data)||{total:0,rows:[],has_more:false};
+  mState.total=d.total||0; mState.has_more=!!d.has_more;
+  const rows=d.rows||[];
+  cEl.textContent=mState.total+' üye';
+  if(!rows.length){ rEl.innerHTML='<p class="muted">Sonuç yok.</p>'; }
+  else{
+    rEl.innerHTML='<div class="tablewrap"><table><thead><tr><th>Ad</th><th>E-posta</th><th>Profil</th><th>Seviye</th><th>Şehir</th><th>Durum</th><th>Kayıt</th><th>Son giriş</th><th></th></tr></thead><tbody>'
+     +rows.map(m=>'<tr>'
+       +'<td><b>'+esc(m.display_name||"(profil yok)")+'</b></td>'
+       +'<td class="muted">'+esc(m.email_masked||"—")+'</td>'
+       +'<td>'+(m.profile_exists?'<span class="pill on">var</span>':'<span class="pill off">yok</span>')+'</td>'
+       +'<td>'+esc(m.tier||"—")+'</td>'
+       +'<td class="muted">'+esc(m.home_city||"—")+'</td>'
+       +'<td>'+(m.blocked?'<span class="pill off">bloke</span>':'<span class="pill on">aktif</span>')+'</td>'
+       +'<td class="muted">'+fmtDate(m.created_at)+'</td>'
+       +'<td class="muted">'+fmtDate(m.last_sign_in_at)+'</td>'
+       +'<td><button class="btn sm" onclick="openMember360(\''+esc(m.user_id)+'\')">360</button></td>'
+       +'</tr>').join("")+'</tbody></table></div>';
+  }
+  const from=rows.length?mState.offset+1:0, to=mState.offset+rows.length;
+  pEl.innerHTML='<button class="btn sm" id="mprev"'+(mState.offset<=0?" disabled":"")+'>‹ Önceki</button>'
+   +'<span class="muted">'+from+'–'+to+' / '+mState.total+'</span>'
+   +'<button class="btn sm" id="mnext"'+(mState.has_more?"":" disabled")+'>Sonraki ›</button>';
+  if($("mprev"))$("mprev").onclick=()=>{ mState.offset=Math.max(0,mState.offset-mState.limit); loadMembersPage(); };
+  if($("mnext"))$("mnext").onclick=()=>{ if(mState.has_more){ mState.offset+=mState.limit; loadMembersPage(); } };
+}
+async function openMember360(uid){
+  openModal();
+  $("sheet").innerHTML='<h2>Üye 360</h2><div class="acc"><div class="accitem"><div class="accbody"><div class="accrow"><span class="muted">Yükleniyor…</span></div></div></div></div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  const r=await adminApi("member_360",{target:uid});
+  if(r.status!==200){
+    const t=(r.status===404)?"Kullanıcı bulunamadı.":apiErrText(r.status);
+    $("sheet").innerHTML='<h2>Üye 360</h2><div class="notice err">'+esc(t)+'</div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+    return;
+  }
+  const d=(r.body&&r.body.data)||{};
+  const id=d.identity||{}, mem=d.member||{}, sm=d.summary||{};
+  const line=(l,val)=>'<div class="accrow"><span><b>'+esc(l)+'</b></span><span style="max-width:62%;text-align:right;word-break:break-word">'+esc(val==null||val===""?"—":val)+'</span></div>';
+  const moreNote=s=>(s&&s.has_more)?'<div class="accrow"><span class="muted">…ilk 20 gösteriliyor (toplam '+esc(s.total||0)+')</span></div>':'';
+  const T=d.trips||{}, F=d.favorites||{}, C=d.comments||{}, P=d.point_events||{}, PL=d.plans||{}, RX=d.reactions||{}, TL=d.timeline||{};
+  window.__m360={uid:uid, note:(mem.admin_note||""), segment:(mem.segment||""), timeline:(TL.items||[]), tlFilter:"all"};
+  let h='<h2>Üye 360</h2>';
+  h+='<div class="accitem" style="margin-bottom:12px"><div class="acchead"><span><b>Kimlik &amp; profil</b></span>'+(mem.segment?'<span class="pill sp">'+esc(mem.segment)+'</span> ':'')+(mem.profile_exists?'<span class="pill on">profil var</span>':'<span class="pill off">profil yok</span>')+'</div><div class="accbody">'
+    +line("Ad", mem.display_name)+line("E-posta", id.email)
+    +line("Seviye", mem.tier)+line("Puan", mem.points)
+    +line("Şehir", mem.home_city)+line("Cinsiyet", mem.gender)+line("Bio", mem.bio)
+    +line("Bloke", mem.blocked?"Evet":"Hayır")
+    +line("Kayıt", fmtDate(id.created_at))+line("Son giriş", fmtDate(id.last_sign_in_at))
+    +'</div></div>';
+  const canBlock=!!mem.profile_exists;
+  h+='<div style="margin:-4px 0 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    +(canBlock
+       ? '<button class="btn '+(mem.blocked?"":"danger")+'" id="m360block">'+(mem.blocked?"Blokeyi kaldır":"Topluluk profilini bloke et")+'</button>'
+       : '<button class="btn" disabled>Bloke</button> <span class="muted">Topluluk profili bulunmuyor; bu işlem Auth hesabını kapatmaz.</span>')
+    +(CAPS.superadmin && mem.profile_exists ? ' <button class="btn" id="m360pts">Puan düzelt</button>' : '')
+    +'</div>';
+  // AOÇ-4: Admin notu + Segment (düzenlenebilir; super_admin/support)
+  h+='<div class="accitem" style="margin-bottom:12px"><div class="acchead"><span><b>Admin notu &amp; Segment</b></span><span class="muted" style="font-size:11px">yalnız yönetim; kullanıcıya/görünür profile sızmaz</span></div><div class="accbody">'
+    +'<div class="fld" style="flex:1 1 100%"><label>Segment etiketi (tek etiket)</label><input id="m360seg" value="'+esc(mem.segment||"")+'" placeholder="ör. vip, riskli, kampanya-a" style="width:100%"></div>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Admin notu</label><textarea id="m360note" rows="3" placeholder="Yalnız yöneticilerin göreceği not…">'+esc(mem.admin_note||"")+'</textarea></div>'
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="m360savemeta">Not &amp; segmenti kaydet</button><span class="muted" id="m360metamsg" style="font-size:12px"></span></div>'
+    +'</div></div>';
+  h+='<div class="cards">'+stat(sm.trips||0,"Seyahat")+stat(sm.favorites||0,"Favori")+stat(sm.comments||0,"Yorum")+stat(sm.point_events||0,"Puan olayı")+'</div>';
+  h+='<div class="acc">';
+  h+='<div class="accitem"><div class="acchead"><span><b>Son seyahatler</b></span><span class="pill">'+esc(T.total||0)+'</span></div><div class="accbody">'
+    +((T.items||[]).length?(T.items).map(t=>'<div class="accrow"><span><b>'+esc(t.city||"—")+'</b> <span class="muted">· '+esc((t.start_date||"")+(t.end_date?(" → "+t.end_date):""))+(t.archived?" · arşiv":"")+'</span></span><span class="muted">v'+esc(t.plan_version)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(T)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Son favoriler</b></span><span class="pill">'+esc(F.total||0)+'</span></div><div class="accbody">'
+    +((F.items||[]).length?(F.items).map(f=>'<div class="accrow"><span>'+esc(f.venue_id||"—")+' <span class="muted">· '+esc(f.city||"")+'</span></span><span class="muted">'+fmtDate(f.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(F)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Son yorumlar</b></span><span class="pill">'+esc(C.total||0)+'</span></div><div class="accbody">'
+    +((C.items||[]).length?(C.items).map(c=>'<div class="accrow"><span style="max-width:70%;word-break:break-word">'+esc((c.body||"").slice(0,140))+' <span class="muted">· '+esc(c.venue_id||"")+(c.hidden?" · gizli":"")+'</span></span><span class="muted">'+fmtDate(c.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(C)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Son puan olayları</b></span><span class="pill">'+esc(P.total||0)+'</span></div><div class="accbody">'
+    +((P.items||[]).length?(P.items).map(p=>'<div class="accrow"><span><b>'+esc(p.event_type||"—")+'</b> <span class="muted">· '+esc(p.status||"")+'</span></span><span>'+esc(p.points)+' puan · '+fmtDate(p.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(P)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Oluşturulan planlar</b></span><span class="pill">'+esc(PL.total||0)+'</span></div><div class="accbody">'
+    +((PL.items||[]).length?(PL.items).map(p=>'<div class="accrow"><span><b>'+esc(p.city||"—")+'</b> <span class="muted">· plan v'+esc(p.version)+' · seyahat #'+esc(p.trip_id)+'</span></span><span class="muted">'+fmtDate(p.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(PL)+'</div></div>';
+  h+='<div class="accitem"><div class="acchead"><span><b>Reaksiyonlar</b></span><span class="pill">'+esc(RX.total||0)+'</span></div><div class="accbody">'
+    +((RX.items||[]).length?(RX.items).map(x=>'<div class="accrow"><span>'+esc(x.reaction||"—")+' <span class="muted">· yorum #'+esc(x.comment_id)+'</span></span><span class="muted">'+fmtDate(x.created_at)+'</span></div>').join(""):'<div class="accrow"><span class="muted">yok</span></div>')+moreNote(RX)+'</div></div>';
+  h+='</div>';
+  // AOÇ-4: Zaman çizelgesi (birleşik, tarih sıralı, tür filtresi)
+  h+='<div class="accitem" style="margin-top:12px"><div class="acchead"><span><b>Zaman çizelgesi</b></span><span class="pill">'+esc(TL.total||0)+'</span></div><div class="accbody">'
+    +'<div class="toolbar" style="margin-bottom:8px"><select id="m360tlf"><option value="all">Tümü</option><option value="point">Puan</option><option value="trip">Seyahat</option><option value="plan">Plan</option><option value="favorite">Favori</option><option value="comment">Yorum</option><option value="reaction">Reaksiyon</option></select></div>'
+    +'<div id="m360tl"></div>'
+    +((TL.has_more)?'<div class="accrow"><span class="muted">…son 50 gösteriliyor (toplam '+esc(TL.total||0)+')</span></div>':'')
+    +'</div></div>';
+  h+='<div class="hint" style="margin-top:10px">Bloke = topluluk içeriği bastırma (yorum/beğeni herkese açık yüzeylerden kalkar); Auth hesap yasağı değildir. Manuel puan düzeltme yalnız super_admin tarafından yapılabilir; ±100 sınırındadır, gerekçe ve ayrıntılı not zorunludur ve işlem denetim kaydına yazılır.</div>';
+  h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  $("sheet").innerHTML=h;
+  if(canBlock && $("m360block")) $("m360block").onclick=()=>memBlock(uid, !mem.blocked, (mem.display_name||id.email||uid));
+  if($("m360pts")) $("m360pts").onclick=()=>openPointsAdjust(uid, (mem.display_name||id.email||uid), mem.points);
+  renderM360Timeline();
+  if($("m360tlf")) $("m360tlf").onchange=()=>{ window.__m360.tlFilter=$("m360tlf").value; renderM360Timeline(); };
+  if($("m360savemeta")) $("m360savemeta").onclick=()=>saveMemberMeta(uid);
+}
+function renderM360Timeline(){
+  const el=$("m360tl"); if(!el||!window.__m360)return;
+  const f=window.__m360.tlFilter||"all";
+  const icon={point:"◆",trip:"✈",plan:"🗺",favorite:"★",comment:"💬",reaction:"👍"};
+  const rows=(window.__m360.timeline||[]).filter(x=>f==="all"||x.type===f);
+  el.innerHTML=rows.length? rows.map(x=>'<div class="accrow"><span style="max-width:70%;word-break:break-word">'+(icon[x.type]||"•")+' '+esc(x.label||"")+'</span><span class="muted">'+fmtDate(x.ts)+'</span></div>').join(""):'<div class="accrow"><span class="muted">kayıt yok</span></div>';
+}
+async function saveMemberMeta(uid){
+  const seg=($("m360seg")?$("m360seg").value:"")||"";
+  const note=($("m360note")?$("m360note").value:"")||"";
+  const msg=$("m360metamsg"), btn=$("m360savemeta"); if(btn){btn.disabled=true;btn.textContent="Kaydediliyor…";}
+  try{
+    const r1=await adminApi("member_set_segment",{target:uid,segment:seg,idempotency_key:uuid4()});
+    if(r1.status!==200) throw new Error("Segment: "+apiErrText(r1.status));
+    const r2=await adminApi("member_set_note",{target:uid,note:note,idempotency_key:uuid4()});
+    if(r2.status!==200) throw new Error("Not: "+apiErrText(r2.status));
+    if(msg){msg.textContent="✓ kaydedildi"; msg.style.color="#2a7";}
+  }catch(e){ if(msg){msg.textContent="Hata: "+(e.message||e); msg.style.color="#a33";} }
+  if(btn){btn.disabled=false;btn.textContent="Not & segmenti kaydet";}
+}
+
+/* ---------- CDP-2: SEGMENTLER ---------- */
+/* ===== CDP-2B: taksonomi + genişletilmiş alan kataloğu ===== */
+let TAX=null;
+function segOpts(k,fb){ return (TAX&&Array.isArray(TAX[k])&&TAX[k].length)?TAX[k]:(fb||[]); }
+function segCityOpts(){ return (TAX&&Array.isArray(TAX.cities_active))?TAX.cities_active:[]; } // [{code,name}]
+const SEG_FIELDS=[
+  // ---- Mevcut durum (türetilmiş) ----
+  {f:"has_trip",label:"Seyahati var mı",grp:"state",kind:"bool"},
+  {f:"has_favorite",label:"Favorisi var mı",grp:"state",kind:"bool"},
+  {f:"has_comment",label:"Yorumu var mı",grp:"state",kind:"bool"},
+  {f:"has_plan",label:"Planı var mı",grp:"state",kind:"bool"},
+  {f:"trip_in_city",label:"Belirli şehirde seyahati",grp:"state",kind:"citypresent"},
+  {f:"plan_in_city",label:"Belirli şehirde planı",grp:"state",kind:"citypresent"},
+  {f:"favorite_in_city",label:"Belirli şehirde favorisi",grp:"state",kind:"citypresent"},
+  {f:"trip_status",label:"Seyahat durumu",grp:"state",kind:"select",src:"trip_status",fb:["draft","upcoming","active","past"]},
+  {f:"tier",label:"Seviye (tier)",grp:"state",kind:"tier"},
+  {f:"points_gte",label:"Puan ≥",grp:"state",kind:"num"},
+  {f:"points_lte",label:"Puan ≤",grp:"state",kind:"num"},
+  {f:"membership_after",label:"Üyelik ≥ tarih",grp:"state",kind:"date"},
+  {f:"membership_before",label:"Üyelik < tarih",grp:"state",kind:"date"},
+  {f:"last_activity_after",label:"Son aktivite ≥ tarih",grp:"state",kind:"date"},
+  {f:"last_activity_before",label:"Son aktivite < tarih",grp:"state",kind:"date"},
+  {f:"manual_segment",label:"Manuel segment etiketi",grp:"state",kind:"text"},
+  // ---- Favori taksonomisi (favorites→venues, COUNT DISTINCT) ----
+  {f:"favorite_venue_type",label:"Favori: venue türü",grp:"fav",kind:"vtype"},
+  {f:"favorite_main_category",label:"Favori: ana kategori",grp:"fav",kind:"vcat"},
+  {f:"favorite_tag",label:"Favori: etiket",grp:"fav",kind:"text"},
+  {f:"favorite_count",label:"Favori sayısı (benzersiz mekan)",grp:"fav",kind:"opn"},
+  {f:"favorite_count_of_category",label:"Belirli kategoride favori sayısı",grp:"fav",kind:"catopn"},
+  {f:"favorite_category_ratio",label:"Kategorinin favoriler içindeki oranı %",grp:"fav",kind:"catoppct"},
+  {f:"favorite_added_last_days",label:"Son X günde favori ekledi",grp:"fav",kind:"num"},
+  {f:"dominant_favorite_category",label:"Baskın favori kategorisi",grp:"fav",kind:"vcat"},
+  {f:"dominant_favorite_type",label:"Baskın favori türü",grp:"fav",kind:"vtype"},
+  // ---- Geçmiş olay (kalıcı) ----
+  {f:"behavior_block",label:"Davranış bloğu (Karar: şehir+mod+zaman+pencere+sayı/oran)",grp:"event",kind:"behavior"},
+  {f:"dominant_decision_mode",label:"Baskın Karar modu",grp:"event",kind:"dommode"},
+  {f:"city_viewed_last_days",label:"Şehre baktı (son 1–180 gün) · 180g saklanır",grp:"event",kind:"citydays"},
+  {f:"city_viewed_count",label:"Şehre baktı — kaç kez (son 1–180 gün)",grp:"event",kind:"citydayscount"},
+  // ---- Eski tekil (geriye uyum; mümkünse Davranış bloğu kullanın) ----
+  {f:"decision_used_last_days",label:"[eski] Son X günde Karar kullandı",grp:"legacy",kind:"num"},
+  {f:"decision_mode",label:"[eski] Karar modu",grp:"legacy",kind:"select",src:"decision_modes",fb:["Çalışmak","Kahve","Yemek","İçki","Yürüyüş","Park","Alışveriş"]},
+  {f:"decision_time",label:"[eski] Karar zamanı",grp:"legacy",kind:"select",src:"decision_times",fb:["Sabah","Öğlen","Öğleden sonra","Akşam","Gece"]},
+  {f:"decision_full_bucket",label:"[eski] Tam eşleşme bucket",grp:"legacy",kind:"select",src:"buckets",fb:["0","1-2","3-5","6+"]},
+  {f:"decision_displayed_bucket",label:"[eski] Gösterilen bucket",grp:"legacy",kind:"select",src:"buckets",fb:["0","1-2","3-5","6+"]},
+  {f:"trip_city",label:"[eski] Seyahat şehri (serbest metin)",grp:"legacy",kind:"text"}
+];
+function segMeta(f){ return SEG_FIELDS.find(x=>x.f===f)||SEG_FIELDS[0]; }
+let _seg={match:"all",groups:[{match:"all",rules:[{field:"has_trip"}]}]}, _segEditId=null, _segName="", _segDesc="", _segEditActive=null, _segFlash=null;
+function segDefault(field){ const m=segMeta(field);
+  switch(m.kind){
+    case "bool": return "true";
+    case "select": return (segOpts(m.src,m.fb)[0]||"");
+    case "tier": return ((segOpts("tiers").map(t=>t.name||t)[0])||"");
+    case "vtype": return (segOpts("venue_types")[0]||"");
+    case "vcat": return (segOpts("venue_cats")[0]||"");
+    case "num": case "date": case "text": return "";
+    case "citypresent": { const c=segCityOpts()[0]; return {city_code:c?c.code:"", present:true}; }
+    case "opn": return {op:"gte", n:""};
+    case "catopn": return {category:(segOpts("venue_cats")[0]||""), op:"gte", n:""};
+    case "catoppct": return {category:(segOpts("venue_cats")[0]||""), op:"gte", pct:""};
+    case "dommode": return {mode:(segOpts("decision_modes",["Kahve"])[0]||"Kahve"), last_days:""};
+    case "citydays": { const c=segCityOpts()[0]; return {city_code:c?c.code:"", days:30}; }
+    case "citydayscount": { const c=segCityOpts()[0]; return {city_code:c?c.code:"", days:30, op:"gte", n:""}; }
+    case "behavior": return {scope:{city_code:"",time:"",window:{last_days:30}}, count_on:true, ratio_on:false, count:{mode:"",op:"gte",n:""}, ratio:{value:(segOpts("decision_modes",["Kahve"])[0]||"Kahve"),op:"gte",pct:""}};
+    default: return "";
+  }
+}
+function segFieldSel(gi,ri,cur){
+  const opt=a=>a.map(x=>'<option value="'+x.f+'"'+(x.f===cur?" selected":"")+'>'+esc(x.label)+'</option>').join("");
+  const curMeta=segMeta(cur), curLegacy=(curMeta.grp==="legacy"||curMeta.grp==="soon");
+  // Yeni kural için YALNIZ state/fav/event seçilebilir; legacy/soon yeni segmentte sunulmaz.
+  let h='<select onchange="segSetField('+gi+','+ri+',this.value)">'
+    +'<optgroup label="Mevcut durum (türetilmiş — kaynak silinince kaybolur)">'+opt(SEG_FIELDS.filter(x=>x.grp==="state"))+'</optgroup>'
+    +'<optgroup label="Favori taksonomisi (türetilmiş)">'+opt(SEG_FIELDS.filter(x=>x.grp==="fav"))+'</optgroup>'
+    +'<optgroup label="Geçmiş olay (kalıcı)">'+opt(SEG_FIELDS.filter(x=>x.grp==="event"))+'</optgroup>';
+  // Yalnızca mevcut kayıt düzenlenirken ve rule zaten legacy/soon ise: görüntüleme grubu
+  if(curLegacy) h+='<optgroup label="Eski/görüntüleme (yeni seçilemez)">'+opt([curMeta])+'</optgroup>';
+  return h+'</select>';
+}
+function selOpts(list,cur){ return list.map(o=>'<option'+(String(cur)===String(o)?" selected":"")+'>'+esc(o)+'</option>').join(""); }
+function segCityAllName(code){ if(!code)return null; const all=(TAX&&Array.isArray(TAX.cities_all))?TAX.cities_all:[]; const m=all.find(c=>c.code===code); return m?m.name:null; }
+function citySel(id,cur,withAll){
+  const cs=segCityOpts();                                   // yalnız AKTİF şehirler seçilebilir (yeni kural)
+  const inActive = !!cur && cs.some(c=>c.code===cur);
+  // Düzenlenen kaydın mevcut city_code'u PASİF ise: dropdown'da seçili biçimde KORU; kullanıcı başka aktif şehir seçmedikçe değişmez
+  let extra=''; if(cur && !inActive){ const nm=segCityAllName(cur)||cur; extra='<option value="'+esc(cur)+'" selected>'+esc(nm)+' (pasif — mevcut kayıt)</option>'; }
+  return '<select id="'+id+'">'+(withAll?'<option value="">(hepsi)</option>':'')+extra+cs.map(c=>'<option value="'+esc(c.code)+'"'+(cur===c.code?" selected":"")+'>'+esc(c.name)+'</option>').join("")+'</select>';
+}
+function opSel(id,cur){ const m={gte:"≥",lte:"≤",eq:"="}; return '<select id="'+id+'">'+["gte","lte","eq"].map(o=>'<option value="'+o+'"'+(cur===o?" selected":"")+'>'+m[o]+'</option>').join("")+'</select>'; }
+function segValInput(gi,ri,field){
+  const m=segMeta(field), id='segv_'+gi+'_'+ri, v=(_seg.groups[gi].rules[ri].value);
+  if(m.grp==="legacy"){ return '<input id="'+id+'" value="'+esc(typeof v==="object"?JSON.stringify(v):(v==null?"":v))+'" disabled title="eski alan — salt-okunur"> <span class="muted">(eski, salt-okunur — yeni segmentte kullanılamaz)</span>'; }
+  if(m.kind==="bool") return '<select id="'+id+'"><option value="true"'+(v!=="false"&&v!==false?" selected":"")+'>var</option><option value="false"'+(v==="false"||v===false?" selected":"")+'>yok</option></select>';
+  if(m.kind==="select") return '<select id="'+id+'">'+selOpts(segOpts(m.src,m.fb),v)+'</select>';
+  if(m.kind==="tier") return '<select id="'+id+'">'+selOpts(segOpts("tiers").map(t=>t.name||t),v)+'</select>';
+  if(m.kind==="vtype") return '<select id="'+id+'">'+selOpts(segOpts("venue_types"),v)+'</select>';
+  if(m.kind==="vcat") return '<select id="'+id+'">'+selOpts(segOpts("venue_cats"),v)+'</select>';
+  if(m.kind==="num") return '<input id="'+id+'" type="number" value="'+esc(v==null?"":v)+'" style="width:110px">';
+  if(m.kind==="date") return '<input id="'+id+'" type="date" value="'+esc(v==null?"":v)+'">';
+  if(m.kind==="soon") return '<span class="muted">olay ingest CDP-2C\'de eklenecek</span>';
+  if(m.kind==="citypresent"){ const o=(v&&typeof v==="object")?v:{city_code:"",present:true}; return citySel(id+"_c",o.city_code,false)+' <select id="'+id+'_p"><option value="true"'+(o.present!==false?" selected":"")+'>var</option><option value="false"'+(o.present===false?" selected":"")+'>yok</option></select>'; }
+  if(m.kind==="opn"){ const o=(v&&typeof v==="object")?v:{op:"gte",n:""}; return opSel(id+"_op",o.op)+' <input id="'+id+'_n" type="number" value="'+esc(o.n==null?"":o.n)+'" style="width:90px" placeholder="adet">'; }
+  if(m.kind==="catopn"){ const o=(v&&typeof v==="object")?v:{category:"",op:"gte",n:""}; return '<select id="'+id+'_cat">'+selOpts(segOpts("venue_cats"),o.category)+'</select> '+opSel(id+"_op",o.op)+' <input id="'+id+'_n" type="number" value="'+esc(o.n==null?"":o.n)+'" style="width:90px">'; }
+  if(m.kind==="catoppct"){ const o=(v&&typeof v==="object")?v:{category:"",op:"gte",pct:""}; return '<select id="'+id+'_cat">'+selOpts(segOpts("venue_cats"),o.category)+'</select> '+opSel(id+"_op",o.op)+' <input id="'+id+'_pct" type="number" min="0" max="100" value="'+esc(o.pct==null?"":o.pct)+'" style="width:80px">%'; }
+  if(m.kind==="dommode"){ const o=(v&&typeof v==="object")?v:{mode:"",last_days:""}; return '<select id="'+id+'_mode">'+selOpts(segOpts("decision_modes",m.fb||[]),o.mode)+'</select> <span class="muted">son</span> <input id="'+id+'_ld" type="number" value="'+esc(o.last_days==null?"":o.last_days)+'" style="width:70px" placeholder="gün(ops)"> <span class="muted">gün</span>'; }
+  if(m.kind==="citydays"){ const o=(v&&typeof v==="object")?v:{city_code:"",days:30}; return citySel(id+"_c",o.city_code,false)+' <span class="muted">son</span> <input id="'+id+'_d" type="number" min="1" max="180" value="'+esc(o.days==null?30:o.days)+'" style="width:70px"> <span class="muted">gün (1–180)</span>'; }
+  if(m.kind==="citydayscount"){ const o=(v&&typeof v==="object")?v:{city_code:"",days:30,op:"gte",n:""}; return citySel(id+"_c",o.city_code,false)+' <span class="muted">son</span> <input id="'+id+'_d" type="number" min="1" max="180" value="'+esc(o.days==null?30:o.days)+'" style="width:60px"> <span class="muted">gün</span> '+opSel(id+"_op",o.op)+' <input id="'+id+'_n" type="number" min="0" value="'+esc(o.n==null?"":o.n)+'" style="width:70px" placeholder="kez">'; }
+  if(m.kind==="behavior"){ const o=(v&&typeof v==="object")?v:segDefault("behavior");
+    const sc=o.scope||{window:{}}; const cnt=o.count||{}; const rat=o.ratio||{}; const cOn=o.count_on!==false, rOn=o.ratio_on===true;
+    let h='<div style="border:1px solid #e3d9c6;border-radius:8px;padding:8px;background:#fff;min-width:340px">';
+    h+='<div class="frow" style="gap:6px;align-items:center;flex-wrap:wrap"><span class="muted">Kapsam:</span> '+citySel(id+"_city",sc.city_code||"",true)
+      +' <select id="'+id+'_time"><option value="">(zaman: hepsi)</option>'+segOpts("decision_times",["Sabah","Öğlen","Öğleden sonra","Akşam","Gece"]).map(t=>'<option'+((sc.time||"")===t?" selected":"")+'>'+esc(t)+'</option>').join("")+'</select>'
+      +' <span class="muted">son</span> <input id="'+id+'_days" type="number" value="'+esc((sc.window&&sc.window.last_days!=null)?sc.window.last_days:30)+'" style="width:70px"> <span class="muted">gün</span></div>';
+    h+='<div class="muted" style="font-size:11px;margin-top:4px">Sayı ve Oran birlikte açılabilir; ikisi de aynı kapsam üzerinde AND çalışır. En az biri gerekli.</div>';
+    // Sayı koşulu
+    h+='<div class="frow" style="gap:6px;align-items:center;margin-top:6px"><label style="display:flex;gap:4px;align-items:center"><input id="'+id+'_con" type="checkbox"'+(cOn?" checked":"")+' onchange="segReadDom();renderSegBuilder()"> Sayı</label>';
+    if(cOn){ h+=' <select id="'+id+'_cmode"><option value="">(mod: hepsi)</option>'+segOpts("decision_modes",[]).map(mm=>'<option'+((cnt.mode||"")===mm?" selected":"")+'>'+esc(mm)+'</option>').join("")+'</select> '+opSel(id+"_cop",cnt.op||"gte")+' <input id="'+id+'_cn" type="number" value="'+esc(cnt.n==null?"":cnt.n)+'" style="width:80px" placeholder="adet"> <span class="muted">olay ("kullanmadı" = 0)</span>'; }
+    h+='</div>';
+    // Oran koşulu (breakdown yalnız mod)
+    h+='<div class="frow" style="gap:6px;align-items:center;margin-top:6px"><label style="display:flex;gap:4px;align-items:center"><input id="'+id+'_ron" type="checkbox"'+(rOn?" checked":"")+' onchange="segReadDom();renderSegBuilder()"> Oran %</label>';
+    if(rOn){ h+=' <span class="muted">payda içinde mod =</span> <select id="'+id+'_rval">'+selOpts(segOpts("decision_modes",[]),rat.value)+'</select> '+opSel(id+"_rop",rat.op||"gte")+' <input id="'+id+'_rpct" type="number" min="0" max="100" value="'+esc(rat.pct==null?"":rat.pct)+'" style="width:70px">%'; }
+    h+='</div></div>'; return h;
+  }
+  return '<input id="'+id+'" value="'+esc(v==null?"":v)+'" placeholder="değer">';
+}
+function segReadDom(){ _seg.groups.forEach((g,gi)=>g.rules.forEach((r,ri)=>{ const m=segMeta(r.field), id="segv_"+gi+"_"+ri;
+  const val=x=>{const e=$(x);return e?e.value:undefined;};
+  if(m.kind==="citypresent"){ const c=val(id+"_c"),p=val(id+"_p"); if(c!==undefined)r.value={city_code:c,present:p!=="false"}; }
+  else if(m.kind==="opn"){ const op=val(id+"_op"),n=val(id+"_n"); if(op!==undefined)r.value={op:op,n:n}; }
+  else if(m.kind==="catopn"){ const cat=val(id+"_cat"),op=val(id+"_op"),n=val(id+"_n"); if(op!==undefined)r.value={category:cat,op:op,n:n}; }
+  else if(m.kind==="catoppct"){ const cat=val(id+"_cat"),op=val(id+"_op"),pct=val(id+"_pct"); if(op!==undefined)r.value={category:cat,op:op,pct:pct}; }
+  else if(m.kind==="dommode"){ const mode=val(id+"_mode"),ld=val(id+"_ld"); if(mode!==undefined)r.value={mode:mode,last_days:ld}; }
+  else if(m.kind==="citydays"){ const c=val(id+"_c"),dd=val(id+"_d"); if(c!==undefined)r.value={city_code:c,days:dd}; }
+  else if(m.kind==="citydayscount"){ const c=val(id+"_c"),dd=val(id+"_d"),op=val(id+"_op"),n=val(id+"_n"); if(c!==undefined)r.value={city_code:c,days:dd,op:op,n:n}; }
+  else if(m.kind==="behavior"){ const chk=x=>{const e=$(x);return e?!!e.checked:undefined;}; const prev=(r.value&&typeof r.value==="object")?r.value:{};
+    const cOn=chk(id+"_con"); const rOn=chk(id+"_ron");
+    r.value={ scope:{city_code:val(id+"_city")||"", time:val(id+"_time")||"", window:{last_days:val(id+"_days")}},
+      count_on:(cOn===undefined?(prev.count_on!==false):cOn), ratio_on:(rOn===undefined?(prev.ratio_on===true):rOn),
+      count:{mode:(val(id+"_cmode")!==undefined?val(id+"_cmode"):((prev.count||{}).mode||"")), op:(val(id+"_cop")||(prev.count||{}).op||"gte"), n:(val(id+"_cn")!==undefined?val(id+"_cn"):((prev.count||{}).n))},
+      ratio:{value:(val(id+"_rval")!==undefined?val(id+"_rval"):((prev.ratio||{}).value||"")), op:(val(id+"_rop")||(prev.ratio||{}).op||"gte"), pct:(val(id+"_rpct")!==undefined?val(id+"_rpct"):((prev.ratio||{}).pct))} }; }
+  else if(m.grp!=="soon"){ const e=$(id); if(e)r.value=e.value; }
+})); }
+function segSetField(gi,ri,f){ segReadDom(); _seg.groups[gi].rules[ri]={field:f, value:segDefault(f)}; renderSegBuilder(); }
+function segSetMatch(gi,val){ segReadDom(); if(gi<0)_seg.match=val; else _seg.groups[gi].match=val; renderSegBuilder(); }
+function segAddRule(gi){ segReadDom(); if(_seg.groups[gi].rules.length<10)_seg.groups[gi].rules.push({field:"has_trip",value:"true"}); renderSegBuilder(); }
+function segDelRule(gi,ri){ segReadDom(); _seg.groups[gi].rules.splice(ri,1); if(_seg.groups[gi].rules.length===0)_seg.groups[gi].rules.push({field:"has_trip",value:"true"}); renderSegBuilder(); }
+function segAddGroup(){ segReadDom(); if(_seg.groups.length<5)_seg.groups.push({match:"all",rules:[{field:"has_trip",value:"true"}]}); renderSegBuilder(); }
+function segDelGroup(gi){ segReadDom(); _seg.groups.splice(gi,1); if(_seg.groups.length===0)_seg.groups.push({match:"all",rules:[{field:"has_trip",value:"true"}]}); renderSegBuilder(); }
+function numOrNull(x){ return (x===""||x==null)?null:Number(x); }
+function segBuildValue(field,raw){ const m=segMeta(field);
+  if(m.kind==="bool") return (raw!=="false"&&raw!==false);
+  if(m.kind==="num") return numOrNull(raw);
+  if(m.kind==="citypresent"){ const o=raw||{}; return {city_code:o.city_code, present:(o.present!==false&&o.present!=="false")}; }
+  if(m.kind==="opn"){ const o=raw||{}; return {op:o.op, n:numOrNull(o.n)}; }
+  if(m.kind==="catopn"){ const o=raw||{}; return {category:o.category, op:o.op, n:numOrNull(o.n)}; }
+  if(m.kind==="catoppct"){ const o=raw||{}; return {category:o.category, op:o.op, pct:numOrNull(o.pct)}; }
+  if(m.kind==="dommode"){ const o=raw||{}; const out={mode:o.mode}; if(o.last_days!==""&&o.last_days!=null)out.last_days=Number(o.last_days); return out; }
+  if(m.kind==="citydays"){ const o=raw||{}; return {city_code:o.city_code, days:numOrNull(o.days)}; }
+  if(m.kind==="citydayscount"){ const o=raw||{}; return {city_code:o.city_code, days:numOrNull(o.days), op:o.op, n:numOrNull(o.n)}; }
+  if(m.kind==="behavior"){ const o=raw||{}; const sc=o.scope||{}; const scope={event_type:"decision_used", window:{last_days:numOrNull((sc.window||{}).last_days)}};
+    if(sc.city_code) scope.city_code=sc.city_code; if(sc.time) scope.time=sc.time;
+    const out={scope:scope};
+    if(o.count_on!==false){ const c=o.count||{}; const cc={op:c.op||"gte", n:numOrNull(c.n)}; if(c.mode)cc.mode=c.mode; out.count=cc; }
+    if(o.ratio_on===true){ const rr=o.ratio||{}; out.ratio={breakdown_field:"mode", value:rr.value, op:rr.op||"gte", pct:numOrNull(rr.pct)}; }
+    return out; }
+  return (raw==null?null:raw);
+}
+function segBuildDef(){ segReadDom(); return {match:_seg.match, groups:_seg.groups.map(g=>({match:g.match, rules:g.rules.map(r=>({field:r.field, value:segBuildValue(r.field,r.value)}))}))}; }
+function renderSegBuilder(){
+  const el=$("segBuild"); if(!el)return;
+  let h='<div class="frow" style="align-items:center;gap:8px"><b>Gruplar arası:</b> <select onchange="segSetMatch(-1,this.value)"><option value="all"'+(_seg.match==="all"?" selected":"")+'>HEPSİ (AND)</option><option value="any"'+(_seg.match==="any"?" selected":"")+'>HERHANGİ (OR)</option></select></div>';
+  _seg.groups.forEach((g,gi)=>{
+    h+='<div class="panel" style="padding:10px;margin:8px 0;background:#faf8f4"><div class="frow" style="align-items:center;gap:8px"><b>Grup '+(gi+1)+'</b> <select onchange="segSetMatch('+gi+',this.value)"><option value="all"'+(g.match==="all"?" selected":"")+'>kural HEPSİ (AND)</option><option value="any"'+(g.match==="any"?" selected":"")+'>kural HERHANGİ (OR)</option></select> <button class="btn sm" onclick="segDelGroup('+gi+')">Grubu sil</button></div>';
+    g.rules.forEach((r,ri)=>{ h+='<div class="frow" style="gap:8px;align-items:flex-start;margin-top:6px">'+segFieldSel(gi,ri,r.field)+segValInput(gi,ri,r.field)+'<button class="btn sm" onclick="segDelRule('+gi+','+ri+')">×</button></div>'; });
+    h+='<div style="margin-top:6px"><button class="btn sm" onclick="segAddRule('+gi+')">+ Kural</button></div></div>';
+  });
+  h+='<div><button class="btn" onclick="segAddGroup()">+ Grup</button></div>';
+  el.innerHTML=h;
+}
+async function renderSegments(){
+  if(!(await isPrivAuthed())){ shell(privLoginHTML()); wirePrivLogin(()=>renderSegments()); return; }
+  if(!TAX){ const t=await adminApi("segment_taxonomy",{}); if(t.status===200)TAX=t.body.data||{}; }
+  const body='<div class="panel"><h3 style="margin-bottom:6px">Segmentler (CDP-lite)</h3>'
+    +'<p class="muted" style="margin-bottom:8px">Kural-tabanlı otomatik segmentler. <b>Mevcut durum</b> sinyalleri (ör. favorisi var) kaynak kayıttan türetilir — kayıt silinirse kaybolur. <b>Geçmiş olay</b> sinyalleri (ör. son 30g Karar, Şehre baktı) 180 gün saklanır. Şehir/mod/zaman/kategori kapalı listelerden seçilir (serbest metin yok). Sonuç yalnız sayı + maskeli önizleme. (Üye 360 manuel etiketinden ayrıdır.)</p>'
+    +'<div class="acc"><div class="accitem"><div class="acchead"><span><b>Davranış olayı gezgini</b></span></div><div class="accbody">'
+      +'<div class="toolbar" style="flex-wrap:wrap;gap:6px">'
+        +'<input id="evFrom" type="date" title="Başlangıç"> <input id="evTo" type="date" title="Bitiş">'
+        +'<select id="evType"><option value="">Tür: hepsi</option>'+["signup","trip_created","plan_created","favorite_added","comment_posted","reaction_added","points_changed","decision_used"].map(t=>'<option>'+t+'</option>').join("")+'</select>'
+        +citySel("evCity","",true)
+        +'<input id="evMq" placeholder="Üye ara (ad / e-posta)" style="min-width:180px"><button class="btn" id="evFind">Ara</button>'
+        +'<span id="evPick" class="muted"></span>'
+        +'<button class="btn primary" id="evGo">Getir</button></div>'
+      +'<div id="evMembers" style="margin-top:6px"></div>'
+      +'<div id="evOut" style="margin-top:8px"><span class="muted">Filtre seçip Getir.</span></div>'
+    +'</div></div></div>'
+    +'<div class="acc" style="margin-top:12px"><div class="accitem"><div class="acchead"><span><b>Segment kurucu</b></span></div><div class="accbody">'
+      +'<div id="segBuild"></div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px"><button class="btn" id="segPrev">Önizle (kaydetmeden)</button><span id="segPrevOut" class="muted"></span></div>'
+      +'<div class="frow" style="margin-top:10px">'+'<div class="fld"><label>Segment adı</label><input id="segName" value="'+esc(_segName)+'"></div>'+'<div class="fld" style="flex:1"><label>Kısa açıklama</label><input id="segDesc" value="'+esc(_segDesc)+'"></div></div>'
+      +'<div style="display:flex;gap:8px;align-items:center"><button class="btn primary" id="segSave">'+(_segEditId?"Değişikliği kaydet":"Segmenti kaydet")+'</button>'+(_segEditId?'<button class="btn" id="segNew">Yeni</button>':'')+'<span id="segSaveMsg" class="muted"></span></div>'
+    +'</div></div></div>'
+    +'<div id="segList" style="margin-top:12px"><span class="muted">Kayıtlı segmentler yükleniyor…</span></div></div>';
+  shell(body);
+  renderSegBuilder();
+  _evRef=null; if($("evPick"))$("evPick").textContent="";
+  $("evGo").onclick=segEventsLoad;
+  $("evFind").onclick=segMemberSearch;
+  $("segPrev").onclick=segPreview;
+  $("segSave").onclick=segSave;
+  if($("segNew"))$("segNew").onclick=()=>{ _segEditId=null;_segName="";_segDesc="";_segEditActive=null;_seg={match:"all",groups:[{match:"all",rules:[{field:"has_trip",value:"true"}]}]}; renderSegments(); };
+  segListLoad();
+  // Başarı mesajı (flash) — tam yeniden render sonrası builder DIŞINDA status alanında gösterilir
+  if(_segFlash){ const fe=$("segSaveMsg"); if(fe){ fe.innerHTML=_segFlash.text; fe.style.color=_segFlash.color||""; } _segFlash=null; }
+}
+let _evRef=null;
+async function segMemberSearch(){
+  const box=$("evMembers"); box.innerHTML='<span class="muted">Aranıyor…</span>';
+  const r=await adminApi("segment_member_search",{q:$("evMq").value.trim()||null,limit:20});
+  if(r.status!==200){ box.innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; return; }
+  const items=(r.body.data&&r.body.data.items)||[];
+  box.innerHTML=items.length?('<div class="tablewrap"><table><thead><tr><th>Ad</th><th>E-posta</th><th>Ref</th><th></th></tr></thead><tbody>'
+    +items.map(m=>'<tr><td class="muted">'+esc(m.name_mask||"—")+'</td><td class="muted">'+esc(m.email_mask||"—")+'</td><td class="muted" style="font-size:11px">'+esc(m.ref)+'</td><td><button class="btn sm" onclick=\'segPickMember("'+esc(m.ref)+'","'+esc((m.email_mask||m.ref)).replace(/'/g,"")+'")\'>Seç</button></td></tr>').join("")
+    +'</tbody></table></div>'):'<span class="muted">eşleşme yok</span>';
+}
+function segPickMember(ref,label){ _evRef=ref; if($("evPick"))$("evPick").innerHTML='seçili: <b>'+esc(label)+'</b> <a href="#" onclick="_evRef=null;$(\'evPick\').textContent=\'\';return false">temizle</a>'; $("evMembers").innerHTML=""; }
+async function segEventsLoad(){
+  const out=$("evOut"); out.innerHTML='<span class="muted">Yükleniyor…</span>';
+  const params={ from:$("evFrom").value||null, to:$("evTo").value||null, type:$("evType").value||null, city_code:$("evCity").value||null, ref:_evRef||null, limit:50 };
+  const r=await adminApi("events_list", params);
+  if(r.status!==200){ out.innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; return; }
+  const d=r.body.data||{}, items=d.items||[]; const canJump=CAPS.members;
+  out.innerHTML='<div class="muted" style="font-size:12px;margin-bottom:4px">'+esc(d.total||0)+' olay'+(d.has_more?" (ilk 50)":"")+'</div>'
+    +'<div class="tablewrap"><table><thead><tr><th>Tarih</th><th>Tür</th><th>Üye</th><th>Ref</th><th>Şehir</th><th>Detay</th>'+(canJump?'<th></th>':'')+'</tr></thead><tbody>'
+    +(items.length?items.map(e=>'<tr><td class="muted">'+fmtDate(e.occurred_at)+'</td><td>'+esc(e.event_type)+'</td><td class="muted">'+esc(e.user_mask||"—")+'</td><td class="muted" style="font-size:11px">'+esc(e.ref||"—")+'</td><td>'+esc(e.city||"—")+'</td><td class="muted" style="font-size:11px">'+esc(JSON.stringify(e.props||{}).slice(0,70))+'</td>'+(canJump?('<td>'+(e.ref?'<button class="btn sm" onclick=\'open360ByRef("'+esc(e.ref)+'")\'>360</button>':'')+'</td>'):'')+'</tr>').join(""):'<tr><td colspan="'+(canJump?7:6)+'" class="muted">kayıt yok</td></tr>')
+    +'</tbody></table></div>';
+}
+async function open360ByRef(ref){
+  openModal(); $("sheet").innerHTML='<div class="muted">Üye 360 yükleniyor…</div>';
+  const r=await adminApi("member_360_by_ref",{ref:ref});
+  if(r.status!==200){ $("sheet").innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+(r.status===403?' — Üye 360 için yetkiniz yok (super_admin/support).':'')+'</div>'; return; }
+  const d=r.body.data||{}; if(d.not_found){ $("sheet").innerHTML='<div class="muted">Üye bulunamadı.</div>'; return; }
+  const idn=d.identity||{}, mem=d.member||{}, sm=d.summary||{};
+  $("sheet").innerHTML='<h3 style="margin-bottom:6px">Üye 360 · <span class="muted">'+esc(idn.ref||ref)+'</span></h3>'
+    +'<div class="muted" style="font-size:12px;margin-bottom:8px">'+esc(idn.email||"")+' · kayıt '+esc(fmtDate(idn.created_at))+'</div>'
+    +'<div class="frow" style="gap:16px;flex-wrap:wrap"><div>Seviye: <b>'+esc(mem.tier||"—")+'</b></div><div>Puan: <b>'+esc(mem.points==null?"—":mem.points)+'</b></div><div>Durum: '+(mem.blocked?'<b style="color:#a33">bloklu</b>':'aktif')+'</div><div>Şehir: '+esc(mem.home_city||"—")+'</div></div>'
+    +'<div class="frow" style="gap:16px;flex-wrap:wrap;margin-top:8px"><div>Seyahat: <b>'+esc(sm.trips||0)+'</b></div><div>Plan: <b>'+esc(sm.plans||0)+'</b></div><div>Favori: <b>'+esc(sm.favorites||0)+'</b></div><div>Yorum: <b>'+esc(sm.comments||0)+'</b></div></div>'
+    +'<div style="margin-top:10px"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+}
+async function segPreview(){
+  const out=$("segPrevOut"); out.textContent="Hesaplanıyor…"; out.style.color="";
+  const r=await adminApi("segment_preview",{definition:segBuildDef()});
+  if(r.status!==200){ out.textContent="Hata: "+apiErrText(r.status); out.style.color="#a33"; return; }
+  const d=r.body.data||{}; segShowResult(d, out);
+}
+function segShowResult(d,out){
+  const s=(d.sample||[]).slice(0,10).map(x=>esc(x.email_mask||"—")+(x.tier?" · "+esc(x.tier):"")).join(", ");
+  out.innerHTML='<b style="color:#2a7">'+esc(d.count||0)+' kullanıcı</b>'+(s?' <span class="muted">· örnek: '+s+'</span>':'');
+}
+async function segSave(){
+  const name=$("segName").value.trim(); const desc=$("segDesc").value.trim();
+  const msg=$("segSaveMsg"); msg.style.color="";
+  if(!name){ msg.textContent="Ad zorunlu."; msg.style.color="#a33"; return; }
+  msg.textContent="Kaydediliyor…";
+  // Düzenlemede mevcut active KORUNUR (server güvenli-dönüşümde yine de pasif tutar); yeni kayıtta true.
+  const activeParam = _segEditId ? _segEditActive : true;
+  const r=await adminApi("segment_upsert",{ id:_segEditId, name:name, description:desc||null, definition:segBuildDef(), active:activeParam });
+  if(r.status!==200){ msg.textContent="Hata: "+apiErrText(r.status); msg.style.color="#a33"; return; }
+  const d=(r.body&&r.body.data)||{};
+  // Mesajı hazırla (flash olarak tam yeniden render sonrası gösterilecek)
+  let ftext, fcolor;
+  if(d.needs_review===true){ ftext='⚠ Gözden geçirilmeli olarak kaydedildi (pasif). Eski/riskli kuralı kaldırıp güvenli tanımla tekrar kaydedin.'; fcolor="#8a5a00"; }
+  else if(d.review_cleared===true){ ftext='✓ Gözden geçirme tamamlandı; segment <b>pasif</b> olarak kaydedildi. Kontrol ettikten sonra "Aktifle" ile aktifleştirebilirsiniz.'; fcolor="#2a7"; }
+  else { ftext='✓ kaydedildi'; fcolor="#2a7"; }
+  // (A) Başarılı kayıttan sonra formu tamamen "Yeni segment" durumuna sıfırla + TAM yeniden render.
+  // Böylece iç state (_segEditId=null) ile ekran (buton "Segmenti kaydet", alanlar boş) birebir aynı olur;
+  // ikinci kaydetmede yanlışlıkla id:null ile yeni segment oluşması engellenir.
+  _segEditId=null; _segName=""; _segDesc=""; _segEditActive=null;
+  _seg={match:"all",groups:[{match:"all",rules:[{field:"has_trip",value:"true"}]}]};
+  _segFlash={text:ftext,color:fcolor};
+  await renderSegments();
+}
+async function segListLoad(){
+  const el=$("segList"); const r=await adminApi("segment_list",{});
+  if(r.status!==200){ el.innerHTML='<div class="notice err">Liste alınamadı: '+esc(apiErrText(r.status))+'</div>'; return; }
+  const segs=(r.body.data&&r.body.data.segments)||[];
+  const rowHtml=s=>{ const nr=!!(s.definition&&s.definition.needs_review===true);
+    const statusCell=nr?'<span class="pill" style="background:#fde8c8;color:#8a5a00;border:1px solid #eecb8a">⚠ Gözden geçirilmeli</span>':(s.active?'<span class="pill on">aktif</span>':'<span class="pill off">pasif</span>');
+    let btns='';
+    if(nr){
+      // needs_review: Çalıştır ve Aktifle GİZLİ; yalnız Düzenle (legacy'yi güvenli kurala çevir) + Çoğalt (pasif kopya)
+      btns='<button class="btn sm" onclick=\''+"segEdit("+JSON.stringify(JSON.stringify(s)).replace(/"/g,"&quot;")+")"+'\'>Düzenle (gözden geçir)</button> <button class="btn sm" onclick=\'segDup("'+s.id+'")\'>Çoğalt (pasif)</button>';
+    } else {
+      btns='<button class="btn sm" onclick=\'segRun("'+s.id+'")\'>Çalıştır</button> <button class="btn sm" onclick=\''+"segEdit("+JSON.stringify(JSON.stringify(s)).replace(/"/g,"&quot;")+")"+'\'>Düzenle</button> <button class="btn sm" onclick=\'segDup("'+s.id+'")\'>Çoğalt</button> <button class="btn sm" onclick=\'segToggle("'+s.id+'",'+(s.active?"false":"true")+')\'>'+(s.active?"Pasifle":"Aktifle")+'</button>';
+    }
+    return '<tr><td><b>'+esc(s.name)+'</b></td><td class="muted">'+esc(s.description||"")+'</td><td>'+(s.last_count==null?"—":esc(s.last_count))+(s.last_run_at?' <span class="muted" style="font-size:11px">'+fmtDate(s.last_run_at)+'</span>':'')+'</td><td>'+statusCell+'</td>'
+      +'<td style="white-space:nowrap">'+btns+'</td></tr><tr id="segrun_'+s.id+'"><td colspan="5" style="padding:0"></td></tr>';
+  };
+  el.innerHTML='<div class="panel"><h3 style="margin-bottom:6px">Kayıtlı segmentler ('+segs.length+')</h3><p class="muted" style="font-size:12px;margin-bottom:6px">⚠ Gözden geçirilmeli: eski/riskli kural içeren segment — çalıştırılamaz/aktifleştirilemez. Düzenle ile eski kuralı silip güvenli kurala (ör. plan_in_city) çevir; güvenli kaydettiğinde işaret otomatik kalkar.</p><div class="tablewrap"><table><thead><tr><th>Ad</th><th>Açıklama</th><th>Son sayı</th><th>Durum</th><th></th></tr></thead><tbody>'
+    +(segs.length?segs.map(rowHtml).join(""):'<tr><td colspan="5" class="muted">yok</td></tr>')
+    +'</tbody></table></div></div>';
+}
+async function segRefresh(){ const el=$("segList"); if(el) el.innerHTML='<div class="panel"><span class="muted">Güncelleniyor…</span></div>'; await segListLoad(); }
+async function segRun(id){
+  const cell=$("segrun_"+id); if(cell&&cell.firstChild)cell.firstChild.innerHTML='<span class="muted" style="padding:6px;display:block">Çalıştırılıyor…</span>';
+  const r=await adminApi("segment_run",{id:id});
+  if(r.status!==200){ if(cell&&cell.firstChild)cell.firstChild.innerHTML='<div class="notice err" style="margin:6px">'+esc(apiErrText(r.status))+'</div>'; return; }
+  const d=r.body.data||{};
+  await segRefresh();                     // liste güncel last_count ile yenilenir (sekmeye yeniden girmek gerekmez)
+  const c2=$("segrun_"+id); if(c2&&c2.firstChild){ const wrap=document.createElement("div"); wrap.style.padding="6px"; c2.firstChild.innerHTML=""; c2.firstChild.appendChild(wrap); segShowResult(d, wrap); }
+}
+function segEditVal(field,value){ const m=segMeta(field);
+  if(m.kind==="bool") return (value===false||value==="false")?"false":"true";
+  if(m.kind==="behavior"){ const o=value||{}; const sc=o.scope||{}; const w=sc.window||{};
+    return { scope:{city_code:sc.city_code||"", time:sc.time||"", window:{last_days:(w.last_days!=null?w.last_days:30)}},
+      count_on:!!o.count || !o.ratio, ratio_on:!!o.ratio,
+      count:o.count?{mode:o.count.mode||"",op:o.count.op||"gte",n:(o.count.n==null?"":o.count.n)}:{mode:"",op:"gte",n:""},
+      ratio:o.ratio?{value:o.ratio.value||"",op:o.ratio.op||"gte",pct:(o.ratio.pct==null?"":o.ratio.pct)}:{value:"",op:"gte",pct:""} }; }
+  return value; // citypresent/opn/catopn/catoppct/dommode/scalars API şekli UI ile uyumlu
+}
+function segEdit(js){ try{ const s=JSON.parse(js); _segEditId=s.id; _segName=s.name||""; _segDesc=s.description||""; _segEditActive=(typeof s.active==="boolean")?s.active:null; const def=s.definition||{match:"all",groups:[]}; _seg={match:def.match||"all", groups:(def.groups||[]).map(g=>({match:g.match||"all", rules:(g.rules||[]).map(r=>({field:r.field, value:segEditVal(r.field,r.value)}))}))}; if(!_seg.groups.length)_seg.groups=[{match:"all",rules:[{field:"has_trip",value:"true"}]}]; renderSegments(); }catch(e){ alert("Düzenlenemedi"); } }
+async function segDup(id){ const el=$("segList"); if(el)el.innerHTML='<div class="panel"><span class="muted">Güncelleniyor…</span></div>'; const r=await adminApi("segment_duplicate",{id:id}); if(r.status!==200){ alert("Hata: "+apiErrText(r.status)); } await segListLoad(); }
+async function segToggle(id,act){ const el=$("segList"); if(el)el.innerHTML='<div class="panel"><span class="muted">Güncelleniyor…</span></div>'; const r=await adminApi("segment_set_active",{id:id,active:act}); if(r.status!==200){ alert("Hata: "+apiErrText(r.status)); } await segListLoad(); }
+
+/* ---------- 0C.2: manuel puan düzeltme (super_admin, ±100, gerekçe zorunlu, idempotent) ---------- */
+function openPointsAdjust(uid, label, curPoints){
+  openModal();
+  const idem=uuid4();
+  $("sheet").innerHTML='<h2>Puan düzelt</h2>'
+    +'<div class="notice warn" style="margin-bottom:12px">Manuel puan düzeltmesi denetim kaydına yazılır ve geri alınamaz. İşlem başına en fazla <b>±100</b>. Toplam puan negatife düşemez.<br><b>'+esc(label)+'</b> · mevcut puan: <b>'+esc(curPoints==null?"—":curPoints)+'</b></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Değişim (−100 … +100, 0 olamaz)</label><input id="pa_delta" type="number" min="-100" max="100" step="1" placeholder="örn. -5 veya 10"></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Gerekçe (zorunlu, 3–280 karakter)</label><input id="pa_reason" type="text" maxlength="280" placeholder="Neden düzeltiliyor?"></div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Not (zorunlu, 3–280 karakter)</label><textarea id="pa_note" maxlength="280" placeholder="Düzeltmenin ayrıntılı açıklamasını yazın…"></textarea></div>'
+    +'<div class="err" id="pa_err"></div>'
+    +'<div class="foot"><button class="btn" id="pa_cancel">Vazgeç</button><button class="btn primary" id="pa_ok">Onayla</button></div>';
+  $("pa_cancel").onclick=()=>closeModal();
+  $("pa_ok").onclick=async()=>{
+    const delta=parseInt($("pa_delta").value,10); const reason=($("pa_reason").value||"").trim(); const note=($("pa_note").value||"").trim();
+    if(!Number.isInteger(delta)||delta===0||delta<-100||delta>100){ $("pa_err").textContent="Değişim −100..+100 arası, 0 dışında bir tam sayı olmalı."; return; }
+    if(reason.length<3||reason.length>280){ $("pa_err").textContent="Gerekçe 3–280 karakter olmalı."; return; }
+    if(note.length<3||note.length>280){ $("pa_err").textContent="Ayrıntılı not zorunlu (3–280 karakter)."; return; }
+    $("pa_ok").disabled=true; $("pa_cancel").disabled=true; $("pa_ok").textContent="İşleniyor…";
+    const r=await adminApi("adjust_points",{target:uid,delta:delta,reason:reason,note:note,idempotency_key:idem});
+    if(r.status===200){ closeModal(); openMember360(uid); return; }
+    let t=writeErrText(r); if(r.body&&r.body.error==="would_make_negative") t="Bu düzeltme toplam puanı negatife düşürür — daha küçük bir değer gir.";
+    $("pa_err").textContent=t; $("pa_ok").disabled=false; $("pa_cancel").disabled=false; $("pa_ok").textContent="Onayla";
+  };
+}
+
+/* ---------- 0C.2: içerik geçmişi + geri alma (super_admin/content_editor) ---------- */
+async function openContentHistory(key){
+  openModal();
+  $("sheet").innerHTML='<h2>İçerik geçmişi</h2><p class="muted">'+esc(key)+'</p><div class="acc"><div class="accitem"><div class="accbody"><div class="accrow"><span class="muted">Yükleniyor…</span></div></div></div></div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  const r=await adminApi("content_versions",{key:key,limit:50});
+  if(r.status!==200){ $("sheet").innerHTML='<h2>İçerik geçmişi</h2><div class="notice err">'+esc(apiErrText(r.status))+'</div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>'; return; }
+  const rows=((r.body&&r.body.data&&r.body.data.rows)||[]);
+  let h='<h2>İçerik geçmişi</h2><p class="muted" style="margin-bottom:10px">'+esc(key)+' · '+esc((r.body.data.total||rows.length))+' sürüm</p>';
+  if(!rows.length){ h+='<p class="muted">Sürüm yok.</p>'; }
+  else{ h+='<div class="acc">'+rows.map(v=>'<div class="accitem"><div class="acchead"><span><b>v'+esc(v.version)+'</b> <span class="muted">· '+esc(fmtDate(v.at))+(v.reason?(" · "+esc(v.reason)):"")+'</span></span><span>'+(v.enabled===false?'<span class="pill off">gizli</span>':'<span class="pill on">açık</span>')+'</span></div>'
+      +'<div class="accbody"><div class="accrow"><span style="max-width:70%;word-break:break-word">'+esc((v.value||"").slice(0,240)||"—")+'</span>'
+      +'<button class="btn sm" onclick="doContentRollback(\''+esc(key).replace(/'/g,"\\'")+'\','+esc(v.version)+')">Bu sürüme dön</button></div></div></div>').join("")+'</div>'; }
+  h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  $("sheet").innerHTML=h;
+}
+function doContentRollback(key, version){
+  openModal();
+  const idem=uuid4();
+  $("sheet").innerHTML='<h2>Sürüme geri dön</h2>'
+    +'<div class="notice warn" style="margin-bottom:12px"><b>'+esc(key)+'</b> içeriği <b>v'+esc(version)+'</b> ile değiştirilecek. Geçmiş silinmez; bu yeni bir sürüm olarak yazılır.</div>'
+    +'<div class="fld" style="margin-bottom:8px"><label>Gerekçe (zorunlu, en az 3 karakter)</label><input id="cr_reason" type="text" maxlength="280" placeholder="Neden geri alınıyor?"></div>'
+    +'<div class="err" id="cr_err"></div>'
+    +'<div class="foot"><button class="btn" id="cr_cancel">Vazgeç</button><button class="btn primary" id="cr_ok">Onayla</button></div>';
+  $("cr_cancel").onclick=()=>openContentHistory(key);
+  $("cr_ok").onclick=async()=>{
+    const reason=($("cr_reason").value||"").trim();
+    if(reason.length<3){ $("cr_err").textContent="Gerekçe en az 3 karakter."; return; }
+    $("cr_ok").disabled=true; $("cr_cancel").disabled=true; $("cr_ok").textContent="İşleniyor…";
+    const r=await adminApi("content_rollback",{key:key,version:version,reason:reason,idempotency_key:idem});
+    if(r.status===200){ try{ const {data}=await db.from("site_content").select("*").order("key"); DATA.content=data||[]; }catch(e){} closeModal(); if(seg==="content")render(); return; }
+    $("cr_err").textContent=writeErrText(r); $("cr_ok").disabled=false; $("cr_cancel").disabled=false; $("cr_ok").textContent="Onayla";
+  };
+}
+
+/* ---------- 0C.2: Değişiklik Günlüğü (super_admin, salt-okunur, sayfalı) ---------- */
+let CL={from:"",to:"",actor:"",entity:"",action:"",eid:"",offset:0,limit:25,total:0};
+function renderChangeLog(){
+  const b='<div class="panel"><h3 style="margin-bottom:6px">Değişiklik Günlüğü</h3><p class="muted" style="margin-bottom:12px">Editör tablolarındaki (mekan/şehir/içerik/reklam) değişikliklerin salt-okunur denetim kaydı. Yalnız super_admin.</p>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px">'
+    +'<div class="fld"><label>Başlangıç</label><input id="cl_from" type="date" value="'+esc(CL.from)+'"></div>'
+    +'<div class="fld"><label>Bitiş</label><input id="cl_to" type="date" value="'+esc(CL.to)+'"></div>'
+    +'<div class="fld"><label>Tablo</label><select id="cl_entity"><option value="">Hepsi</option>'+["venues","cities","site_content","ads"].map(e=>'<option value="'+e+'"'+(CL.entity===e?" selected":"")+'>'+e+'</option>').join("")+'</select></div>'
+    +'<div class="fld"><label>İşlem</label><select id="cl_action"><option value="">Hepsi</option>'+["insert","update","delete"].map(a=>'<option value="'+a+'"'+(CL.action===a?" selected":"")+'>'+a+'</option>').join("")+'</select></div>'
+    +'<div class="fld"><label>Admin UID</label><input id="cl_actor" type="text" value="'+esc(CL.actor)+'" placeholder="uuid (ops.)"></div>'
+    +'<div class="fld"><label>Kayıt kimliği</label><input id="cl_eid" type="text" value="'+esc(CL.eid)+'" placeholder="id/code/key (ops.)"></div>'
+    +'</div><div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn primary sm" onclick="clSearch(0)">Filtrele</button><button class="btn sm" onclick="clReset()">Temizle</button></div>'
+    +'<div id="clBody"><p class="muted">Yükleniyor…</p></div></div>';
+  shell(b);
+  clSearch(CL.offset||0);
+}
+function clReset(){ CL={from:"",to:"",actor:"",entity:"",action:"",eid:"",offset:0,limit:25,total:0}; renderChangeLog(); }
+async function clSearch(offset){
+  CL.from=($("cl_from")||{}).value||""; CL.to=($("cl_to")||{}).value||""; CL.entity=($("cl_entity")||{}).value||"";
+  CL.action=($("cl_action")||{}).value||""; CL.actor=(($("cl_actor")||{}).value||"").trim(); CL.eid=(($("cl_eid")||{}).value||"").trim();
+  CL.offset=offset||0;
+  const p={limit:CL.limit,offset:CL.offset};
+  if(CL.from) p.from=CL.from+"T00:00:00Z"; if(CL.to) p.to=CL.to+"T23:59:59Z";
+  if(CL.entity) p.entity=CL.entity; if(CL.action) p.action=CL.action;
+  if(CL.actor) p.actor_uid=CL.actor; if(CL.eid) p.entity_id=CL.eid;
+  const box=$("clBody"); if(box)box.innerHTML='<p class="muted">Yükleniyor…</p>';
+  const r=await adminApi("audit_search",p);
+  if(!box)return;
+  if(r.status!==200){ box.innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; return; }
+  const d=(r.body&&r.body.data)||{}; const rows=d.rows||[]; CL.total=d.total||0;
+  if(!rows.length){ box.innerHTML='<p class="muted">Kayıt yok.</p>'; return; }
+  let h='<div class="tablewrap"><table><thead><tr><th>Tarih</th><th>Admin</th><th>Tablo</th><th>İşlem</th><th>Kayıt</th><th></th></tr></thead><tbody>';
+  h+=rows.map(x=>'<tr><td style="white-space:nowrap">'+esc(fmtDate(x.at))+'</td><td class="muted" style="font-size:11px">'+esc((x.actor_uid||"—"))+'</td><td><b>'+esc(x.entity)+'</b></td><td>'+esc(x.action)+'</td><td>'+esc(x.entity_id||"—")+'</td><td><button class="btn sm" onclick="openAuditDetail('+esc(x.id)+')">Detay</button></td></tr>').join("");
+  h+='</tbody></table></div>';
+  const from=CL.offset+1, to=CL.offset+rows.length;
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px"><span class="muted">'+from+'–'+to+' / '+CL.total+'</span><span style="display:flex;gap:6px">'
+    +'<button class="btn sm" '+(CL.offset<=0?"disabled":"")+' onclick="clSearch('+Math.max(0,CL.offset-CL.limit)+')">← Önceki</button>'
+    +'<button class="btn sm" '+(to>=CL.total?"disabled":"")+' onclick="clSearch('+(CL.offset+CL.limit)+')">Sonraki →</button></span></div>';
+  box.innerHTML=h;
+}
+async function openAuditDetail(id){
+  openModal();
+  $("sheet").innerHTML='<h2>Değişiklik detayı</h2><p class="muted">Yükleniyor…</p><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  const r=await adminApi("audit_detail",{id:id});
+  if(r.status!==200){ $("sheet").innerHTML='<h2>Değişiklik detayı</h2><div class="notice err">'+esc(apiErrText(r.status))+'</div><div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>'; return; }
+  const d=(r.body&&r.body.data)||{};
+  const jshow=o=>{ if(o==null)return '<span class="muted">—</span>'; try{ return '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;background:#f6f6f4;padding:8px;border-radius:6px;max-height:200px;overflow:auto">'+esc(JSON.stringify(o,null,2))+'</pre>'; }catch(e){ return esc(String(o)); } };
+  let h='<h2>Değişiklik detayı</h2>';
+  h+='<div class="acc"><div class="accitem"><div class="accbody">'
+    +'<div class="accrow"><span><b>Tarih</b></span><span>'+esc(fmtDate(d.at))+'</span></div>'
+    +'<div class="accrow"><span><b>Admin</b></span><span class="muted" style="font-size:12px">'+esc(d.actor_uid||"—")+'</span></div>'
+    +'<div class="accrow"><span><b>Tablo</b></span><span>'+esc(d.entity)+'</span></div>'
+    +'<div class="accrow"><span><b>İşlem</b></span><span>'+esc(d.action)+'</span></div>'
+    +'<div class="accrow"><span><b>Kayıt</b></span><span>'+esc(d.entity_id||"—")+'</span></div>'
+    +'</div></div></div>';
+  h+='<div style="margin-top:10px"><b>Önce</b>'+jshow(d.before)+'</div><div style="margin-top:8px"><b>Sonra</b>'+jshow(d.after)+'</div>';
+  h+='<div class="hint" style="margin-top:8px">Alanlar güvenli allowlist ile gösterilir.</div>';
+  h+='<div class="foot"><button class="btn" onclick="closeModal()">Kapat</button></div>';
+  $("sheet").innerHTML=h;
+}
+
+/* ---------- modal ---------- */
+function openModal(){ $("modal").classList.remove("hide"); }
+function closeModal(){ $("modal").classList.add("hide"); }
+$("modal").onclick=e=>{ if(e.target===$("modal"))closeModal(); };
+
+async function boot(){
+  $("app").innerHTML='<div class="wrap"><p class="muted" style="padding:40px;text-align:center">Yükleniyor…</p></div>';
+  await loadAll();
+  render();
+}
+bootGate();
+</script>
+<script>
+/* ================= CDP-3B · E-posta Şablonları (email-api ile GERÇEK entegrasyon; mock YOK) ================= */
+async function emailApi(action, fields){
+  try{
+    const {data:{session}}=await authClient.auth.getSession();
+    if(!session) return {status:401, body:{error:"no_session"}};
+    const res=await fetch(FN_EMAIL_URL,{ method:"POST", cache:"no-store",
+      headers:{"Content-Type":"application/json","apikey":CFG.key,"Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify(Object.assign({action}, fields||{})) });
+    let body=null; try{ body=await res.json(); }catch(e){}
+    return {status:res.status, body};
+  }catch(e){ return {status:0, body:{error:"network"}}; }
+}
+function newId(){ return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():('xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/[x]/g,()=>((Math.random()*16)|0).toString(16))); }
+let _gjsLoaded=false;
+function loadGrapes(){ return new Promise((res,rej)=>{ if(_gjsLoaded&&window.grapesjs)return res();
+  const SRI={css:'sha384-kcbRZleYUgRur4pld6Agh5vep/FKMvauFL9QYhviTKbxuJF1Iil2Y4q+DMXr6Pzl',js:'sha384-9WsveEkzJPxXhUVesgc+Yhf4S70h66eLgal2CckJku1ut13/IwUfb/MKTgti9Qf/',preset:'sha384-g6PRPz/Tx4TepexHMqRJ2fmXdDh3pdPgAjQOUwYZh7R1eAxdY2yG2XKwRykvQZB7'};
+  const css=document.createElement('link'); css.rel='stylesheet'; css.href='/vendor/grapesjs/grapes.min.css'; css.integrity=SRI.css; css.crossOrigin='anonymous'; document.head.appendChild(css);
+  const s1=document.createElement('script'); s1.src='/vendor/grapesjs/grapes.min.js'; s1.integrity=SRI.js; s1.crossOrigin='anonymous'; s1.onload=()=>{ const s2=document.createElement('script'); s2.src='/vendor/grapesjs/grapesjs-preset-newsletter.index.js'; s2.integrity=SRI.preset; s2.crossOrigin='anonymous'; s2.onload=()=>{_gjsLoaded=true;res();}; s2.onerror=rej; document.head.appendChild(s2); }; s1.onerror=rej; document.head.appendChild(s1);
+}); }
+let _emEditor=null, _emMode=null, _emCurId=null, _emSourceType=null, _emAssets=[];
+/* STABİL idempotency key'leri: op başarıyla bitene kadar korunur (retry aynı key'i kullanır) */
+let _emCreateIdem=null, _emSaveIdem=null, _emPublishIdem=null, _emHostIdem=null; const _emRowIdem={};
+function _rowIdem(id,op){ const k=id+'|'+op; if(!_emRowIdem[k])_emRowIdem[k]=newId(); return _emRowIdem[k]; }
+function _clrRow(id,op){ delete _emRowIdem[id+'|'+op]; }
+function emVal(id){ const e=document.getElementById(id); return e?e.value:''; }
+const EM_VARS=['first_name','city_name','trip_start_date','trip_end_date','days_until_trip','unsubscribe_url'];
+function emVarSel(){ return '<select id="em_var" onchange="emInsertVar(this.value)"><option value="">+ Değişken</option>'+EM_VARS.map(v=>'<option value="'+v+'">'+v+'</option>').join('')+'</select>'; }
+function emFields(){ return '<input id="em_name" placeholder="Şablon adı (iç)"><input id="em_desc" placeholder="Açıklama"><select id="em_class"><option value="marketing">Marketing</option><option value="transactional">Transactional</option></select>'
+  +'<input id="em_subject" placeholder="Konu satırı"><input id="em_preview" placeholder="Önizleme metni"><input id="em_sender" placeholder="Gönderen adı"><input id="em_reply" placeholder="Reply-to (e-posta)">'+emVarSel(); }
+const EM_SAMPLE='<table style="width:100%;background:#f4f4f4"><tr><td><table style="max-width:600px;margin:0 auto;background:#fff"><tr><td style="padding:20px;text-align:center"><img src="https://cdn.asalocal.club/logo.png" alt="ASALOCAL" style="width:140px"/></td></tr><tr><td style="padding:24px"><h1 style="font-family:Arial;font-size:24px">Merhaba {{first_name}}!</h1><p style="font-family:Arial;color:#444">{{city_name}} planın için {{days_until_trip}} gün kaldı.</p><p style="text-align:center"><a href="https://asalocal.club/amsterdam" style="background:#c8102e;color:#fff;padding:12px 22px;text-decoration:none;font-family:Arial">Keşfet</a></p></td></tr><tr><td style="padding:16px;text-align:center;color:#999;font-size:12px;font-family:Arial"><a href="{{unsubscribe_url}}" style="color:#999">Abonelikten çık</a></td></tr></table></td></tr></table>';
+function emResetIdem(){ _emCreateIdem=null; _emSaveIdem=null; _emPublishIdem=null; _emHostIdem=null; _emAssets=[]; }
+function emInsertVar(v){ if(!v)return; if(_emMode==='visual'&&_emEditor){ const sel=_emEditor.getSelected(); if(sel&&sel.get&&sel.get('type')==='text'){ sel.set('content',(sel.get('content')||'')+' {{'+v+'}}'); } else { _emEditor.addComponents('<span>{{'+v+'}}</span>'); } } else { const ta=document.getElementById('em_src'); if(ta) ta.value+=' {{'+v+'}}'; } const s=document.getElementById('em_var'); if(s)s.value=''; }
+async function renderEmail(){
+  shell('<div class="panel"><div class="toolbar"><h3 style="margin:0">E-posta · Şablonlar</h3>'
+    +(CAPS.crm?'<button class="btn primary" onclick="emNewVisual()">+ Görsel editör</button> <button class="btn" onclick="emNewImport()">+ HTML içe aktar</button>':'')
+    +'</div><div id="emList"><span class="muted">Yükleniyor…</span></div></div>'
+    +'<div id="emEditor"></div>');
+  const r=await emailApi('list',{});
+  if(r.status!==200){ $("emList").innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; return; }
+  const t=(r.body&&r.body.templates)||[];
+  $("emList").innerHTML = t.length? '<table class="tbl"><thead><tr><th>Ad</th><th>Sınıf</th><th>Kaynak</th><th>Durum</th><th>Draft</th><th>Yayın</th><th></th></tr></thead><tbody>'
+    +t.map(x=>'<tr><td>'+esc(x.internal_name)+'</td><td>'+esc(x.email_class)+'</td><td>'+esc(x.source_type)+'</td><td>'+esc(x.status)+'</td><td>'+(x.current_draft_version??'–')+'</td><td>'+(x.published_version??'–')+'</td>'
+      +'<td><button class="btn sm" onclick="emOpen(\''+x.id+'\')">Aç</button> <button class="btn sm" onclick="emDuplicate(\''+x.id+'\')">Çoğalt</button>'
+      +(CAPS.superadmin?' <button class="btn sm" onclick="emArchive(\''+x.id+'\')">Arşivle</button>':'')+'</td></tr>').join('')+'</tbody></table>'
+    : '<span class="muted">Henüz şablon yok.</span>';
+}
+function emPanel(html){ $("emEditor").innerHTML='<div class="panel">'+html+'</div>'; }
+async function emNewVisual(){ _emMode='visual'; _emCurId=null; _emSourceType='visual_builder'; emResetIdem();
+  emPanel('<div class="frow" style="gap:8px;flex-wrap:wrap;align-items:center">'+emFields()
+    +'<label class="btn sm" style="cursor:pointer">Görsel yükle<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="emAssetUpload(this)"></label>'
+    +'<button class="btn sm" onclick="emDevice(\'Desktop\')">🖥️</button><button class="btn sm" onclick="emDevice(\'Mobile portrait\')">📱</button>'
+    +'<button class="btn sm" onclick="emValidate()">Doğrula</button>'+(CAPS.crm?'<button class="btn sm" onclick="emSave()">Taslak kaydet</button>':'')+(CAPS.superadmin?'<button class="btn primary sm" onclick="emPublish()">Yayınla</button>':'')
+    +'</div><div id="gjs" style="border:1px solid var(--line);border-radius:8px;min-height:360px;margin-top:8px"></div><div id="emReport" style="margin-top:8px"></div>');
+  document.getElementById('em_name').value='Yaz Kampanyası'; document.getElementById('em_subject').value='Amsterdam';
+  try{ await loadGrapes(); }catch(e){ $("emReport").innerHTML='<div class="notice err">GrapesJS yüklenemedi (self-host /vendor, SRI doğrulaması).</div>'; return; }
+  _emEditor=window.grapesjs.init({container:'#gjs',height:'380px',storageManager:false,plugins:['grapesjs-preset-newsletter'],deviceManager:{devices:[{name:'Desktop',width:''},{name:'Mobile portrait',width:'320px',widthMedia:'480px'}]}});
+  _emEditor.setComponents(EM_SAMPLE);
+}
+function emNewImport(){ _emMode='import'; _emCurId=null; _emSourceType='html_import'; emResetIdem();
+  emPanel('<div class="frow" style="gap:8px;flex-wrap:wrap;align-items:center">'+emFields()+'<label class="btn sm" style="cursor:pointer">.html seç<input type="file" accept=".html,text/html" style="display:none" onchange="emImportFile(this)"></label></div>'
+    +'<textarea id="em_src" rows="8" style="width:100%;margin-top:8px" placeholder="Claude Design HTML yapıştır"></textarea>'
+    +'<div class="frow" style="gap:8px;margin-top:8px"><button class="btn sm" onclick="emHostImages()">Görselleri barındır (rehost)</button><button class="btn sm" onclick="emValidate()">Doğrula &amp; Sanitize</button>'+(CAPS.crm?'<button class="btn sm" onclick="emSave()">Taslak kaydet</button>':'')+(CAPS.superadmin?'<button class="btn primary sm" onclick="emPublish()">Yayınla</button>':'')+'</div><div id="emReport" style="margin-top:8px"></div>');
+  document.getElementById('em_name').value='Claude Design'; document.getElementById('em_subject').value='Merhaba'; document.getElementById('em_src').value=EM_SAMPLE;
+}
+function emImportFile(inp){ const f=inp.files&&inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{document.getElementById('em_src').value=r.result;}; r.readAsText(f); }
+async function emAssetUpload(inp){ const f=inp.files&&inp.files[0]; if(!f)return; if(f.size>2000000){alert('Görsel 2MB üstü reddedilir.');return;}
+  let b64; try{ b64=await new Promise((res,rej)=>{const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(f);}); }catch(e){ alert('Dosya okunamadı'); return; }
+  const u=await emailApi('asset_upload',{data_base64:b64, idem:newId(), request_id:newId()});
+  if(u.status!==200){ alert('Yükleme reddedildi: '+((u.body&&u.body.error)||apiErrText(u.status))); return; }
+  _emAssets.push({id:u.body.asset_id, path:u.body.path});
+  const pub=CFG.url+'/storage/v1/object/public/email-assets-public/'+u.body.path;
+  if(_emEditor) _emEditor.addComponents('<img src="'+pub+'" alt="" style="max-width:100%"/>');
+  alert('Görsel yüklendi (draft; yayınlanınca public bucket\'a promote edilir).');
+}
+async function emHostImages(){ if(!_emHostIdem)_emHostIdem=newId();
+  const r=await emailApi('import_host_images',{email_class:emGetClass(), html:emVal('em_src'), idem:_emHostIdem, request_id:_emHostIdem});
+  if(r.status!==200){ alert(apiErrText(r.status)+' '+((r.body&&r.body.error)||'')); return; }
+  _emHostIdem=null; document.getElementById('em_src').value=r.body.rewritten_html||emVal('em_src');
+  (r.body.hosted||[]).forEach(h=>{ if(!_emAssets.some(a=>a.id===h.asset_id)) _emAssets.push({id:h.asset_id,path:h.path}); }); // dedupe
+  const man=r.body.needs_manual_upload||[]; if(man.length) alert('Allowlist dışı görseller barındırılmadı; manuel yükle:\n'+man.join('\n'));
+  emValidate();
+}
+function emDevice(d){ _emEditor&&_emEditor.setDevice(d); }
+function emGetHtml(){ if(_emMode==='visual'){ try{ return _emEditor.runCommand('gjs-get-inlined-html')||_emEditor.getHtml(); }catch(e){ return _emEditor.getHtml(); } } return document.getElementById('em_src').value; }
+function emGetClass(){ return document.getElementById('em_class').value; }
+async function emValidate(){
+  const r=await emailApi('validate',{email_class:emGetClass(), html:emGetHtml(), builder_json:_emMode==='visual'?_emEditor.getProjectData():null, source_type:_emSourceType});
+  if(r.status!==200){ $("emReport").innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; return null; }
+  const rep=r.body.validation_report||{};
+  const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'"><body style="margin:0">'+(r.body.preview_html||'')+'</body>';
+  $("emReport").innerHTML='<div><b>'+(r.body.ok?'<span style="color:#0a7d33">GEÇTİ</span>':'<span style="color:#c0303a">ENGELLENDİ</span>')+'</b> content_hash='+esc((r.body.content_hash||'').slice(0,16))+'…'
+    +(rep.errors&&rep.errors.length?'<div class="err">Hata: '+esc(rep.errors.join(', '))+'</div>':'')
+    +(rep.warnings&&rep.warnings.length?'<div class="muted">Uyarı: '+esc(rep.warnings.join(', '))+'</div>':'')
+    +'</div><div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap"><iframe sandbox="" style="width:600px;height:320px;border:1px solid var(--line)" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe><iframe sandbox="" style="width:320px;height:380px;border:1px solid var(--line)" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe></div>'
+    +'<div class="muted" style="margin-top:6px"><b>Düz metin (server üretimi):</b></div><pre style="white-space:pre-wrap;font:11px/1.4 ui-monospace,monospace;background:#f6f6f6;border:1px solid var(--line);border-radius:8px;padding:8px;max-height:140px;overflow:auto">'+esc(rep.plain_text||'')+'</pre>';
+  return r.body;
+}
+/* emSave: BOOLEAN döner (başarı=true). STABİL idem (create/save). asset_manifest gerçek yüklenen asset'lerden. */
+async function emSave(){
+  if(!CAPS.crm){ alert(apiErrText(403)); return false; }
+  if(_emCurId===null){ if(!_emCreateIdem)_emCreateIdem=newId();
+    const c=await emailApi('create',{internal_name:emVal('em_name'), description:emVal('em_desc')||null, email_class:emGetClass(), source_type:_emSourceType, idem:_emCreateIdem, request_id:_emCreateIdem});
+    if(c.status!==200){ alert(apiErrText(c.status)+' '+((c.body&&c.body.error)||'')); return false; }
+    _emCurId=c.body.template_id; _emCreateIdem=null; }
+  if(!_emSaveIdem)_emSaveIdem=newId();
+  const s=await emailApi('save',{template_id:_emCurId, email_class:emGetClass(), source_type:_emSourceType,
+    subject:emVal('em_subject'), preview_text:emVal('em_preview'), sender_name:emVal('em_sender'), reply_to:emVal('em_reply')||null,
+    html:emGetHtml(), builder_json:_emMode==='visual'?_emEditor.getProjectData():null,
+    asset_manifest:_emAssets.map(a=>({asset_id:a.id, public_path:a.path})), idem:_emSaveIdem, request_id:_emSaveIdem});
+  if(s.status!==200){ alert(apiErrText(s.status)+' '+((s.body&&s.body.error)||'')); return false; }
+  _emSaveIdem=null; return true;
+}
+async function emPublish(){
+  if(!CAPS.superadmin){ alert('Yayınlama yalnız super_admin.'); return; }
+  const ok=await emSave(); if(!ok) return;                 // save BAŞARISIZSA publish YOK (guard)
+  if(!_emPublishIdem)_emPublishIdem=newId();
+  const p=await emailApi('publish',{template_id:_emCurId, idem:_emPublishIdem, request_id:_emPublishIdem});
+  if(p.status!==200){ alert('Yayın reddedildi: '+((p.body&&p.body.error)||apiErrText(p.status))); return; }
+  _emPublishIdem=null; alert('Yayınlandı (immutable).'); renderEmail();
+}
+async function emOpen(id){ const g=await emailApi('get',{template_id:id}); if(g.status!==200){ alert(apiErrText(g.status)); return; } const t=g.body.template||{};
+  if(t.status==='published' && !g.body.draft){
+    // Yayınlanmış + draft yok -> düzenlemek için AÇIK "Yeni sürüm" (auto YOK)
+    const pub=g.body.published||{}; const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'"><body style="margin:0">'+esc((pub.sanitized_html||'')).replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</body>';
+    emPanel('<div class="frow" style="align-items:center;gap:8px"><b>'+esc(t.internal_name)+'</b> <span class="badge">yayında v'+(pub.version_number||'')+' (immutable)</span>'
+      +(CAPS.crm?' <button class="btn primary sm" onclick="emNewVersion(\''+id+'\')">Yeni sürüm oluştur</button>':' <span class="muted">Düzenleme için crm/super_admin gerekir.</span>')+'</div>'
+      +'<iframe sandbox="" style="width:600px;height:340px;border:1px solid var(--line);margin-top:8px" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe>');
+    return;
+  }
+  const v=g.body.draft||{};
+  _emCurId=id; _emSourceType=t.source_type; emResetIdem(); _emCurId=id;
+  if(t.source_type==='visual_builder'){ await emNewVisual(); _emCurId=id; document.getElementById('em_name').value=t.internal_name; document.getElementById('em_class').value=t.email_class; document.getElementById('em_subject').value=v.subject||''; document.getElementById('em_preview').value=v.preview_text||''; document.getElementById('em_sender').value=v.sender_name||''; document.getElementById('em_reply').value=v.reply_to||''; try{ if(v.builder_json) _emEditor.loadProjectData(v.builder_json); else if(v.sanitized_html) _emEditor.setComponents(v.sanitized_html); }catch(e){} }
+  else { emNewImport(); _emCurId=id; document.getElementById('em_name').value=t.internal_name; document.getElementById('em_class').value=t.email_class; document.getElementById('em_subject').value=v.subject||''; document.getElementById('em_preview').value=v.preview_text||''; document.getElementById('em_sender').value=v.sender_name||''; document.getElementById('em_reply').value=v.reply_to||''; document.getElementById('em_src').value=v.source_html||v.sanitized_html||''; }
+  if(document.getElementById('em_desc')) document.getElementById('em_desc').value=t.description||'';
+  _emAssets=(v.asset_manifest||[]).map(function(m){ return {id:m.asset_id, path:(m.public_path||'')}; });  // draft manifest KORUNUR (reopen)
+  await emValidate();
+}
+async function emNewVersion(id){ if(!CAPS.crm){alert(apiErrText(403));return;}
+  const r=await emailApi('new_version',{template_id:id, idem:_rowIdem(id,'newver'), request_id:_rowIdem(id,'newver')});
+  if(r.status!==200){ alert('Yeni sürüm hatası: '+((r.body&&r.body.error)||apiErrText(r.status))); return; }
+  _clrRow(id,'newver'); await emOpen(id);  // published pointer korunur; yeni draft düzenlenir
+}
+async function emDuplicate(id){ if(!CAPS.crm){alert(apiErrText(403));return;} const r=await emailApi('duplicate',{template_id:id, idem:_rowIdem(id,'dup'), request_id:_rowIdem(id,'dup')}); if(r.status!==200){alert(apiErrText(r.status)+' '+((r.body&&r.body.error)||''));return;} _clrRow(id,'dup'); renderEmail(); }
+async function emArchive(id){ if(!CAPS.superadmin){alert('Arşiv yalnız super_admin.');return;} const r=await emailApi('archive',{template_id:id, idem:_rowIdem(id,'arch'), request_id:_rowIdem(id,'arch')}); if(r.status!==200){alert(apiErrText(r.status)+' '+((r.body&&r.body.error)||''));return;} _clrRow(id,'arch'); renderEmail(); }
+</script>
+</body>
+</html>
