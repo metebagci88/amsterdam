@@ -29,12 +29,29 @@ async function db<T=any>(sql:string, args:unknown[]=[]):Promise<T[]>{
   const c=new Client(DB_URL); await c.connect();
   try{ const r=await c.queryObject<T>(sql, args as any); return r.rows; } finally{ await c.end(); }
 }
-// storage REST (service_role) — fault injection için object yaz/sil
-async function putObject(bucket:string, path:string, bytes:Uint8Array, mime:string){
-  return fetch(`${STORAGE}/object/${bucket}/${path}`,{method:"POST",headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":mime,"x-upsert":"true"},body:bytes});
+// storage REST (service_role) — fault injection için object yaz/sil.
+// Response body DETERMİNİSTİK olarak tam tüketilir (await resp.text()); ham Response caller'a DÖNMEZ
+// -> Deno resource-leak dedektörü tetiklenmez (sanitizeResources/Ops GEVŞETİLMEZ).
+async function putObject(bucket:string, path:string, bytes:Uint8Array, mime:string):Promise<{ok:boolean,status:number,bodyText:string}>{
+  const resp=await fetch(`${STORAGE}/object/${bucket}/${path}`,{method:"POST",headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY,"Content-Type":mime,"x-upsert":"true"},body:bytes});
+  const bodyText=await resp.text();
+  return { ok:resp.ok, status:resp.status, bodyText };
 }
-async function delObject(bucket:string, path:string){
-  return fetch(`${STORAGE}/object/${bucket}/${path}`,{method:"DELETE",headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY}});
+async function delObject(bucket:string, path:string):Promise<{ok:boolean,status:number,bodyText:string}>{
+  const resp=await fetch(`${STORAGE}/object/${bucket}/${path}`,{method:"DELETE",headers:{apikey:SERVICE_KEY,Authorization:"Bearer "+SERVICE_KEY}});
+  const bodyText=await resp.text();
+  return { ok:resp.ok, status:resp.status, bodyText };
+}
+// GATE9c: storage.objects tablosunu SAHİBİ (supabase_storage_admin) rolüyle yeniden adlandır.
+// SET ROLE + ALTER TABLE + RESET ROLE AYNI fiziksel bağlantıda, AYRI komutlar olarak çalışır
+// (multi-statement tek queryObject varsayımı YOK). db() her çağrıda yeni Client açtığı için ayrı helper.
+async function renameStorageObjects(fromName:string, toName:string){
+  const c=new Client(DB_URL); await c.connect();
+  try{
+    await c.queryObject("set role supabase_storage_admin");
+    await c.queryObject(`alter table storage.${fromName} rename to ${toName}`);
+    await c.queryObject("reset role");
+  } finally { await c.end(); }
 }
 
 async function mkPublishedTemplate(){
@@ -144,9 +161,11 @@ Deno.test("GATE6: benzersiz görsel path'ini boz -> asset_upload 409 storage_has
   const obj0=await db<{n:number}>("select count(*)::int as n from storage.objects where bucket_id=$1 and name=$2",[DRAFT_BUCKET,path]);
   assertEquals(Number(obj0[0].n),0,"precondition: draft bucket'ta path yok");
   try{
-    // draft path'e YANLIŞ (farklı uzunlukta) içerik koy -> hash uyuşmazlığı zorla
+    // draft path'e YANLIŞ (farklı uzunlukta) içerik koy -> hash uyuşmazlığı zorla.
+    // PUT HTTP başarısızlığı SESSİZCE YUTULMAZ (assert + bodyText).
     const corrupt=new Uint8Array([1,2,3,4,5,6,7,8,9,10,11,12,13]);
-    const pr=await putObject(DRAFT_BUCKET,path,corrupt,"image/png"); assert(pr.ok||pr.status===200,"corrupt put ok:"+pr.status);
+    const pr=await putObject(DRAFT_BUCKET,path,corrupt,"image/png");
+    assert(pr.ok||pr.status===200,"corrupt put başarısız: status="+pr.status+" body="+pr.bodyText);
     const idem=uuid();
     const up=await api("asset_upload",{data_base64:PNG_UNIQUE,idem,request_id:idem},CRM);
     assertEquals(up.status,409,"bozuk object -> 409:"+JSON.stringify(up.body));
@@ -156,8 +175,10 @@ Deno.test("GATE6: benzersiz görsel path'ini boz -> asset_upload 409 storage_has
     const reg=await db<{n:number}>("select count(*)::int as n from public.email_assets where content_hash=$1 and object_path=$2",[hash,path]);
     assertEquals(Number(reg[0].n),0,"conflict'te register YOK");
   } finally {
-    // Test object'ini draft bucket'tan TAMAMEN sil (doğru içeriği geri YÜKLEME); silmeyi doğrula -> orphan bırakma
-    await delObject(DRAFT_BUCKET,path);
+    // Test object'ini draft bucket'tan TAMAMEN sil (doğru içeriği geri YÜKLEME).
+    // DELETE HTTP sonucu ASSERT edilir (sessizce yutulmaz), sonra fiziksel silme DB'den doğrulanır -> orphan yok.
+    const del=await delObject(DRAFT_BUCKET,path);
+    assert(del.ok||del.status===200||del.status===204,"cleanup delete başarısız: status="+del.status+" body="+del.bodyText);
     const obj1=await db<{n:number}>("select count(*)::int as n from storage.objects where bucket_id=$1 and name=$2",[DRAFT_BUCKET,path]);
     assertEquals(Number(obj1[0].n),0,"cleanup: test object'i tamamen silinmiş olmalı (reconcile için orphan yok)");
   }
@@ -232,33 +253,43 @@ Deno.test("GATE9b: DB error fault injection -> 500 reconcile_db_error (asla ok/0
 
 Deno.test("GATE9c: storage.objects rename fault injection -> 500 reconcile_storage_error (izole, restore garantili)", async () => {
   assert(SERVICE_KEY.length>0,"SERVICE_KEY gerekli");
-  // FAIL-CLOSED yerel-DB koruması: host yerel/ephemeral değilse ALTER YAPMA ve gate FAIL ver
-  // (prod-benzeri harici DB üzerinde ASLA rename denenmez).
+  // (1) FAIL-CLOSED yerel-DB koruması: yalnız localhost/127.0.0.1/::1. Aksi halde ALTER DENENMEZ, gate FAIL.
   const host=(()=>{ try{ return new URL(DB_URL).hostname; }catch{ return ""; } })();
-  assert(host==="127.0.0.1"||host==="localhost"||host==="::1"||host==="0.0.0.0",
-    "GATE_FAILED:gate9c_db_not_local host="+host+" (fault injection yalnız yerel/ephemeral DB'de çalışır)");
-  // Precondition: storage.objects VAR, objects_cdp3b_fault YOK
+  assert(host==="localhost"||host==="127.0.0.1"||host==="::1",
+    "GATE_FAILED:gate9c_db_not_local host="+host+" (fault injection yalnız yerel/ephemeral DB'de çalışır; dış/prod DB'de SET ROLE/ALTER YOK)");
+  // (2) Owner EXACT-MATCH: storage.objects sahibi tam olarak supabase_storage_admin olmalı; değilse bilinmeyen role GEÇME.
+  const own=await db<{o:string}>("select tableowner as o from pg_tables where schemaname='storage' and tablename='objects'",[]);
+  const owner=own[0]?.o;
+  assert(owner==="supabase_storage_admin", "GATE9C_UNEXPECTED_OWNER:"+String(owner));
+  // (3) Mevcut DB kullanıcısı bu role geçebilmeli; değilse ALTER DENEMEDEN açık FAIL.
+  const hr=await db<{h:boolean}>("select pg_has_role(current_user, 'supabase_storage_admin', 'MEMBER') as h",[]);
+  assert(hr[0]?.h===true, "GATE9C_CANNOT_SET_OWNER_ROLE");
+  // (4) Precondition: storage.objects VAR, objects_cdp3b_fault YOK
   const pre=await db<{o:string|null,f:string|null}>(
     "select to_regclass('storage.objects')::text as o, to_regclass('storage.objects_cdp3b_fault')::text as f",[]);
   assert(pre[0].o!==null, "precondition: storage.objects mevcut");
   assert(pre[0].f===null, "precondition: objects_cdp3b_fault mevcut DEĞİL");
   let renamed=false;
   try{
-    // storage list yolunu boz: temel tabloyu geçici olarak yeniden adlandır
-    await db("alter table storage.objects rename to objects_cdp3b_fault",[]); renamed=true;
+    // storage list yolunu boz: temel tabloyu SAHİBİ rolüyle (aynı bağlantıda SET ROLE+ALTER+RESET) yeniden adlandır
+    await renameStorageObjects("objects","objects_cdp3b_fault"); renamed=true;
     const r=await api("reconcile",{},SUPER);
     assertEquals(r.status,500,"storage error -> 500:"+JSON.stringify(r.body));
     assertEquals(r.body?.error,"reconcile_storage_error","reconcile_storage_error");
     assertNotEquals(r.body?.ok,true,"asla ok:true");
   } finally {
-    // ZORUNLU restore: hata YUTULMAZ (başarısız olursa test throw eder ve KIRMIZI olur)
-    if(renamed){ await db("alter table storage.objects_cdp3b_fault rename to objects",[]); }
+    // FAIL-CLOSED zorunlu restore: fault-tablo mevcutsa geri al. Hata YUTULMAZ (throw ederse test KIRMIZI olur).
+    const chk=await db<{f:string|null}>("select to_regclass('storage.objects_cdp3b_fault')::text as f",[]);
+    if(renamed || chk[0].f!==null){ await renameStorageObjects("objects_cdp3b_fault","objects"); }
   }
-  // Restore doğrulaması: tablo geri, fault-tablo yok, normal reconcile 200
+  // Restore doğrulaması: tablo geri, fault-tablo yok
   const post=await db<{o:string|null,f:string|null}>(
     "select to_regclass('storage.objects')::text as o, to_regclass('storage.objects_cdp3b_fault')::text as f",[]);
   assert(post[0].o!==null, "restore: storage.objects yeniden mevcut");
   assert(post[0].f===null, "restore: objects_cdp3b_fault artık yok");
+  // Restore sonrası normal reconcile: HTTP 200 + geçerli JSON + error YOK
   const r2=await api("reconcile",{},SUPER);
   assertEquals(r2.status,200,"restore sonrası normal reconcile 200:"+JSON.stringify(r2.body));
+  assert(r2.body && typeof r2.body==="object","restore sonrası reconcile geçerli JSON");
+  assert(!("error" in r2.body),"restore sonrası reconcile error YOK");
 });
