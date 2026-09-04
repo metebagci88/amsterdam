@@ -147,10 +147,17 @@ serve(async (req) => {
         await rpc(svc,"admin_q_email_asset_gc_candidates",{p_actor:actor}); // super_admin değilse 'forbidden'
         const { data: rows, error: rerr } = await svc.from("email_assets").select("id,object_path,public_object_path,content_hash,status");
         if (rerr) { console.error("reconcile db", rerr); throw new HttpErr(500,"reconcile_db_error"); } // DB error -> FAIL, boş başarı DÖNME
+        // E2E test seam (PRODUCTION'da TAMAMEN INERT): yalnız EMAIL_API_E2E=1 iken ve super_admin rol kapısı (yukarıdaki
+        // admin_q_email_asset_gc_candidates) GEÇİLDİKTEN SONRA, 'x-asa-e2e-fault: storage-list-error' başlığı GERÇEK listeleme
+        // yardımcısının HATA KOLUNU deterministik tetikler. Prod'da E2E=false -> başlık tamamen yok sayılır. Sahte HTTP yanıtı
+        // DÖNMEZ; üretimdeki if(r.error) dalı çalışır ve maskeli 500 reconcile_storage_error üretir (ham ayrıntı yalnız log'a).
+        const e2eStorageListFault = E2E && req.headers.get("x-asa-e2e-fault") === "storage-list-error";
         async function listAll(bucket: string): Promise<{names:Set<string>, truncated:boolean}> {
           const names = new Set<string>(); let offset=0; const PAGE=1000, MAX=100000; let truncated=false;
           while (true) {
-            const r = await svc.storage.from(bucket).list("", { limit: PAGE, offset });
+            const r: { data: any[]|null, error: any } = e2eStorageListFault
+              ? { data: null, error: { message: "e2e_injected_storage_list_error" } }
+              : await svc.storage.from(bucket).list("", { limit: PAGE, offset });
             if (r.error) { console.error("reconcile list", bucket, r.error); throw new HttpErr(500,"reconcile_storage_error"); } // list error -> FAIL
             const batch = r.data || []; batch.forEach((o:any)=>names.add(o.name)); offset += batch.length;
             if (batch.length < PAGE) break;
