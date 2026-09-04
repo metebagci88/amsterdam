@@ -15,6 +15,8 @@ const STORAGE = API.replace(/\/functions\/v1\/email-api$/, "") + "/storage/v1";
 const DRAFT_BUCKET = "email-assets-draft";
 const uuid = () => crypto.randomUUID();
 const PNG_1x1 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+// GATE6 izolasyonu için AYRI, deterministik, geçerli 1x1 RGBA PNG (farklı binary/SHA/path; PNG_1x1 ile paylaşılmaz)
+const PNG_UNIQUE = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mO4I2LzHwAFKAIsz1ZnywAAAABJRU5ErkJggg==";
 const b64bytes = (b64:string)=>Uint8Array.from(atob(b64), c=>c.charCodeAt(0));
 async function sha256Hex(u:Uint8Array){ const d=await crypto.subtle.digest("SHA-256",u); return [...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
 
@@ -68,24 +70,42 @@ Deno.test("GATE4: aynı-key publish retry -> tek audit (admin_write_log idem=1) 
   assertEquals(Number(n2[0].n),1,"retry sonrası HÂLÂ tek audit (ikinci audit YOK)");
 });
 
-// ---------- GATE 5A: aynı-idem paralel new_version -> aynı version_id, tek draft ----------
-Deno.test("GATE5A: paralel new_version aynı idem -> aynı version_id + tek draft + tek audit", async () => {
+// ---------- GATE 5A: aynı-idem paralel new_version -> aynı version_id, version-delta=1, tek unpublished, pointer eşleşir, tek audit ----------
+Deno.test("GATE5A: paralel new_version aynı idem -> aynı version_id + version-delta=1 + tek unpublished + pointer eşleşir + tek audit", async () => {
   const t=await mkPublishedTemplate(); const nidem=uuid();
+  // (A) çağrılardan ÖNCE: toplam version sayısı + version ID listesi
+  const before=await db<{id:string}>("select id from public.email_template_versions where template_id=$1",[t.tid]);
+  const beforeIds=new Set(before.map(r=>r.id));
   const [a,b]=await Promise.all([
     api("new_version",{template_id:t.tid,idem:nidem,request_id:nidem},CRM),
     api("new_version",{template_id:t.tid,idem:nidem,request_id:nidem},CRM),
   ]);
   assertEquals(a.status,200,"a"); assertEquals(b.status,200,"b");
   assertEquals(a.body.version_id,b.body.version_id,"aynı idem -> aynı version_id");
-  const drafts=await db<{n:number}>("select count(*)::int as n from public.email_template_versions where template_id=$1 and status='draft'",[t.tid]);
-  assertEquals(Number(drafts[0].n),1,"tek draft");
+  const vid=a.body.version_id;
+  // (B) çağrılardan SONRA: toplam version = before+1; tam 1 yeni ID = response version_id
+  const after=await db<{id:string}>("select id from public.email_template_versions where template_id=$1",[t.tid]);
+  assertEquals(after.length, before.length+1, "toplam version tam olarak before+1");
+  const newIds=after.map(r=>r.id).filter(id=>!beforeIds.has(id));
+  assertEquals(newIds.length,1,"tam olarak 1 yeni version eklendi");
+  assertEquals(newIds[0], vid, "yeni version ID = başarılı response version_id");
+  // is_published=false (draft) sayısı tam 1
+  const unpub=await db<{n:number}>("select count(*)::int as n from public.email_template_versions where template_id=$1 and is_published=false",[t.tid]);
+  assertEquals(Number(unpub[0].n),1,"tam 1 unpublished (current draft) version");
+  // email_templates.current_draft_version_id = response version_id
+  const ptr=await db<{cid:string|null}>("select current_draft_version_id as cid from public.email_templates where id=$1",[t.tid]);
+  assertEquals(ptr[0].cid, vid, "current_draft_version_id = response version_id");
+  // aynı idem retry -> tek audit
   const aud=await db<{n:number}>("select count(*)::int as n from public.admin_write_log where idempotency_key=$1",[nidem]);
   assertEquals(Number(aud[0].n),1,"tek audit");
 });
 
-// ---------- GATE 5B: FARKLI-idem paralel new_version -> biri kazanır, diğeri draft_exists; tek draft ----------
-Deno.test("GATE5B: paralel new_version farklı idem -> biri 200 biri draft_exists + tek draft", async () => {
+// ---------- GATE 5B: FARKLI-idem paralel new_version -> biri kazanır, diğeri draft_exists; version-delta=1, tek unpublished, pointer eşleşir ----------
+Deno.test("GATE5B: paralel new_version farklı idem -> biri 200 biri draft_exists + version-delta=1 + tek unpublished + pointer eşleşir", async () => {
   const t=await mkPublishedTemplate();
+  // (A) çağrılardan ÖNCE: toplam version sayısı + version ID listesi
+  const before=await db<{id:string}>("select id from public.email_template_versions where template_id=$1",[t.tid]);
+  const beforeIds=new Set(before.map(r=>r.id));
   const [a,b]=await Promise.all([
     api("new_version",{template_id:t.tid,idem:uuid(),request_id:uuid()},CRM),
     api("new_version",{template_id:t.tid,idem:uuid(),request_id:uuid()},CRM),
@@ -95,20 +115,40 @@ Deno.test("GATE5B: paralel new_version farklı idem -> biri 200 biri draft_exist
   assertEquals(oks.length,1,"tam biri başarılı");
   assertEquals(rej.length,1,"tam biri reddedildi");
   assertEquals(rej[0].body?.error,"draft_exists","reddin sebebi draft_exists");
-  const drafts=await db<{n:number}>("select count(*)::int as n from public.email_template_versions where template_id=$1 and status='draft'",[t.tid]);
-  assertEquals(Number(drafts[0].n),1,"yalnız tek current draft");
+  const vid=oks[0].body.version_id;
+  // (B) çağrılardan SONRA: toplam version = before+1; tam 1 yeni ID = başarılı response version_id
+  const after=await db<{id:string}>("select id from public.email_template_versions where template_id=$1",[t.tid]);
+  assertEquals(after.length, before.length+1, "toplam version tam olarak before+1");
+  const newIds=after.map(r=>r.id).filter(id=>!beforeIds.has(id));
+  assertEquals(newIds.length,1,"tam olarak 1 yeni version eklendi");
+  assertEquals(newIds[0], vid, "yeni version ID = başarılı response version_id");
+  // is_published=false (draft) sayısı tam 1
+  const unpub=await db<{n:number}>("select count(*)::int as n from public.email_template_versions where template_id=$1 and is_published=false",[t.tid]);
+  assertEquals(Number(unpub[0].n),1,"yalnız tek current draft (unpublished)");
+  // DB pointer = başarılı response version_id
+  const ptr=await db<{cid:string|null}>("select current_draft_version_id as cid from public.email_templates where id=$1",[t.tid]);
+  assertEquals(ptr[0].cid, vid, "current_draft_version_id = başarılı response version_id");
 });
 
-// ---------- GATE 6: storage_hash_conflict GERÇEK fault injection ----------
-Deno.test("GATE6: draft object'i boz -> asset_upload 409 storage_hash_conflict + register/audit YOK", async () => {
+// ---------- GATE 6: storage_hash_conflict GERÇEK fault injection (İZOLE: benzersiz fixture) ----------
+Deno.test("GATE6: benzersiz görsel path'ini boz -> asset_upload 409 storage_hash_conflict + register/audit YOK (izole)", async () => {
   assert(SERVICE_KEY.length>0,"SERVICE_KEY gerekli (fault injection)");
-  const bytes=b64bytes(PNG_1x1); const hash=await sha256Hex(bytes); const path=`${hash}.png`;
-  // draft path'e YANLIŞ (farklı uzunlukta) içerik koy
-  const corrupt=new Uint8Array([1,2,3,4,5,6,7,8,9,10]);
-  const pr=await putObject(DRAFT_BUCKET,path,corrupt,"image/png"); assert(pr.ok||pr.status===200,"corrupt put ok:"+pr.status);
+  // AYRI, deterministik ikinci fixture (farklı binary/SHA/path). PNG_1x1 KULLANILMAZ.
+  const bytes=b64bytes(PNG_UNIQUE); const hash=await sha256Hex(bytes); const path=`${hash}.png`;
+  const png1Hash=await sha256Hex(b64bytes(PNG_1x1));
+  assertNotEquals(hash, png1Hash, "benzersiz fixture hash'i PNG_1x1 hash'inden FARKLI olmalı");
+  // Precondition-1: bu hash/path için email_assets kaydı YOK
+  const reg0=await db<{n:number}>("select count(*)::int as n from public.email_assets where content_hash=$1 or object_path=$2",[hash,path]);
+  assertEquals(Number(reg0[0].n),0,"precondition: bu hash/path için register=0");
+  // Precondition-2: draft bucket'ta bu path fiziksel olarak YOK
+  const obj0=await db<{n:number}>("select count(*)::int as n from storage.objects where bucket_id=$1 and name=$2",[DRAFT_BUCKET,path]);
+  assertEquals(Number(obj0[0].n),0,"precondition: draft bucket'ta path yok");
   try{
+    // draft path'e YANLIŞ (farklı uzunlukta) içerik koy -> hash uyuşmazlığı zorla
+    const corrupt=new Uint8Array([1,2,3,4,5,6,7,8,9,10,11,12,13]);
+    const pr=await putObject(DRAFT_BUCKET,path,corrupt,"image/png"); assert(pr.ok||pr.status===200,"corrupt put ok:"+pr.status);
     const idem=uuid();
-    const up=await api("asset_upload",{data_base64:PNG_1x1,idem,request_id:idem},CRM);
+    const up=await api("asset_upload",{data_base64:PNG_UNIQUE,idem,request_id:idem},CRM);
     assertEquals(up.status,409,"bozuk object -> 409:"+JSON.stringify(up.body));
     assertEquals(up.body?.error,"storage_hash_conflict","hata storage_hash_conflict");
     const aud=await db<{n:number}>("select count(*)::int as n from public.admin_write_log where idempotency_key=$1",[idem]);
@@ -116,8 +156,10 @@ Deno.test("GATE6: draft object'i boz -> asset_upload 409 storage_hash_conflict +
     const reg=await db<{n:number}>("select count(*)::int as n from public.email_assets where content_hash=$1 and object_path=$2",[hash,path]);
     assertEquals(Number(reg[0].n),0,"conflict'te register YOK");
   } finally {
-    // düzelt: doğru içeriği geri koy (sonraki testler PNG_1x1 kullanır)
-    await putObject(DRAFT_BUCKET,path,bytes,"image/png");
+    // Test object'ini draft bucket'tan TAMAMEN sil (doğru içeriği geri YÜKLEME); silmeyi doğrula -> orphan bırakma
+    await delObject(DRAFT_BUCKET,path);
+    const obj1=await db<{n:number}>("select count(*)::int as n from storage.objects where bucket_id=$1 and name=$2",[DRAFT_BUCKET,path]);
+    assertEquals(Number(obj1[0].n),0,"cleanup: test object'i tamamen silinmiş olmalı (reconcile için orphan yok)");
   }
 });
 
@@ -188,13 +230,35 @@ Deno.test("GATE9b: DB error fault injection -> 500 reconcile_db_error (asla ok/0
   } finally { await db("grant select on public.email_assets to service_role",[]); }
 });
 
-Deno.test("GATE9c: storage list error fault injection -> 500 reconcile_storage_error", async () => {
+Deno.test("GATE9c: storage.objects rename fault injection -> 500 reconcile_storage_error (izole, restore garantili)", async () => {
   assert(SERVICE_KEY.length>0,"SERVICE_KEY gerekli");
-  await db("revoke select on storage.objects from service_role",[]);
+  // FAIL-CLOSED yerel-DB koruması: host yerel/ephemeral değilse ALTER YAPMA ve gate FAIL ver
+  // (prod-benzeri harici DB üzerinde ASLA rename denenmez).
+  const host=(()=>{ try{ return new URL(DB_URL).hostname; }catch{ return ""; } })();
+  assert(host==="127.0.0.1"||host==="localhost"||host==="::1"||host==="0.0.0.0",
+    "GATE_FAILED:gate9c_db_not_local host="+host+" (fault injection yalnız yerel/ephemeral DB'de çalışır)");
+  // Precondition: storage.objects VAR, objects_cdp3b_fault YOK
+  const pre=await db<{o:string|null,f:string|null}>(
+    "select to_regclass('storage.objects')::text as o, to_regclass('storage.objects_cdp3b_fault')::text as f",[]);
+  assert(pre[0].o!==null, "precondition: storage.objects mevcut");
+  assert(pre[0].f===null, "precondition: objects_cdp3b_fault mevcut DEĞİL");
+  let renamed=false;
   try{
+    // storage list yolunu boz: temel tabloyu geçici olarak yeniden adlandır
+    await db("alter table storage.objects rename to objects_cdp3b_fault",[]); renamed=true;
     const r=await api("reconcile",{},SUPER);
     assertEquals(r.status,500,"storage error -> 500:"+JSON.stringify(r.body));
     assertEquals(r.body?.error,"reconcile_storage_error","reconcile_storage_error");
     assertNotEquals(r.body?.ok,true,"asla ok:true");
-  } finally { await db("grant select on storage.objects to service_role",[]); }
+  } finally {
+    // ZORUNLU restore: hata YUTULMAZ (başarısız olursa test throw eder ve KIRMIZI olur)
+    if(renamed){ await db("alter table storage.objects_cdp3b_fault rename to objects",[]); }
+  }
+  // Restore doğrulaması: tablo geri, fault-tablo yok, normal reconcile 200
+  const post=await db<{o:string|null,f:string|null}>(
+    "select to_regclass('storage.objects')::text as o, to_regclass('storage.objects_cdp3b_fault')::text as f",[]);
+  assert(post[0].o!==null, "restore: storage.objects yeniden mevcut");
+  assert(post[0].f===null, "restore: objects_cdp3b_fault artık yok");
+  const r2=await api("reconcile",{},SUPER);
+  assertEquals(r2.status,200,"restore sonrası normal reconcile 200:"+JSON.stringify(r2.body));
 });
