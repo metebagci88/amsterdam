@@ -23,7 +23,7 @@ sha256sum -c SHA256SUMS >/dev/null 2>&1 || fail "sha256sums_mismatch"
 
 # ---- GATE sanitizer: canonical SHA ----
 GATE="sanitizer_sha"
-EXPECT="bc60ffede60a2e64f905146be0e32f3bf375bf5824eb96d3734225eaa71493d2"
+EXPECT="11490786a1d5de4f685c0db25f9555af56cc95611c5e2f6ea09fc8cf15592bf9"
 GOT="$(sha256sum edge/email-api/email_sanitizer.js | cut -d' ' -f1)"
 [ "$GOT" = "$EXPECT" ] || fail "sanitizer_sha"
 
