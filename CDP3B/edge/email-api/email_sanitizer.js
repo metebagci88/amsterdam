@@ -49,12 +49,12 @@
     s = String(s);
     s = s.replace(/&#x([0-9a-fA-F]+);?/g, function(_,h){ try{return String.fromCodePoint(parseInt(h,16));}catch(e){return '';} });
     s = s.replace(/&#(\d+);?/g, function(_,d){ try{return String.fromCodePoint(parseInt(d,10));}catch(e){return '';} });
-    var named={amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",colon:':',sol:'/',tab:'\t',newline:'\n',lpar:'(',rpar:')'};
+    var named={amp:'&',lt:'<',gt;'>',quot:'"',apos:"'",colon:':',sol:'/',tab:'\t',newline:'\n',lpar:'(',rpar:')'};
     s = s.replace(/&([a-zA-Z]+);?/g, function(m,n){ n=n.toLowerCase(); return named.hasOwnProperty(n)?named[n]:m; });
     return s;
   }
   function urlClass(raw){
-    var d = decodeEntities(raw).replace(/[\u0000-\u0020]+/g,''); // gizleyen boşluk/kontrol karakterlerini kaldır
+    var d = decodeEntities(raw).replace(new RegExp('['+String.fromCharCode(0)+'-'+String.fromCharCode(32)+']+','g'),''); // gizleyen boşluk/kontrol karakterlerini kaldır
     var low = d.toLowerCase();
     if(low.indexOf('//')===0) return {kind:'protocol_relative', clean:d};
     var m = low.match(/^([a-z][a-z0-9+.\-]*):/);
