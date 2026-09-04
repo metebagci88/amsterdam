@@ -20,8 +20,8 @@ const PNG_UNIQUE = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mO4
 const b64bytes = (b64:string)=>Uint8Array.from(atob(b64), c=>c.charCodeAt(0));
 async function sha256Hex(u:Uint8Array){ const d=await crypto.subtle.digest("SHA-256",u); return [...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
 
-async function api(action:string, fields:Record<string,unknown>, jwt:string){
-  const r = await fetch(API,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+jwt},body:JSON.stringify({action,...fields})});
+async function api(action:string, fields:Record<string,unknown>, jwt:string, extraHeaders:Record<string,string>={}){
+  const r = await fetch(API,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+jwt,...extraHeaders},body:JSON.stringify({action,...fields})});
   let body:any=null; try{ body=await r.json(); }catch{ /*noop*/ }
   return { status:r.status, body };
 }
@@ -42,18 +42,6 @@ async function delObject(bucket:string, path:string):Promise<{ok:boolean,status:
   const bodyText=await resp.text();
   return { ok:resp.ok, status:resp.status, bodyText };
 }
-// GATE9c: storage.objects tablosunu SAHİBİ (supabase_storage_admin) rolüyle yeniden adlandır.
-// SET ROLE + ALTER TABLE + RESET ROLE AYNI fiziksel bağlantıda, AYRI komutlar olarak çalışır
-// (multi-statement tek queryObject varsayımı YOK). db() her çağrıda yeni Client açtığı için ayrı helper.
-async function renameStorageObjects(fromName:string, toName:string){
-  const c=new Client(DB_URL); await c.connect();
-  try{
-    await c.queryObject("set role supabase_storage_admin");
-    await c.queryObject(`alter table storage.${fromName} rename to ${toName}`);
-    await c.queryObject("reset role");
-  } finally { await c.end(); }
-}
-
 async function mkPublishedTemplate(){
   const c = await api("create",{internal_name:"E2E "+uuid().slice(0,8),description:"e2e",email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
   assertEquals(c.status,200,"create"); const tid=c.body.template_id;
@@ -251,45 +239,26 @@ Deno.test("GATE9b: DB error fault injection -> 500 reconcile_db_error (asla ok/0
   } finally { await db("grant select on public.email_assets to service_role",[]); }
 });
 
-Deno.test("GATE9c: storage.objects rename fault injection -> 500 reconcile_storage_error (izole, restore garantili)", async () => {
-  assert(SERVICE_KEY.length>0,"SERVICE_KEY gerekli");
-  // (1) FAIL-CLOSED yerel-DB koruması: yalnız localhost/127.0.0.1/::1. Aksi halde ALTER DENENMEZ, gate FAIL.
-  const host=(()=>{ try{ return new URL(DB_URL).hostname; }catch{ return ""; } })();
-  assert(host==="localhost"||host==="127.0.0.1"||host==="::1",
-    "GATE_FAILED:gate9c_db_not_local host="+host+" (fault injection yalnız yerel/ephemeral DB'de çalışır; dış/prod DB'de SET ROLE/ALTER YOK)");
-  // (2) Owner EXACT-MATCH: storage.objects sahibi tam olarak supabase_storage_admin olmalı; değilse bilinmeyen role GEÇME.
-  const own=await db<{o:string}>("select tableowner as o from pg_tables where schemaname='storage' and tablename='objects'",[]);
-  const owner=own[0]?.o;
-  assert(owner==="supabase_storage_admin", "GATE9C_UNEXPECTED_OWNER:"+String(owner));
-  // (3) Mevcut DB kullanıcısı bu role geçebilmeli; değilse ALTER DENEMEDEN açık FAIL.
-  const hr=await db<{h:boolean}>("select pg_has_role(current_user, 'supabase_storage_admin', 'MEMBER') as h",[]);
-  assert(hr[0]?.h===true, "GATE9C_CANNOT_SET_OWNER_ROLE");
-  // (4) Precondition: storage.objects VAR, objects_cdp3b_fault YOK
-  const pre=await db<{o:string|null,f:string|null}>(
-    "select to_regclass('storage.objects')::text as o, to_regclass('storage.objects_cdp3b_fault')::text as f",[]);
-  assert(pre[0].o!==null, "precondition: storage.objects mevcut");
-  assert(pre[0].f===null, "precondition: objects_cdp3b_fault mevcut DEĞİL");
-  let renamed=false;
-  try{
-    // storage list yolunu boz: temel tabloyu SAHİBİ rolüyle (aynı bağlantıda SET ROLE+ALTER+RESET) yeniden adlandır
-    await renameStorageObjects("objects","objects_cdp3b_fault"); renamed=true;
-    const r=await api("reconcile",{},SUPER);
-    assertEquals(r.status,500,"storage error -> 500:"+JSON.stringify(r.body));
-    assertEquals(r.body?.error,"reconcile_storage_error","reconcile_storage_error");
-    assertNotEquals(r.body?.ok,true,"asla ok:true");
-  } finally {
-    // FAIL-CLOSED zorunlu restore: fault-tablo mevcutsa geri al. Hata YUTULMAZ (throw ederse test KIRMIZI olur).
-    const chk=await db<{f:string|null}>("select to_regclass('storage.objects_cdp3b_fault')::text as f",[]);
-    if(renamed || chk[0].f!==null){ await renameStorageObjects("objects_cdp3b_fault","objects"); }
-  }
-  // Restore doğrulaması: tablo geri, fault-tablo yok
-  const post=await db<{o:string|null,f:string|null}>(
-    "select to_regclass('storage.objects')::text as o, to_regclass('storage.objects_cdp3b_fault')::text as f",[]);
-  assert(post[0].o!==null, "restore: storage.objects yeniden mevcut");
-  assert(post[0].f===null, "restore: objects_cdp3b_fault artık yok");
-  // Restore sonrası normal reconcile: HTTP 200 + geçerli JSON + error YOK
-  const r2=await api("reconcile",{},SUPER);
-  assertEquals(r2.status,200,"restore sonrası normal reconcile 200:"+JSON.stringify(r2.body));
-  assert(r2.body && typeof r2.body==="object","restore sonrası reconcile geçerli JSON");
-  assert(!("error" in r2.body),"restore sonrası reconcile error YOK");
+// GATE9c: reconcile Storage-list hata kolu -> 500 reconcile_storage_error.
+// Yaklaşım: EMAIL_API_E2E=1 test-seam. 'x-asa-e2e-fault: storage-list-error' başlığı, GERÇEK listeleme yardımcısının
+// hata kolunu ({data:null,error} eşdeğeri) deterministik tetikler; ardından ÜRETİMDEKİ if(error) dalı maskeli 500 üretir.
+// Prod'da EMAIL_API_E2E set edilmez -> başlık TAMAMEN inert. Bu, GERÇEK altyapı kesintisi DEĞİLDİR; yalnız Storage istemcisinin
+// gerçek hata-işleme dalını deterministik çalıştırır (gerçek kesinti testi ayrı staging işidir).
+Deno.test("GATE9c: E2E storage-list fault seam -> 500 reconcile_storage_error (rol kapısı korunur, prod-inert)", async () => {
+  const FAULT = { "x-asa-e2e-fault": "storage-list-error" };
+  // (1) super_admin + fault başlığı: rol kapısı GEÇİLİR, sonra listeleme yardımcısının hata kolu -> maskeli 500
+  const r = await api("reconcile", {}, SUPER, FAULT);
+  assertEquals(r.status, 500, "super+fault -> 500:"+JSON.stringify(r.body));
+  assertEquals(r.body?.error, "reconcile_storage_error", "error tam olarak reconcile_storage_error");
+  assertNotEquals(r.body?.ok, true, "asla ok:true");
+  // ham hata ayrıntısı istemciye SIZMAMALI (yalnız maskeli kod döner)
+  assert(!JSON.stringify(r.body||{}).includes("e2e_injected"), "ham hata ayrıntısı istemciye sızmamalı");
+  // (2) CRM/yetkisiz rol + AYNI başlık: rol kapısı fault'tan ÖNCE -> forbidden. Başlık yetki kapısını AŞMAZ.
+  const rc = await api("reconcile", {}, CRM, FAULT);
+  assert(rc.status===403 || rc.body?.error==="forbidden", "crm+fault -> forbidden (rol kapısı önce):"+rc.status+" "+JSON.stringify(rc.body));
+  assertNotEquals(rc.body?.error, "reconcile_storage_error", "crm+fault -> storage_error DEĞİL (rol kapısı fault'tan önce)");
+  // (3) fault YOK -> hemen sonraki normal reconcile: HTTP 200 + ok:true (kalıcı yan etki YOK; seam idempotent/inert)
+  const r2 = await api("reconcile", {}, SUPER);
+  assertEquals(r2.status, 200, "fault sonrası normal reconcile 200:"+JSON.stringify(r2.body));
+  assertEquals(r2.body?.ok, true, "normal reconcile ok:true");
 });
