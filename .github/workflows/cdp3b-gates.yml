@@ -47,14 +47,27 @@ jobs:
       - name: Supabase start (ephemeral)
         run: supabase start
 
-      - name: Export local stack env (KEY=value -> GITHUB_ENV)
+      - name: Export local stack env (isimler 'supabase status -o env'den parse + non-empty assert + mask)
         run: |
           set -euo pipefail
           ST="$(supabase status -o env)"
-          echo "SUPABASE_DB_URL=$(echo "$ST" | sed -n 's/^DB_URL="\?\([^"]*\)"\?$/\1/p')" >> "$GITHUB_ENV"
-          echo "SERVICE_KEY=$(echo "$ST" | sed -n 's/^SERVICE_ROLE_KEY="\?\([^"]*\)"\?$/\1/p')" >> "$GITHUB_ENV"
-          echo "JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long" >> "$GITHUB_ENV"
-          echo "EMAIL_API_URL=http://127.0.0.1:54321/functions/v1/email-api" >> "$GITHUB_ENV"
+          getv(){ printf '%s\n' "$ST" | sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p"; }
+          API_URL="$(getv API_URL)"; DB_URL="$(getv DB_URL)"; ANON_KEY="$(getv ANON_KEY)"; SERVICE_ROLE_KEY="$(getv SERVICE_ROLE_KEY)"
+          # İsimleri tahmin etme: gerçekten bulunan değerler için non-empty assertion
+          [ -n "$API_URL" ]          || { echo "GATE_FAILED:status_env_API_URL"; exit 1; }
+          [ -n "$DB_URL" ]           || { echo "GATE_FAILED:status_env_DB_URL"; exit 1; }
+          [ -n "$ANON_KEY" ]         || { echo "GATE_FAILED:status_env_ANON_KEY"; exit 1; }
+          [ -n "$SERVICE_ROLE_KEY" ] || { echo "GATE_FAILED:status_env_SERVICE_ROLE_KEY"; exit 1; }
+          # Sırları GitHub logunda maskele
+          echo "::add-mask::$ANON_KEY"
+          echo "::add-mask::$SERVICE_ROLE_KEY"
+          {
+            echo "API_URL=$API_URL"
+            echo "SUPABASE_DB_URL=$DB_URL"
+            echo "ANON_KEY=$ANON_KEY"
+            echo "SERVICE_KEY=$SERVICE_ROLE_KEY"
+            echo "EMAIL_API_URL=$API_URL/functions/v1/email-api"
+          } >> "$GITHUB_ENV"
 
       - name: Seed (baseline + up + users + buckets) — KEY=value env üret
         run: |
@@ -110,6 +123,25 @@ jobs:
             exit 1
           fi
           echo "residue=zero" | tee -a /tmp/teardown.log
+
+      - name: Artifact secret taraması (token/key sızıntısı = FAIL) — upload'tan ÖNCE
+        if: always()
+        run: |
+          set -uo pipefail
+          files="/tmp/gates_out.txt /tmp/serve.log /tmp/ci_setup_psql.log /tmp/cdp3b_gate_step.log /tmp/teardown.log"
+          leak=0
+          for s in "${SUPER_JWT:-}" "${CRM_JWT:-}" "${ANON_KEY:-}" "${SERVICE_KEY:-}"; do
+            [ -n "$s" ] || continue
+            for f in $files; do
+              [ -f "$f" ] || continue
+              if grep -F -q -- "$s" "$f"; then echo "GATE_FAILED:secret_leak_in_$(basename "$f")"; leak=1; fi
+            done
+          done
+          # /tmp/gate_env kesinlikle artifact'a dahil DEĞİL (aşağıdaki path'te yok); yine de teyit
+          case " /tmp/gates_out.txt /tmp/serve.log /tmp/ci_setup_psql.log /tmp/cdp3b_gate_step.log /tmp/teardown.log " in
+            *" /tmp/gate_env "*) echo "GATE_FAILED:gate_env_in_artifact"; leak=1;; esac
+          [ "$leak" = "0" ] || exit 1
+          echo "secret scan temiz"
 
       - name: Upload gate + teardown logs (secret'sız) — teardown'dan SONRA, her durumda
         if: always()
