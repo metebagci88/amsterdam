@@ -27,11 +27,15 @@ EXPECT="bc60ffede60a2e64f905146be0e32f3bf375bf5824eb96d3734225eaa71493d2"
 GOT="$(sha256sum edge/email-api/email_sanitizer.js | cut -d' ' -f1)"
 [ "$GOT" = "$EXPECT" ] || fail "sanitizer_sha"
 
-# ---- GATE 1/2/3: Deno ----
+# ---- GATE 1/2: Deno (check + sanitizer test) ----
 GATE="deno"; command -v deno >/dev/null 2>&1 || fail "deno_missing"
+deno --version >>"$LOGF" 2>&1 || true   # teşhis: kurulu Deno sürümü (secret içermez)
 GATE="deno_check";  deno check edge/email-api/index.ts               >>"$LOGF" 2>&1 || fail "deno_check"
 GATE="deno_test";   deno test --allow-net edge/email-api/test_sanitizer_deno.ts >>"$LOGF" 2>&1 || fail "deno_test"
-GATE="deno_bundle"; deno bundle edge/email-api/index.ts >/dev/null 2>>"$LOGF"      || fail "deno_bundle"
+# NOT: eski 'deno bundle' gate'i KALDIRILDI. Deno 1.46.3 'bundle' alt-komutu node: specifier'larını
+# desteklemiyor (deno#15960) ve Supabase istemci grafiği node:buffer kullanıyor -> yanıltıcı hata.
+# Edge derleme/çalışma kanıtı artık aşağıdaki authenticated 'edge_runtime' gate'idir (serve edilen
+# gerçek email-api'ye 200 taxonomy çağrısı). Tip/derleme denetimi zaten 'deno check' ile yapılır.
 
 # ---- GATE db_url: gerekli ----
 GATE="db_url"; [ -n "${SUPABASE_DB_URL:-}" ] || { echo "GATE_FAILED:gate9_blocked_no_db_url"; exit 1; }
@@ -59,6 +63,30 @@ SQL
 # ---- GATE 4-9(e2e): gerçek Edge/Storage/DB assertion testleri ----
 GATE="staging_env"
 if [ -z "${EMAIL_API_URL:-}" ] || [ -z "${SUPER_JWT:-}" ] || [ -z "${CRM_JWT:-}" ]; then fail "staging_env"; fi
+
+# ---- GATE edge_runtime: serve edilen GERÇEK email-api'ye authenticated taxonomy (Edge derleme/çalışma kanıtı) ----
+# Başarı: HTTP tam 200 + geçerli JSON + 'error' alanı YOK. 401/400/500/parse edilemeyen -> PASS DEĞİL.
+# Token/JWT ASLA loglanmaz; body maskelenir. (Anonim readiness loop yalnız 'port ayağa kalktı' beklemesidir.)
+GATE="edge_runtime"
+ER_CODE="$(curl -s -o /tmp/edge_probe_body.json -w '%{http_code}' -X POST "$EMAIL_API_URL" \
+  -H 'content-type: application/json' -H "Authorization: Bearer ${SUPER_JWT}" \
+  -d '{"action":"taxonomy"}' || echo 000)"
+edge_fail(){
+  { echo "== edge_runtime FAIL: $1 http=$ER_CODE =="
+    echo "-- response body (maskelenmiş) --"
+    sed -E 's/[A-Za-z0-9._-]{24,}/<redacted>/g' /tmp/edge_probe_body.json 2>/dev/null | head -c 800; echo
+    echo "-- serve.log kuyruğu --"; tail -n 30 /tmp/serve.log 2>/dev/null; } >>"$LOGF" 2>&1
+  fail "edge_runtime"
+}
+[ "$ER_CODE" = "200" ] || edge_fail "http_not_200"
+# geçerli JSON + 'error' alanı YOK (node parse; exit 3=parse hatası, 4='error' var, 0=ok)
+if node -e 'const fs=require("fs");let b;try{b=JSON.parse(fs.readFileSync("/tmp/edge_probe_body.json","utf8"))}catch(e){process.exit(3)}process.exit(b&&typeof b==="object"&&Object.prototype.hasOwnProperty.call(b,"error")?4:0)' 2>>"$LOGF"; then
+  echo "edge_runtime OK (http=200, geçerli JSON, error yok)" >>"$LOGF"
+else
+  ER_RC=$?
+  case "$ER_RC" in 3) edge_fail "invalid_json";; 4) edge_fail "response_has_error";; *) edge_fail "probe_unknown_${ER_RC}";; esac
+fi
+
 GATE="e2e"
 deno test --allow-net --allow-env gates/e2e_gates.ts >>"$LOGF" 2>&1 || fail "gate_e2e"
 
