@@ -47,18 +47,27 @@ BMISS="$(psql "$SUPABASE_DB_URL" -tA -c "select count(*) from (values ('admin_us
 
 # ---- GATE 9: rollback dry-run (GERÇEK psql; geçici DB, ayrı transaction) ----
 GATE="gate9"
-G9="$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -tA <<SQL 2>>"$LOGF"
+G9="$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -qAt <<SQL 2>>"$LOGF"
 begin;
 \\i CDP3B_up.sql
 \\i CDP3B_down.sql
-select
-  (select count(*) from information_schema.tables where table_schema='public' and table_name like 'email\\_%')
- +(select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like '%email%' and p.proname ~ '^(_email|admin_[qw]_email)')
- +(select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and t.tgname like 'trg_email%') as leftover;
+select '__CDP3B_GATE9_LEFTOVER__=' || (
+    (select count(*) from information_schema.tables where table_schema='public' and table_name like 'email\\_%')
+   +(select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like '%email%' and p.proname ~ '^(_email|admin_[qw]_email)')
+   +(select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and t.tgname like 'trg_email%')
+ );
 rollback;
 SQL
 )" || fail "gate9_psql"
-[ "$(echo "$G9" | tr -d '[:space:]')" = "0" ] || fail "gate9_leftover_${G9}"
+printf '%s\n' "$G9" >> "$LOGF"   # ham psql çıktısı teşhis için; başarıda YALNIZ parse edilen sonuç kullanılır
+# Benzersiz sentinel ile fail-closed: yalnız '^__CDP3B_GATE9_LEFTOVER__=[0-9]+$' satırı kabul (genel sayı arama / tail / varsayılan 0 YOK).
+G9_RE='^__CDP3B_GATE9_LEFTOVER__=[0-9]+$'
+G9_N="$(printf '%s\n' "$G9" | grep -Ec "$G9_RE" || true)"
+if [ "$G9_N" -eq 0 ]; then fail "gate9_result_missing"; fi
+if [ "$G9_N" -gt 1 ]; then fail "gate9_result_ambiguous"; fi
+G9_SENT="$(printf '%s\n' "$G9" | grep -E "$G9_RE")"
+G9_VAL="${G9_SENT#__CDP3B_GATE9_LEFTOVER__=}"
+[ "$G9_VAL" = "0" ] || fail "gate9_leftover_${G9_VAL}"
 
 # ---- GATE 4-9(e2e): gerçek Edge/Storage/DB assertion testleri ----
 GATE="staging_env"
