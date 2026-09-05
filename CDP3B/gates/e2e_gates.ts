@@ -267,53 +267,181 @@ Deno.test("GATE9c: E2E storage-list fault seam -> 500 reconcile_storage_error (r
 const BASE = API.replace(/\/functions\/v1\/email-api$/, "");
 const PUBURL = (p:string)=>`${BASE}/storage/v1/object/public/email-assets-public/${p}`;
 
-// ---------- GATE AP1: asset_preview sahip + signed URL + token + no-store + partial (başka aktör açıkça unavailable) ----------
-Deno.test("GATE-AP1: asset_preview sahip signed URL + no-store + başka aktör (ilişkisiz) unavailable (sessizce düşmez)", async () => {
+// asset'i verilen template'in CURRENT DRAFT sürümüne bağla (save -> manifest). aid+path döndürür.
+async function bindAssetToCurrentDraft(tid:string, jwt:string){
+  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},jwt);
+  assertEquals(up.status,200,"asset_upload:"+JSON.stringify(up.body));
+  const aid=up.body.asset_id, path=up.body.path;
+  const html=`<table><tr><td><img src="${PUBURL(path)}" alt="x" width="1" height="1"><a href="{{unsubscribe_url}}">çık</a></td></tr></table>`;
+  const s=await api("save",{template_id:tid,email_class:"marketing",source_type:"visual_builder",subject:"bind",html,builder_json:{root:1},asset_manifest:[{asset_id:aid,public_path:path}],idem:uuid(),request_id:uuid()},jwt);
+  assertEquals(s.status,200,"save:"+JSON.stringify(s.body));
+  return { aid, path };
+}
+const FNSIG = "public.admin_q_email_asset_preview(uuid,uuid[],uuid)";
+
+// ---------- AP1: kendi yeni ve henüz bağlanmamış upload -> preview VAR (+ signed/token/no-store/ttl) ----------
+Deno.test("AP1: kendi taze (hiçbir sürüme bağlı olmayan) upload -> preview VAR; signed URL + token + no-store + ttl=600", async () => {
   const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
   assertEquals(up.status,200,"asset_upload:"+JSON.stringify(up.body)); const aid=up.body.asset_id;
-  // (1) sahibi (CRM), template YOK -> created_by=actor -> signed URL
-  const p1 = await api("asset_preview",{asset_ids:[aid]},CRM);
-  assertEquals(p1.status,200,"preview:"+JSON.stringify(p1.body));
-  assertEquals((p1.body.previews||[]).length,1,"sahip: tam 1 preview");
-  assertEquals(p1.body.previews[0].asset_id,aid,"preview asset_id eşleşir");
-  assert(/\/storage\/v1\/object\/sign\//.test(p1.body.previews[0].url),"signed endpoint (sign/)");
-  assert(/[?&]token=/.test(p1.body.previews[0].url),"kısa-ömürlü token query");
-  assertEquals((p1.body.unavailable_asset_ids||[]).length,0,"sahip: unavailable yok");
-  assertEquals(p1.body.ttl,600,"ttl=600");
-  // no-store header (ham fetch; gövde tamamen tüketilir)
+  const p = await api("asset_preview",{asset_ids:[aid]},CRM);          // template YOK -> yalnız branch (B) taze-upload yolu
+  assertEquals(p.status,200,"preview:"+JSON.stringify(p.body));
+  assertEquals((p.body.previews||[]).length,1,"taze upload: tam 1 preview");
+  assertEquals(p.body.previews[0].asset_id,aid,"preview asset_id eşleşir");
+  assert(/\/storage\/v1\/object\/sign\//.test(p.body.previews[0].url),"signed endpoint (sign/)");
+  assert(/[?&]token=/.test(p.body.previews[0].url),"kısa-ömürlü token query");
+  assertEquals((p.body.unavailable_asset_ids||[]).length,0,"unavailable yok");
+  assertEquals(p.body.ttl,600,"ttl=600");
   const raw = await fetch(API,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+CRM},body:JSON.stringify({action:"asset_preview",asset_ids:[aid]})});
   assertEquals(raw.headers.get("cache-control"),"no-store","Cache-Control: no-store");
   await raw.text();
-  // (2) başka aktör (SUPER), template YOK -> ilişki yok -> previews boş, unavailable=[aid] (AÇIKÇA bildirilir)
-  const p2 = await api("asset_preview",{asset_ids:[aid]},SUPER);
-  assertEquals(p2.status,200,"preview2:"+JSON.stringify(p2.body));
-  assertEquals((p2.body.previews||[]).length,0,"başka aktör: preview yok");
-  assert((p2.body.unavailable_asset_ids||[]).includes(aid),"başka aktör: unavailable listesinde (partial açık bildirim)");
 });
 
-// ---------- GATE AP2: current_draft ilişkisi cross-actor preview + ilgisiz/current-olmayan template reddi ----------
-Deno.test("GATE-AP2: current_draft_version manifest ilişkisi -> cross-actor (SUPER) preview; ilgisiz template -> unavailable", async () => {
+// ---------- AP2: current draft'a bağlı kendi asset'i -> preview VAR ----------
+Deno.test("AP2: current draft sürümüne bağlı kendi asset'i -> preview VAR (branch A, doğru template_id)", async () => {
   const c = await api("create",{internal_name:"AP2 "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
   const tid=c.body.template_id;
-  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
-  const aid=up.body.asset_id, path=up.body.path;
-  const html=`<table><tr><td><img src="${PUBURL(path)}" alt="x" width="1" height="1"><a href="{{unsubscribe_url}}">çık</a></td></tr></table>`;
-  const s=await api("save",{template_id:tid,email_class:"marketing",source_type:"visual_builder",subject:"AP2",html,builder_json:{root:1},asset_manifest:[{asset_id:aid,public_path:path}],idem:uuid(),request_id:uuid()},CRM);
-  assertEquals(s.status,200,"save:"+JSON.stringify(s.body));
-  // SUPER sahip DEĞİL; doğru template current draft manifestinde aid var -> preview
-  const ok = await api("asset_preview",{asset_ids:[aid],template_id:tid},SUPER);
+  const { aid } = await bindAssetToCurrentDraft(tid, CRM);            // artık bir sürüm manifestinde -> branch B kapanır, branch A açılır
+  const ok = await api("asset_preview",{asset_ids:[aid],template_id:tid},CRM);
   assertEquals(ok.status,200,"ok:"+JSON.stringify(ok.body));
-  assertEquals((ok.body.previews||[]).length,1,"current draft ilişkisi ile cross-actor preview");
-  // İLGİSİZ template ile SUPER -> ilişki yok -> unavailable (başka template'e bağlı olsa da current draft değil)
-  const c2 = await api("create",{internal_name:"AP2b "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
-  const bad = await api("asset_preview",{asset_ids:[aid],template_id:c2.body.template_id},SUPER);
-  assertEquals(bad.status,200,"bad:"+JSON.stringify(bad.body));
-  assertEquals((bad.body.previews||[]).length,0,"ilgisiz template: preview yok");
-  assert((bad.body.unavailable_asset_ids||[]).includes(aid),"ilgisiz template: unavailable");
+  assertEquals((ok.body.previews||[]).length,1,"current draft: preview VAR");
+  assertEquals(ok.body.previews[0].asset_id,aid,"asset_id eşleşir");
+  // NOT: branch (A) aktör kontrolü yapmaz (bir template'in taslak asset'ini herhangi bir editör önizleyebilir);
+  //      SUPER da doğru template_id ile önizleyebilir — bu tasarım gereğidir, AP3/AP5 sızıntıyı ayrıca dışlar.
 });
 
-// ---------- GATE AP3: no_ids fail-closed ----------
-Deno.test("GATE-AP3: asset_preview boş id -> 422 no_ids", async () => {
+// ---------- AP3: aynı actor'ın BAŞKA template current draft'ına bağlı asset'i -> preview YOK ----------
+Deno.test("AP3: aynı actor'ın başka template current draft'ına bağlı asset'i -> FARKLI template_id ile ve template'siz -> preview YOK", async () => {
+  const c1 = await api("create",{internal_name:"AP3a "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
+  const tid1=c1.body.template_id;
+  const { aid } = await bindAssetToCurrentDraft(tid1, CRM);           // aid, tid1'in current draft'ına bağlı (CRM sahibi)
+  const c2 = await api("create",{internal_name:"AP3b "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
+  const tid2=c2.body.template_id;
+  // (1) BAŞKA template_id (tid2) ile: branch A tid2 current draft'ında yok; branch B kapalı (aid bir sürüme bağlı) -> YOK
+  const r1 = await api("asset_preview",{asset_ids:[aid],template_id:tid2},CRM);
+  assertEquals(r1.status,200,"r1:"+JSON.stringify(r1.body));
+  assertEquals((r1.body.previews||[]).length,0,"başka template: preview YOK (created_by tek başına yetki vermez)");
+  assert((r1.body.unavailable_asset_ids||[]).includes(aid),"başka template: unavailable");
+  // (2) template'siz: branch A uygulanamaz; branch B kapalı (bağlı) -> YOK
+  const r2 = await api("asset_preview",{asset_ids:[aid]},CRM);
+  assertEquals((r2.body.previews||[]).length,0,"template'siz: preview YOK (bağlı asset created_by ile dönmez)");
+  assert((r2.body.unavailable_asset_ids||[]).includes(aid),"template'siz: unavailable");
+});
+
+// ---------- AP4: aynı template'in ESKİ/non-current draft'ına bağlı asset -> preview YOK ----------
+Deno.test("AP4: aynı template'in non-current (pointer'ı kaldırılmış) draft'ına bağlı asset -> preview YOK", async () => {
+  const c = await api("create",{internal_name:"AP4 "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
+  const tid=c.body.template_id;
+  const { aid } = await bindAssetToCurrentDraft(tid, CRM);            // aid, tid'in (o an current) draft'ının manifestinde
+  // O draft'ı NON-CURRENT yap: pointer'ı kaldır (deferred pointer-check yalnız not-null'da doğrular; null geçerli).
+  // Sürüm hâlâ is_published=false ve manifestinde aid var; ama artık current_draft_version_id DEĞİL. Asset status='draft'.
+  await db("update public.email_templates set current_draft_version_id=null where id=$1",[tid]);
+  const r = await api("asset_preview",{asset_ids:[aid],template_id:tid},CRM);
+  assertEquals(r.status,200,"r:"+JSON.stringify(r.body));
+  assertEquals((r.body.previews||[]).length,0,"non-current draft bağı: preview YOK (branch A yalnız current draft)");
+  assert((r.body.unavailable_asset_ids||[]).includes(aid),"non-current draft bağı: unavailable");
+});
+
+// ---------- AP5: başka actor'ın bağlanmamış asset'i -> preview YOK ----------
+Deno.test("AP5: başka actor'ın (SUPER) taze/bağlanmamış asset'ini CRM önizleyemez -> preview YOK", async () => {
+  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},SUPER); // created_by=SUPER
+  assertEquals(up.status,200,"asset_upload:"+JSON.stringify(up.body)); const aid=up.body.asset_id;
+  const r = await api("asset_preview",{asset_ids:[aid]},CRM);          // CRM sahibi değil, bağ yok -> her iki branch kapalı
+  assertEquals(r.status,200,"r:"+JSON.stringify(r.body));
+  assertEquals((r.body.previews||[]).length,0,"başka actor unbound: preview YOK");
+  assert((r.body.unavailable_asset_ids||[]).includes(aid),"başka actor unbound: unavailable");
+});
+
+// ---------- AP6: published asset -> signed draft preview YOK (kanonik public URL kullanılır) ----------
+Deno.test("AP6: published asset -> signed draft preview YOK (status filtresi 'draft','promoting' ile dışlanır)", async () => {
+  const t=await mkPublishedTemplate();                                // t.aid publish sonrası status='published'
+  const st=await db<{status:string}>("select status from public.email_assets where id=$1",[t.aid]);
+  assertEquals(st[0]?.status,"published","önkoşul: asset published");
+  const r = await api("asset_preview",{asset_ids:[t.aid],template_id:t.tid},SUPER);
+  assertEquals(r.status,200,"r:"+JSON.stringify(r.body));
+  assertEquals((r.body.previews||[]).length,0,"published: signed preview YOK");
+  assert((r.body.unavailable_asset_ids||[]).includes(t.aid),"published: unavailable (public URL kullanılmalı)");
+  assert(!/\/storage\/v1\/object\/sign\//.test(JSON.stringify(r.body)),"published: yanıtta hiç signed endpoint yok");
+});
+
+// ---------- AP7: 2 asset'ten biri yetkisiz -> previews yalnız yetkiliyi, unavailable diğerini döndürür ----------
+Deno.test("AP7: karışık istek -> previews yalnız yetkili asset'i, unavailable_asset_ids yalnız yetkisizi döndürür", async () => {
+  const upOwn = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);   // CRM taze -> yetkili (B)
+  const aOwn=upOwn.body.asset_id;
+  const upOther = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},SUPER); // SUPER taze -> CRM için yetkisiz
+  const aOther=upOther.body.asset_id;
+  const r = await api("asset_preview",{asset_ids:[aOwn,aOther]},CRM);
+  assertEquals(r.status,200,"r:"+JSON.stringify(r.body));
+  assertEquals((r.body.previews||[]).length,1,"tam 1 preview (yalnız yetkili)");
+  assertEquals(r.body.previews[0].asset_id,aOwn,"preview yalnız kendi asset'i");
+  assertEquals((r.body.unavailable_asset_ids||[]).length,1,"tam 1 unavailable");
+  assertEquals(r.body.unavailable_asset_ids[0],aOther,"unavailable yalnız yetkisiz asset");
+});
+
+// ---------- AP8: CRM/super_admin izinli; yetkisiz rol/authenticated forbidden ----------
+Deno.test("AP8: CRM+SUPER izinli (200); RPC EXECUTE yalnız service_role (anon/authenticated FORBIDDEN)", async () => {
+  const upC = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const rc = await api("asset_preview",{asset_ids:[upC.body.asset_id]},CRM);
+  assertEquals(rc.status,200,"CRM izinli:"+JSON.stringify(rc.body));
+  const upS = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},SUPER);
+  const rs = await api("asset_preview",{asset_ids:[upS.body.asset_id]},SUPER);
+  assertEquals(rs.status,200,"SUPER izinli:"+JSON.stringify(rs.body));
+  // Yetki sınırı (deny-all): parametreli RPC yalnız service_role'e EXECUTE. anon/authenticated doğrudan çağıramaz.
+  const g=await db<{svc:boolean,auth:boolean,anon:boolean}>(
+    `select has_function_privilege('service_role',$1,'execute') as svc,
+            has_function_privilege('authenticated',$1,'execute') as auth,
+            has_function_privilege('anon',$1,'execute') as anon`,[FNSIG]);
+  assertEquals(g[0].svc,true,"service_role EXECUTE var");
+  assertEquals(g[0].auth,false,"authenticated EXECUTE YOK (forbidden)");
+  assertEquals(g[0].anon,false,"anon EXECUTE YOK (forbidden)");
+});
+
+// ---------- AP9: ham UUID/path dışında storage hatası client'a sızmaz ----------
+Deno.test("AP9: yanıt sözleşmesi sızdırmaz — yalnız {ok,previews[{asset_id,url}],unavailable_asset_ids,ttl}; storage hata iç detayı YOK", async () => {
+  // (1) yapısal: yetkili + yetkisiz karışık istek -> yanıt anahtarları sabit; preview öğeleri yalnız asset_id,url
+  const upOwn = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const rr = await api("asset_preview",{asset_ids:[upOwn.body.asset_id, uuid()]},CRM); // ikinci id: kayıtsız (RPC hiç dönmez)
+  assertEquals(rr.status,200,"rr:"+JSON.stringify(rr.body));
+  assertEquals(Object.keys(rr.body).sort().join(","),"ok,previews,ttl,unavailable_asset_ids","yanıt anahtarları tam sabit");
+  for (const pv of (rr.body.previews||[])) assertEquals(Object.keys(pv).sort().join(","),"asset_id,url","preview öğesi yalnız asset_id,url (object_path YOK)");
+  assert(!JSON.stringify(rr.body).includes("object_path"),"yanıtta object_path anahtarı yok");
+  // (2) gerçek sign-hatası fault: bağlanmamış kendi asset'inin object_path'ini var-olmayan geçerli-biçimli path ile değiştir.
+  //     RPC yine döner (branch B: created_by=CRM, bağsız), ama createSignedUrl 404 -> index.ts unavailable'a düşer, ham hata DÖNMEZ.
+  const upF = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const aF=upF.body.asset_id;
+  // object_path check '<64hex>.<ext>' ve mime=png ister; storage'da fiziksel karşılığı OLMAYAN geçerli-biçimli path ata.
+  const ghostPath="".padStart(64,"a")+".png"; // 64-hex + .png: biçim/mime-tutarlı, ama draft bucket'ta yok
+  await db("update public.email_assets set object_path=$2 where id=$1",[aF, ghostPath]);
+  const rf = await api("asset_preview",{asset_ids:[aF]},CRM);
+  assertEquals(rf.status,200,"rf:"+JSON.stringify(rf.body));
+  assertEquals(Object.keys(rf.body).sort().join(","),"ok,previews,ttl,unavailable_asset_ids","fault: yanıt anahtarları hâlâ sabit");
+  // ham storage hata iç detayı (StorageApiError/Bucket/stack/statusCode) SIZMAMALI
+  const blob=JSON.stringify(rf.body);
+  for (const leak of ["StorageApiError","Bucket","statusCode","\"error\"","stack","InternalError"]) assert(!blob.includes(leak),"fault: '"+leak+"' iç detayı sızmamalı");
+});
+
+// ---------- AP10: RLS deny-all + service-role-only RPC korunur ----------
+Deno.test("AP10: 4 email tablosu RLS enabled + anon/authenticated grant YOK; RPC EXECUTE yalnız service_role", async () => {
+  const T=["email_templates","email_template_versions","email_assets","email_version_assets"];
+  const rls=await db<{relname:string,rls:boolean}>(
+    `select c.relname, c.relrowsecurity as rls from pg_class c join pg_namespace n on n.oid=c.relnamespace
+     where n.nspname='public' and c.relname = any($1)`,[T]);
+  assertEquals(rls.length,4,"4 tablo bulundu");
+  for (const r of rls) assertEquals(r.rls,true,r.relname+" RLS enabled");
+  const grants=await db<{n:number}>(
+    `select count(*)::int as n from information_schema.role_table_grants
+     where table_schema='public' and table_name = any($1) and grantee in ('anon','authenticated')`,[T]);
+  assertEquals(Number(grants[0].n),0,"anon/authenticated tablo grant YOK (deny-all)");
+  const g=await db<{svc:boolean,auth:boolean,anon:boolean}>(
+    `select has_function_privilege('service_role',$1,'execute') as svc,
+            has_function_privilege('authenticated',$1,'execute') as auth,
+            has_function_privilege('anon',$1,'execute') as anon`,[FNSIG]);
+  assertEquals(g[0].svc,true,"RPC service_role EXECUTE var");
+  assertEquals(g[0].auth,false,"RPC authenticated EXECUTE YOK");
+  assertEquals(g[0].anon,false,"RPC anon EXECUTE YOK");
+});
+
+// ---------- AP-EDGE: asset_preview boş id -> 422 no_ids (fail-closed giriş doğrulaması) ----------
+Deno.test("AP-EDGE: asset_preview boş id listesi -> 422 no_ids", async () => {
   const r = await api("asset_preview",{asset_ids:[]},CRM);
   assertEquals(r.status,422,"no_ids -> 422:"+JSON.stringify(r.body));
   assertEquals(r.body?.error,"no_ids","hata no_ids");
