@@ -50,6 +50,8 @@ GATE="gate9"
 G9="$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -qAt <<SQL 2>>"$LOGF"
 begin;
 \\i CDP3B_up.sql
+\\i CDP3B_patch_asset_preview_up.sql
+\\i CDP3B_patch_asset_preview_down.sql
 \\i CDP3B_down.sql
 select '__CDP3B_GATE9_LEFTOVER__=' || (
     (select count(*) from information_schema.tables where table_schema='public' and table_name like 'email\\_%')
@@ -102,6 +104,12 @@ deno test --allow-net --allow-env gates/e2e_gates.ts >>"$LOGF" 2>&1 || fail "gat
 # ---- GATE 8b: admin.html emOpen/_emAssets/emSave (jsdom, gerçek fonksiyonlar) ----
 GATE="admin_reopen"; command -v node >/dev/null 2>&1 || fail "node_missing"
 node gates/admin_reopen_test.mjs >>"$LOGF" 2>&1 || fail "admin_reopen"
+
+# ---- GATE 8c: admin.html emSerializeCanonical/emSwapToPreview GERÇEK GrapesJS component modeli (jsdom) ----
+# Kanıt: kaydet serileştirmesi source_html+builder_json'da signed/draft/token/data-asa-id=0; STATE KAYBI YOK
+# (aynı component kimliği); reopen project/component/style korur; deterministik; TTL refresh; foreign img laundering YOK.
+GATE="gjs_serialize"
+node gates/gjs_serialize_test.mjs >>"$LOGF" 2>&1 || fail "gjs_serialize"
 
 trap - ERR
 echo "LOCAL_GATES_PASS_STAGING_PENDING"
