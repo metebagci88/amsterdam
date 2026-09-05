@@ -6,7 +6,7 @@
 // - GC: candidates (dry-run) -> storage delete -> finalize (RPC)
 // - hata maskeleme: ham DB/storage detayı client'a DÖNMEZ; yalnız server log
 // - görsel boyutu gerçek binary'den (client'a güvenilmez)
-// Sanitize mantığı canonical ./email_sanitizer.js (SHA bc60ffed…) ile AYNI; Deno'da deno-dom.
+// Sanitize mantığı canonical ./email_sanitizer.js (SHA-256 11490786a1d5de4f685c0db25f9555af56cc95611c5e2f6ea09fc8cf15592bf9) ile AYNI; Deno'da deno-dom.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -68,6 +68,23 @@ function imageSize(b: Uint8Array, mime: string): {w:number|null,h:number|null} {
 const E2E = Deno.env.get("EMAIL_API_E2E") === "1";
 const E2E_HOSTS = E2E ? (Deno.env.get("E2E_IMAGE_HOSTS")||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean) : [];
 const E2E_ALLOW_HTTP = E2E && Deno.env.get("E2E_ALLOW_HTTP")==="1";
+// CI-only public-origin ALIAS (assertCanonicalAssets). YALNIZ E2E=1 iken aktif; prod'da (E2E=false) TAMAMEN inert (null).
+// Amaç: CI'da edge'in internal SUPABASE_URL'i (http://kong:8000) ile testin admin-benzeri dış public URL host'u
+// (http://127.0.0.1:54321) farklı olduğundan, KALICI managed public URL karşılaştırmasında bu dış origin de kabul edilsin.
+// SUPABASE_URL DEĞİŞMEZ -> Auth/DB/Storage istemcileri internal URL'i kullanmaya devam eder (createSignedUrl vb.).
+// Startup'ta FAIL-CLOSED doğrulama: yalnız TAM ORIGIN (scheme+host[+port]); path/query/fragment/credentials -> throw.
+// signed/draft/token bu alias üzerinden de KABUL EDİLMEZ: FORBIDDEN kontrolleri (aşağıda) origin'den bağımsız çalışır.
+const E2E_PUBLIC_ORIGIN: string | null = (() => {
+  if (!E2E) return null;                                   // prod: inert
+  const raw = Deno.env.get("E2E_PUBLIC_SUPABASE_URL");
+  if (!raw) return null;
+  let u: URL;
+  try { u = new URL(raw); } catch { throw new Error("E2E_PUBLIC_SUPABASE_URL_invalid_url"); }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("E2E_PUBLIC_SUPABASE_URL_bad_scheme");
+  if (u.username || u.password || u.search || u.hash || (u.pathname && u.pathname !== "/"))
+    throw new Error("E2E_PUBLIC_SUPABASE_URL_not_origin_only");   // path/query/fragment/credentials YASAK
+  return u.origin;                                          // scheme://host[:port]
+})();
 function ssrfHostAllowed(u: string): boolean {
   try {
     const url=new URL(u);
@@ -115,10 +132,15 @@ async function assertCanonicalAssets(svc: any, supabaseUrl: string, manifest: an
     : { data: [] as any[], error: null };
   if (error) { console.error("assertCanonicalAssets db", error); throw new HttpErr(500, "asset_lookup_failed"); }
   const allowed = new Set<string>();
-  const pubBase = `${supabaseUrl}/storage/v1/object/public/${PUBLIC_BUCKET}/`;
+  // Kanonik public origin(ler): gerçek SUPABASE_URL HER ZAMAN; E2E alias YALNIZ E2E=1 iken (prod'da null -> eklenmez).
+  // Alias sadece EK bir izinli public origin'dir; host-duyarsız/path-bazlı karşılaştırma YAPILMAZ (tam URL eşleşmesi korunur).
+  const pubBases = [`${supabaseUrl}/storage/v1/object/public/${PUBLIC_BUCKET}/`];
+  if (E2E_PUBLIC_ORIGIN) pubBases.push(`${E2E_PUBLIC_ORIGIN}/storage/v1/object/public/${PUBLIC_BUCKET}/`);
   for (const a of (assets||[])) {
-    if (a.object_path) allowed.add(pubBase + a.object_path);
-    if (a.public_object_path) allowed.add(pubBase + a.public_object_path);
+    for (const pubBase of pubBases) {
+      if (a.object_path) allowed.add(pubBase + a.object_path);
+      if (a.public_object_path) allowed.add(pubBase + a.public_object_path);
+    }
   }
   const FORBIDDEN = /\/storage\/v1\/object\/sign\/|email-assets-draft|[?&]token=|data-asa-pub|data-asa-id/i;
   const storageUrlRe = /https?:\/\/[^\s"'()<>\\]+\/storage\/v1\/object\/[^\s"'()<>\\]+/gi;
