@@ -171,7 +171,7 @@ const run = async () => {
   await window.emSwapToPreview();
   let simgs = window._emManagedImgs();
   assert.equal(simgs.length, 1, "T6: swap sonrası tek img");
-  assert.equal(imgSrc(simgs[0]), SIGNED_URL, "T6: img src signed preview)e çevrildi (görsel görünür)");
+  assert.equal(imgSrc(simgs[0]), SIGNED_URL, "T6: img src signed preview'e çevrildi (görsel görünür)");
   const cidPost = simgs[0].getId ? simgs[0].getId() : simgs[0].cid;
   assert.equal(cidPost, cidPre, "T6: swap aynı component kimliği (rebuild YOK -> props/style korunur)");
   // refresh (2. çağrı) -> yeni signed token (re-upload YOK)
@@ -189,9 +189,10 @@ const run = async () => {
   const serF = window.emSerializeCanonical();
   assert.ok(!serF.html.includes("/email-assets-public/"), "T7: foreign img kanonik public URL'ye UYDURULMADI");
   assert.ok(serF.html.includes(EVIL_URL), "T7: foreign src olduğu gibi kaldı (server fail-closed reddedecek)");
+  // client yine de data-asa-pub'ı kalıcı referans yapmaz (temizlik sonrası kontrol server'da; burada laundering YOK kanıtı yeterli)
 
   console.log("previewCount(asset_preview çağrısı) =", previewCount);
   console.log("GJS_SERIALIZE_OK");
-  process.exit(0);
+  process.exit(0);   // GrapesJS rAF/timer handle'ları açık kalır; başarıda temiz çık
 };
 run().catch(e=>{ console.error("GJS_SERIALIZE_FAIL", e && e.stack || e); process.exit(1); });
