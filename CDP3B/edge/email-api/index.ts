@@ -104,6 +104,37 @@ function reqStr(v: unknown, max: number, name: string): string {
 }
 class HttpErr extends Error { code: number; constructor(code:number,msg:string){ super(msg); this.code=code; } }
 
+// FAIL-CLOSED içerik denetimi (yalnız istemciye güvenilmez): kalıcı girdilerde (source_html + builder_json +
+// sanitized_html) YALNIZ manifest asset'lerinin SUNUCU-TÜRETİLMİŞ kanonik public URL'leri bulunabilir.
+// signed endpoint / draft bucket / token / geçici editör alanları YASAK. URL-parse + manifest eşleşmesi
+// birincil sınır; regex yalnız ek savunma. Manifest dışı managed storage URL -> reddet.
+async function assertCanonicalAssets(svc: any, supabaseUrl: string, manifest: any[], strings: (string|null|undefined|unknown)[]) {
+  const ids = Array.isArray(manifest) ? manifest.map((m:any)=>m?.asset_id).filter((x:any)=>typeof x==="string" && UUID_RE.test(x)) : [];
+  const { data: assets, error } = ids.length
+    ? await svc.from("email_assets").select("id,object_path,public_object_path").in("id", ids)
+    : { data: [] as any[], error: null };
+  if (error) { console.error("assertCanonicalAssets db", error); throw new HttpErr(500, "asset_lookup_failed"); }
+  const allowed = new Set<string>();
+  const pubBase = `${supabaseUrl}/storage/v1/object/public/${PUBLIC_BUCKET}/`;
+  for (const a of (assets||[])) {
+    if (a.object_path) allowed.add(pubBase + a.object_path);
+    if (a.public_object_path) allowed.add(pubBase + a.public_object_path);
+  }
+  const FORBIDDEN = /\/storage\/v1\/object\/sign\/|email-assets-draft|[?&]token=|data-asa-pub|data-asa-id/i;
+  const storageUrlRe = /https?:\/\/[^\s"'()<>\\]+\/storage\/v1\/object\/[^\s"'()<>\\]+/gi;
+  for (const s of strings) {
+    if (s === null || s === undefined) continue;
+    const str = typeof s === "string" ? s : JSON.stringify(s);
+    if (!str) continue;
+    if (FORBIDDEN.test(str)) throw new HttpErr(409, "draft_asset_url_in_content");   // ek savunma (regex)
+    const urls = str.match(storageUrlRe) || [];
+    for (const u of urls) {                                                          // birincil sınır: her storage URL manifest'te olmalı
+      const clean = u.replace(/[),.;'"]+$/,"");
+      if (!allowed.has(clean)) throw new HttpErr(409, "unmanaged_asset_url");
+    }
+  }
+}
+
 serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors(origin) });
@@ -181,6 +212,25 @@ serve(async (req) => {
       }
       case "gc_candidates": return j(await rpc(svc,"admin_q_email_asset_gc_candidates",{p_actor:actor}), 200, origin);
 
+      case "asset_preview": { // taslak görsel için KISA-ÖMÜRLÜ signed URL (SALT-OKUMA; DB/Storage yazmaz; loglanmaz; no-store)
+        const ids: string[] = Array.isArray(body.asset_ids) ? body.asset_ids.filter((x:any)=>typeof x==="string" && UUID_RE.test(x)).slice(0,50) : [];
+        if (!ids.length) throw new HttpErr(422,"no_ids");
+        const tid = (typeof body.template_id==="string" && UUID_RE.test(body.template_id)) ? body.template_id : null;
+        const rows = await rpc(svc,"admin_q_email_asset_preview",{p_actor:actor,p_asset_ids:ids,p_template_id:tid}); // rol/durum/ilişki kapısı; forbidden -> 403
+        const okMap = new Map<string,string>();
+        for (const r of (rows||[])) okMap.set(r.asset_id, r.object_path);
+        const previews: any[] = []; const unavailable: string[] = [];
+        for (const id of ids) {
+          const objPath = okMap.get(id);
+          if (!objPath) { unavailable.push(id); continue; }                                 // yetki/ilişki yok -> SESSİZCE DÜŞÜRME, açıkça bildir
+          const sg = await svc.storage.from(DRAFT_BUCKET).createSignedUrl(objPath, 600, { download:false });
+          if (sg.error || !sg.data?.signedUrl) { console.error("preview sign", id, sg.error); unavailable.push(id); continue; } // ham storage hatası client'a DÖNMEZ
+          previews.push({ asset_id:id, url:sg.data.signedUrl });
+        }
+        return new Response(JSON.stringify({ ok:true, previews, unavailable_asset_ids: unavailable, ttl:600 }),
+          { status:200, headers:{ ...cors(origin), "Content-Type":"application/json", "Cache-Control":"no-store" } });
+      }
+
       case "create":
         reqStr(body.internal_name,120,"internal_name");
         if (body.description!=null) reqStr(body.description,500,"description");
@@ -192,6 +242,7 @@ serve(async (req) => {
       case "validate": { // yazma yok
         const cls = enumv(body.email_class,["marketing","transactional"]);
         const html = reqStr(body.html ?? "", MAX_HTML, "html");
+        await assertCanonicalAssets(svc, SUPABASE_URL, body.asset_manifest ?? [], [html, body.builder_json]); // FAIL-CLOSED: signed/draft/token/unmanaged reddi
         const rep = EmailSanitizer.process(html,{emailClass:cls,allowedVars:ALLOWED_VARS,remoteImageAllowlist:TRUSTED_IMAGE_HOSTS,parseHTML});
         return j({ ok:rep.ok, validation_report:rep, content_hash:await sha256Hex(rep.sanitized_html||""), preview_html:EmailSanitizer.previewSafe(rep.sanitized_html||"") }, 200, origin);
       }
@@ -201,6 +252,8 @@ serve(async (req) => {
         if (body.builder_json && JSON.stringify(body.builder_json).length>MAX_BUILDER) throw new HttpErr(422,"builder_json_too_large");
         const rep = EmailSanitizer.process(html,{emailClass:cls,allowedVars:ALLOWED_VARS,remoteImageAllowlist:TRUSTED_IMAGE_HOSTS,parseHTML});
         if (!rep.ok) return j({ ok:false, error:"validation_failed", validation_report:rep }, 422, origin);
+        // FAIL-CLOSED: kalıcı girdilerin (html + builder_json + üretilen sanitized_html) hepsinde signed/draft/token/unmanaged reddi
+        await assertCanonicalAssets(svc, SUPABASE_URL, body.asset_manifest ?? [], [html, body.builder_json, rep.sanitized_html]);
         const content_hash = await sha256Hex(rep.sanitized_html);
         const builder_json_hash = body.builder_json ? await sha256Hex(JSON.stringify(body.builder_json)) : null;
         const out = await rpc(svc,"admin_w_email_version_save",{ p_actor:actor,p_template_id:reqUuid(body.template_id),
@@ -279,6 +332,8 @@ serve(async (req) => {
           catch(e){ console.error("promote", e); failed.push(aid+":promote_failed"); }
         }
         if (failed.length) return j({ ok:false, error:"asset_promotion_failed", failed, note:"şablon YAYINLANMADI; kısmi kopyalar data_health/reconciliation ile ele alınır" }, 409, origin);
+        // FAIL-CLOSED: yayınlanacak kalıcı içerikte (sanitized_html + source_html + builder_json) draft/signed/token/unmanaged URL OLMAMALI
+        await assertCanonicalAssets(svc, SUPABASE_URL, (draft.asset_manifest || []), [draft.sanitized_html, draft.source_html, draft.builder_json]);
         // E/F: tüm asset'ler promoted -> DB publish (RPC yeniden doğrular)
         const out = await rpc(svc,"admin_w_email_publish",{p_actor:actor,p_template_id:tid,p_idem:idem,p_request_id:reqId});
         return j(out, 200, origin);
