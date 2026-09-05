@@ -262,3 +262,108 @@ Deno.test("GATE9c: E2E storage-list fault seam -> 500 reconcile_storage_error (r
   assertEquals(r2.status, 200, "fault sonrası normal reconcile 200:"+JSON.stringify(r2.body));
   assertEquals(r2.body?.ok, true, "normal reconcile ok:true");
 });
+
+// ==================== CDP-3B PATCH · taslak görsel önizleme + fail-closed içerik denetimi ====================
+const BASE = API.replace(/\/functions\/v1\/email-api$/, "");
+const PUBURL = (p:string)=>`${BASE}/storage/v1/object/public/email-assets-public/${p}`;
+
+// ---------- GATE AP1: asset_preview sahip + signed URL + token + no-store + partial (başka aktör açıkça unavailable) ----------
+Deno.test("GATE-AP1: asset_preview sahip signed URL + no-store + başka aktör (ilişkisiz) unavailable (sessizce düşmez)", async () => {
+  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  assertEquals(up.status,200,"asset_upload:"+JSON.stringify(up.body)); const aid=up.body.asset_id;
+  // (1) sahibi (CRM), template YOK -> created_by=actor -> signed URL
+  const p1 = await api("asset_preview",{asset_ids:[aid]},CRM);
+  assertEquals(p1.status,200,"preview:"+JSON.stringify(p1.body));
+  assertEquals((p1.body.previews||[]).length,1,"sahip: tam 1 preview");
+  assertEquals(p1.body.previews[0].asset_id,aid,"preview asset_id eşleşir");
+  assert(/\/storage\/v1\/object\/sign\//.test(p1.body.previews[0].url),"signed endpoint (sign/)");
+  assert(/[?&]token=/.test(p1.body.previews[0].url),"kısa-ömürlü token query");
+  assertEquals((p1.body.unavailable_asset_ids||[]).length,0,"sahip: unavailable yok");
+  assertEquals(p1.body.ttl,600,"ttl=600");
+  // no-store header (ham fetch; gövde tamamen tüketilir)
+  const raw = await fetch(API,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+CRM},body:JSON.stringify({action:"asset_preview",asset_ids:[aid]})});
+  assertEquals(raw.headers.get("cache-control"),"no-store","Cache-Control: no-store");
+  await raw.text();
+  // (2) başka aktör (SUPER), template YOK -> ilişki yok -> previews boş, unavailable=[aid] (AÇIKÇA bildirilir)
+  const p2 = await api("asset_preview",{asset_ids:[aid]},SUPER);
+  assertEquals(p2.status,200,"preview2:"+JSON.stringify(p2.body));
+  assertEquals((p2.body.previews||[]).length,0,"başka aktör: preview yok");
+  assert((p2.body.unavailable_asset_ids||[]).includes(aid),"başka aktör: unavailable listesinde (partial açık bildirim)");
+});
+
+// ---------- GATE AP2: current_draft ilişkisi cross-actor preview + ilgisiz/current-olmayan template reddi ----------
+Deno.test("GATE-AP2: current_draft_version manifest ilişkisi -> cross-actor (SUPER) preview; ilgisiz template -> unavailable", async () => {
+  const c = await api("create",{internal_name:"AP2 "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
+  const tid=c.body.template_id;
+  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const aid=up.body.asset_id, path=up.body.path;
+  const html=`<table><tr><td><img src="${PUBURL(path)}" alt="x" width="1" height="1"><a href="{{unsubscribe_url}}">çık</a></td></tr></table>`;
+  const s=await api("save",{template_id:tid,email_class:"marketing",source_type:"visual_builder",subject:"AP2",html,builder_json:{root:1},asset_manifest:[{asset_id:aid,public_path:path}],idem:uuid(),request_id:uuid()},CRM);
+  assertEquals(s.status,200,"save:"+JSON.stringify(s.body));
+  // SUPER sahip DEĞİL; doğru template current draft manifestinde aid var -> preview
+  const ok = await api("asset_preview",{asset_ids:[aid],template_id:tid},SUPER);
+  assertEquals(ok.status,200,"ok:"+JSON.stringify(ok.body));
+  assertEquals((ok.body.previews||[]).length,1,"current draft ilişkisi ile cross-actor preview");
+  // İLGİSİZ template ile SUPER -> ilişki yok -> unavailable (başka template'e bağlı olsa da current draft değil)
+  const c2 = await api("create",{internal_name:"AP2b "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
+  const bad = await api("asset_preview",{asset_ids:[aid],template_id:c2.body.template_id},SUPER);
+  assertEquals(bad.status,200,"bad:"+JSON.stringify(bad.body));
+  assertEquals((bad.body.previews||[]).length,0,"ilgisiz template: preview yok");
+  assert((bad.body.unavailable_asset_ids||[]).includes(aid),"ilgisiz template: unavailable");
+});
+
+// ---------- GATE AP3: no_ids fail-closed ----------
+Deno.test("GATE-AP3: asset_preview boş id -> 422 no_ids", async () => {
+  const r = await api("asset_preview",{asset_ids:[]},CRM);
+  assertEquals(r.status,422,"no_ids -> 422:"+JSON.stringify(r.body));
+  assertEquals(r.body?.error,"no_ids","hata no_ids");
+});
+
+// ---------- GATE CF: save/validate FAIL-CLOSED (html VE builder_json; signed/draft/token/data-asa-pub/unmanaged) + temiz geçer ----------
+Deno.test("GATE-CF: save+validate builder_json+html fail-closed (signed/draft/token/data-asa-pub/unmanaged) + temiz kanonik geçer", async () => {
+  const c = await api("create",{internal_name:"CF "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
+  const tid=c.body.template_id;
+  const SIGNED=`${BASE}/storage/v1/object/sign/email-assets-draft/x.png?token=ABC123`;
+  const clean="<p>ok {{unsubscribe_url}}</p>";      // sanitize-geçerli; kalıcı denetim builder_json üzerinden test edilir
+  const REJ=["draft_asset_url_in_content","unmanaged_asset_url"];
+  // NOT: SAVE'de assertCanonicalAssets sanitize'DAN SONRA koşar; bu yüzden SAVE reddi testlerinde yasaklı içerik
+  // builder_json'a konur (sanitizer'a dokunmaz, html temiz kalır) -> rep.ok=true -> reddi assertCanonicalAssets üretir.
+  // HTML-kaynağı reddi ise VALIDATE ile test edilir (validate'te assertCanonicalAssets sanitize'DAN ÖNCE koşar).
+  const mkSave=(fields:Record<string,unknown>)=>api("save",{template_id:tid,email_class:"marketing",source_type:"visual_builder",subject:"CF",html:clean,asset_manifest:[],idem:uuid(),request_id:uuid(),...fields},CRM);
+  const mkValidate=(html:string,extra:Record<string,unknown>={})=>api("validate",{email_class:"marketing",source_type:"visual_builder",html,builder_json:{r:1},asset_manifest:[],...extra},CRM);
+  // 1) SAVE: signed URL builder_json'da -> reddet (builder_json DA denetlenir; client temizliğine güvenilmez)
+  let r=await mkSave({builder_json:{blocks:[{src:SIGNED}]}});
+  assert(r.status>=400,"signed builder_json reddi:"+JSON.stringify(r.body)); assert(REJ.includes(r.body?.error),"kod:"+r.body?.error);
+  // 2) SAVE: data-asa-pub builder_json'da -> reddet (geçici editör alanı kalıcı içerikte yasak)
+  r=await mkSave({builder_json:{blocks:[{attrs:"data-asa-pub=https://evil"}]}});
+  assert(r.status>=400,"data-asa-pub reddi:"+JSON.stringify(r.body)); assertEquals(r.body?.error,"draft_asset_url_in_content");
+  // 3) SAVE: token query builder_json'da (public görünse de) -> reddet
+  r=await mkSave({builder_json:{blocks:[{src:`${PUBURL("y.png")}?token=Z`}]}});
+  assert(r.status>=400,"token reddi:"+JSON.stringify(r.body)); assertEquals(r.body?.error,"draft_asset_url_in_content");
+  // 4) SAVE: manifest DIŞI managed public storage URL builder_json'da -> unmanaged_asset_url (URL-parse+manifest; regex tek sınır değil)
+  r=await mkSave({builder_json:{blocks:[{src:PUBURL("notinmanifest.png")}]}});
+  assert(r.status>=400,"unmanaged reddi:"+JSON.stringify(r.body)); assertEquals(r.body?.error,"unmanaged_asset_url");
+  // 5) VALIDATE: signed URL HTML KAYNAĞINDA -> reddet (validate DE fail-closed; sanitize'dan ÖNCE, html-source reddi)
+  let v=await mkValidate(`<p><img src="${SIGNED}"></p>`);
+  assert(v.status>=400,"validate signed html reddi:"+JSON.stringify(v.body)); assert(REJ.includes(v.body?.error),"validate kod:"+v.body?.error);
+  // 6) VALIDATE: manifest DIŞI managed public URL HTML kaynağında -> unmanaged_asset_url
+  v=await mkValidate(`<p><img src="${PUBURL("notinmanifest.png")}"></p>`);
+  assert(v.status>=400,"validate unmanaged reddi:"+JSON.stringify(v.body)); assertEquals(v.body?.error,"unmanaged_asset_url");
+  // 7) TEMİZ managed (manifest'li kanonik public; html + builder_json) -> save 200
+  const up=await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM); const aid=up.body.asset_id, path=up.body.path;
+  const okr=await mkSave({html:`<table><tr><td><img src="${PUBURL(path)}">{{unsubscribe_url}}</td></tr></table>`,builder_json:{blocks:[{src:PUBURL(path)}]},asset_manifest:[{asset_id:aid,public_path:path}]});
+  assertEquals(okr.status,200,"temiz kanonik geçer:"+JSON.stringify(okr.body));
+});
+
+// ---------- GATE CF-PUB: publish fail-closed sonrası yayınlanan içerik signed/draft/token/temp-attr = 0 ----------
+Deno.test("GATE-CF-PUB: yayınlanan sanitized_html/source_html/builder_json signed/draft/token/data-asa-* = 0", async () => {
+  const t=await mkPublishedTemplate();
+  const g=await api("get",{template_id:t.tid},SUPER);
+  assertEquals(g.status,200,"get:"+JSON.stringify(g.body));
+  const pub=g.body.published||{};
+  const blob=JSON.stringify([pub.sanitized_html??"",pub.source_html??"",pub.builder_json??null]);
+  assert(!/\/storage\/v1\/object\/sign\//.test(blob),"published: signed endpoint yok");
+  assert(!/email-assets-draft/.test(blob),"published: draft bucket yok");
+  assert(!/[?&]token=/.test(blob),"published: token yok");
+  assert(!/data-asa-pub|data-asa-id/.test(blob),"published: geçici editör alanı yok");
+});
