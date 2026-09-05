@@ -1546,10 +1546,13 @@ async function emAssetUpload(inp){ const f=inp.files&&inp.files[0]; if(!f)return
   let b64; try{ b64=await new Promise((res,rej)=>{const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(f);}); }catch(e){ alert('Dosya okunamadı'); return; }
   const u=await emailApi('asset_upload',{data_base64:b64, idem:newId(), request_id:newId()});
   if(u.status!==200){ alert('Yükleme reddedildi: '+((u.body&&u.body.error)||apiErrText(u.status))); return; }
-  _emAssets.push({id:u.body.asset_id, path:u.body.path});
-  const pub=CFG.url+'/storage/v1/object/public/email-assets-public/'+u.body.path;
-  if(_emEditor) _emEditor.addComponents('<img src="'+pub+'" alt="" style="max-width:100%"/>');
-  alert('Görsel yüklendi (draft; yayınlanınca public bucket\'a promote edilir).');
+  _emAssets.push({id:u.body.asset_id, path:u.body.path});   // server-approved asset (kalıcı referans = asset_id)
+  var disp=_emPubUrl(u.body.asset_id), warn=false;          // fallback public (publish öncesi 404 olabilir)
+  try{ var pv=await emailApi('asset_preview',{asset_ids:[u.body.asset_id], template_id:_emCurId||null});
+       if(pv.status===200 && pv.body.previews && pv.body.previews[0]){ disp=pv.body.previews[0].url; } else { warn=true; } }catch(e){ warn=true; }
+  if(_emMode==='visual' && _emEditor){ _emEditor.addComponents('<img data-asa-id="'+u.body.asset_id+'" src="'+disp+'" alt="" style="max-width:100%"/>'); }
+  else { var ta=document.getElementById('em_src'); if(ta) ta.value+='\n<img src="'+_emPubUrl(u.body.asset_id)+'" alt=""/>'; }   // import: KALICI public URL
+  alert(warn ? 'Görsel yüklendi fakat taslak önizleme URL\'si alınamadı; kaydetmeden önce kontrol et.' : 'Görsel yüklendi (taslak editöründe hemen görünür).');
 }
 async function emHostImages(){ if(!_emHostIdem)_emHostIdem=newId();
   const r=await emailApi('import_host_images',{email_class:emGetClass(), html:emVal('em_src'), idem:_emHostIdem, request_id:_emHostIdem});
@@ -1561,13 +1564,59 @@ async function emHostImages(){ if(!_emHostIdem)_emHostIdem=newId();
 }
 function emDevice(d){ _emEditor&&_emEditor.setDevice(d); }
 function emGetHtml(){ if(_emMode==='visual'){ try{ return _emEditor.runCommand('gjs-get-inlined-html')||_emEditor.getHtml(); }catch(e){ return _emEditor.getHtml(); } } return document.getElementById('em_src').value; }
+/* CDP-3B patch · taslak görsel önizleme: kalıcı referans YALNIZ server-approved asset_id (_emAssets).
+   Kanonik public URL server-approved asset_id+public_path'ten türetilir; istemci data-asa-* AUTHORITATIVE DEĞİL. */
+function _emPubUrl(id){ var a=_emAssets.find(function(x){return x.id===id;}); return a? CFG.url+'/storage/v1/object/public/email-assets-public/'+a.path : null; }
+/* GrapesJS 'image' component src'yi hem MODEL property'sinde (get/set 'src') hem attributes'ta tutar; getHtml/inlined
+   MODEL property'sini okur. Bu yüzden managed img listesi component AĞACINDAN türetilir (find() render'lı canvas ister),
+   src OKUMA/YAZMA her iki yeri de kapsar (yoksa 'temiz' HTML üretilemez -> server fail-closed reddeder). */
+function _emManagedImgs(){ var out=[]; try{ (function walk(c){ (c.components&&c.components()||[]).forEach(function(ch){ if(String(ch.get&&ch.get('tagName')||'').toLowerCase()==='img') out.push(ch); walk(ch); }); })(_emEditor.getWrapper()); }catch(e){} return out; }
+function _emImgSrc(c){ try{ var at=c.getAttributes()||{}; if(at.src!=null) return at.src; return (c.get&&c.get('src'))||null; }catch(e){ return null; } }
+function _emSetImgSrc(c,url){ try{ if(c.set)c.set('src',url); }catch(e){} try{ c.addAttributes({src:url}); }catch(e){} }
+/* Kaydet/doğrula ÖNCESİ: managed img src'yi kanonik public URL'ye çevir, geçici data-asa-id KALDIR;
+   html + builder_json'ı bu haldeyken al; sonra canlı editörde signed görünümü geri kur (STATE KAYBI YOK: yalnız ilgili
+   img component'lerinin src attribute'u güncellenir; project/component/style/blocks yeniden kurulmaz). */
+function emSerializeCanonical(){
+  if(_emMode!=='visual'||!_emEditor){ return { html: (document.getElementById('em_src')?document.getElementById('em_src').value:''), builder_json: null }; }
+  var restore=[];
+  _emManagedImgs().forEach(function(c){
+    var at=c.getAttributes()||{}; var cur=_emImgSrc(c); var id=at['data-asa-id']||null;
+    if(!id){ for(var i=0;i<_emAssets.length;i++){ if(cur && cur===_emPubUrl(_emAssets[i].id)){ id=_emAssets[i].id; break; } } }
+    var pub=id?_emPubUrl(id):null;
+    if(pub){ restore.push({c:c, src:cur, id:id}); _emSetImgSrc(c,pub); c.removeAttributes(['data-asa-id']); }
+  });
+  var html; try{ html=_emEditor.runCommand('gjs-get-inlined-html')||_emEditor.getHtml(); }catch(e){ html=_emEditor.getHtml(); }
+  var bj=_emEditor.getProjectData();   // bu noktada src'ler KANONİK public (signed/token/data-asa-id YOK)
+  restore.forEach(function(r){ _emSetImgSrc(r.c, r.src); r.c.addAttributes({ 'data-asa-id':r.id }); });   // signed görünüm + geçici id geri (yalnız canlı editör)
+  return { html: html, builder_json: bj };
+}
+/* Reopen/refresh: managed img'lerin src'sini component MODELİNDE geçici signed URL'ye çevir (yeniden kurma YOK -> stil/props korunur). */
+async function emSwapToPreview(){
+  if(_emMode!=='visual'||!_emEditor||!_emAssets.length) return;
+  var pv=await emailApi('asset_preview',{asset_ids:_emAssets.map(function(a){return a.id;}), template_id:_emCurId||null});
+  if(pv.status!==200){ if(document.getElementById('emReport'))document.getElementById('emReport').innerHTML='<div class="notice err">Bazı taslak görseller yüklenemedi (önizleme yetkisi/erişim). Boş görselle kaydetme.</div>'; return; }
+  var map={}; (pv.body.previews||[]).forEach(function(p){ map[p.asset_id]=p.url; });
+  _emManagedImgs().forEach(function(c){ var at=c.getAttributes()||{}; var cur=_emImgSrc(c);
+    for(var i=0;i<_emAssets.length;i++){ var a=_emAssets[i]; if((cur===_emPubUrl(a.id)||at['data-asa-id']===a.id) && map[a.id]){ _emSetImgSrc(c,map[a.id]); c.addAttributes({'data-asa-id':a.id}); break; } }
+  });
+  var miss=(pv.body.unavailable_asset_ids||[]);
+  if(miss.length && document.getElementById('emReport')) document.getElementById('emReport').innerHTML='<div class="notice err">Bazı taslak görseller yüklenemedi ('+miss.length+' adet). Kaydetmeden önce kontrol et.</div>';
+}
 function emGetClass(){ return document.getElementById('em_class').value; }
 async function emValidate(){
-  const r=await emailApi('validate',{email_class:emGetClass(), html:emGetHtml(), builder_json:_emMode==='visual'?_emEditor.getProjectData():null, source_type:_emSourceType});
-  if(r.status!==200){ $("emReport").innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; return null; }
+  var ser=emSerializeCanonical();   // html + builder_json server-approved asset eşlemesinden kanonik (signed/temp YOK)
+  const r=await emailApi('validate',{email_class:emGetClass(), html:ser.html, builder_json:ser.builder_json, source_type:_emSourceType, asset_manifest:_emAssets.map(function(a){return {asset_id:a.id, public_path:a.path};})});
+  if(r.status!==200){ $("emReport").innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+((r.body&&r.body.error)?' ('+esc(r.body.error)+')':'')+'</div>'; return null; }
   const rep=r.body.validation_report||{};
-  const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'"><body style="margin:0">'+(r.body.preview_html||'')+'</body>';
+  /* Güvenli önizleme: server-sanitized HTML'den; managed public URL -> kısa-ömürlü signed URL swap;
+     CSP img-src YALNIZ Supabase Storage origin + izinli ASALOCAL CDN (keyfi uzak/tracker BLOKLANIR). innerHTML admin DOM'una BASILMAZ (sandbox iframe srcdoc). */
+  var sfx=(rep.sanitized_html||''), miss=[];
+  try{ var pv=await emailApi('asset_preview',{asset_ids:_emAssets.map(function(a){return a.id;}), template_id:_emCurId||null});
+       if(pv.status===200){ (pv.body.previews||[]).forEach(function(p){ var a=_emAssets.find(function(x){return x.id===p.asset_id;}); if(a){ sfx=sfx.split(_emPubUrl(a.id)).join(p.url); } }); miss=pv.body.unavailable_asset_ids||[]; } }catch(e){}
+  var stOrigin=(function(){ try{ return new URL(CFG.url).origin; }catch(e){ return CFG.url; } })();
+  const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src '+stOrigin+' https://cdn.asalocal.club; style-src \'unsafe-inline\'"><body style="margin:0">'+sfx+'</body>';
   $("emReport").innerHTML='<div><b>'+(r.body.ok?'<span style="color:#0a7d33">GEÇTİ</span>':'<span style="color:#c0303a">ENGELLENDİ</span>')+'</b> content_hash='+esc((r.body.content_hash||'').slice(0,16))+'…'
+    +(miss.length?'<div class="err">Bazı taslak görseller önizlemede yüklenemedi ('+miss.length+' adet); boş görselle kaydetme.</div>':'')
     +(rep.errors&&rep.errors.length?'<div class="err">Hata: '+esc(rep.errors.join(', '))+'</div>':'')
     +(rep.warnings&&rep.warnings.length?'<div class="muted">Uyarı: '+esc(rep.warnings.join(', '))+'</div>':'')
     +'</div><div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap"><iframe sandbox="" style="width:600px;height:320px;border:1px solid var(--line)" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe><iframe sandbox="" style="width:320px;height:380px;border:1px solid var(--line)" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe></div>'
@@ -1582,9 +1631,10 @@ async function emSave(){
     if(c.status!==200){ alert(apiErrText(c.status)+' '+((c.body&&c.body.error)||'')); return false; }
     _emCurId=c.body.template_id; _emCreateIdem=null; }
   if(!_emSaveIdem)_emSaveIdem=newId();
+  var _emSer=emSerializeCanonical();   // kalıcı html + builder_json: managed img'ler kanonik public URL; signed/draft/token/data-asa-* YOK
   const s=await emailApi('save',{template_id:_emCurId, email_class:emGetClass(), source_type:_emSourceType,
     subject:emVal('em_subject'), preview_text:emVal('em_preview'), sender_name:emVal('em_sender'), reply_to:emVal('em_reply')||null,
-    html:emGetHtml(), builder_json:_emMode==='visual'?_emEditor.getProjectData():null,
+    html:_emSer.html, builder_json:_emSer.builder_json,
     asset_manifest:_emAssets.map(a=>({asset_id:a.id, public_path:a.path})), idem:_emSaveIdem, request_id:_emSaveIdem});
   if(s.status!==200){ alert(apiErrText(s.status)+' '+((s.body&&s.body.error)||'')); return false; }
   _emSaveIdem=null; return true;
@@ -1600,7 +1650,8 @@ async function emPublish(){
 async function emOpen(id){ const g=await emailApi('get',{template_id:id}); if(g.status!==200){ alert(apiErrText(g.status)); return; } const t=g.body.template||{};
   if(t.status==='published' && !g.body.draft){
     // Yayınlanmış + draft yok -> düzenlemek için AÇIK "Yeni sürüm" (auto YOK)
-    const pub=g.body.published||{}; const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src data:; style-src \'unsafe-inline\'"><body style="margin:0">'+esc((pub.sanitized_html||'')).replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</body>';
+    const pub=g.body.published||{}; var _stO=(function(){ try{ return new URL(CFG.url).origin; }catch(e){ return CFG.url; } })();
+    const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src '+_stO+' https://cdn.asalocal.club; style-src \'unsafe-inline\'"><body style="margin:0">'+esc((pub.sanitized_html||'')).replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</body>';
     emPanel('<div class="frow" style="align-items:center;gap:8px"><b>'+esc(t.internal_name)+'</b> <span class="badge">yayında v'+(pub.version_number||'')+' (immutable)</span>'
       +(CAPS.crm?' <button class="btn primary sm" onclick="emNewVersion(\''+id+'\')">Yeni sürüm oluştur</button>':' <span class="muted">Düzenleme için crm/super_admin gerekir.</span>')+'</div>'
       +'<iframe sandbox="" style="width:600px;height:340px;border:1px solid var(--line);margin-top:8px" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe>');
@@ -1612,6 +1663,7 @@ async function emOpen(id){ const g=await emailApi('get',{template_id:id}); if(g.
   else { emNewImport(); _emCurId=id; document.getElementById('em_name').value=t.internal_name; document.getElementById('em_class').value=t.email_class; document.getElementById('em_subject').value=v.subject||''; document.getElementById('em_preview').value=v.preview_text||''; document.getElementById('em_sender').value=v.sender_name||''; document.getElementById('em_reply').value=v.reply_to||''; document.getElementById('em_src').value=v.source_html||v.sanitized_html||''; }
   if(document.getElementById('em_desc')) document.getElementById('em_desc').value=t.description||'';
   _emAssets=(v.asset_manifest||[]).map(function(m){ return {id:m.asset_id, path:(m.public_path||'')}; });  // draft manifest KORUNUR (reopen)
+  await emSwapToPreview();   // reopen: managed public URL'leri kısa-ömürlü signed URL'ye çevir (görsel görünür; project/component/style KORUNUR)
   await emValidate();
 }
 async function emNewVersion(id){ if(!CAPS.crm){alert(apiErrText(403));return;}

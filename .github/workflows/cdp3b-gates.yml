@@ -68,6 +68,10 @@ jobs:
             echo "SERVICE_KEY=$SERVICE_ROLE_KEY"
             echo "EMAIL_API_URL=$API_URL/functions/v1/email-api"
           } >> "$GITHUB_ENV"
+          # CI-only: assertCanonicalAssets E2E public-origin ALIAS. Edge'in internal SUPABASE_URL'i (functions serve -> kong:8000)
+          # DEĞİŞMEZ; bu env yalnız KALICI public URL karşılaştırmasında test host'unu ($API_URL) EK canonical origin yapar.
+          # Prod'da bu env ASLA set edilmez + EMAIL_API_E2E=1 gerektirir -> index.ts'te tamamen inert.
+          echo "E2E_PUBLIC_SUPABASE_URL=$API_URL" >> gates/e2e.env
 
       - name: Seed (baseline + up + users + buckets) — KEY=value env üret
         run: |
