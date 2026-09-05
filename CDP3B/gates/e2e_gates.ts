@@ -20,6 +20,26 @@ const PNG_UNIQUE = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mO4
 const b64bytes = (b64:string)=>Uint8Array.from(atob(b64), c=>c.charCodeAt(0));
 async function sha256Hex(u:Uint8Array){ const d=await crypto.subtle.digest("SHA-256",u); return [...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
 
+// --- freshTestImage(): her çağrıda BENZERSİZ + biçim-geçerli 1x1 PNG (içerik-hash dedupe'u tetiklenmez).
+// Geçerli PNG_1x1'in IHDR'sinden HEMEN SONRA rasgele UUID içeren GEÇERLİ bir tEXt ancillary chunk eklenir (CRC hesaplı).
+// magic (PNG imzası) + IHDR (1x1 boyut, offset 16..23) DEĞİŞMEZ -> sunucu magic/boyut kontrolünü geçer; ham baytlar
+// FARKLI -> sha256 içerik-hash'i FARKLI. Bozuk dosyaya rasgele bayt EKLENMEZ; gerçek, CRC-geçerli chunk kullanılır.
+const _CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0;}return t;})();
+function _crc32(b:Uint8Array){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=_CRC[(c^b[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function _u32(n:number){return new Uint8Array([(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255]);}
+function _pngChunk(type:string,data:Uint8Array){
+  const tb=new TextEncoder().encode(type); const body=new Uint8Array(tb.length+data.length); body.set(tb,0); body.set(data,tb.length);
+  const out=new Uint8Array(4+body.length+4); out.set(_u32(data.length),0); out.set(body,4); out.set(_u32(_crc32(body)),4+body.length); return out;
+}
+function freshTestImage():string{
+  const base=b64bytes(PNG_1x1);                          // sig(8)+IHDR(25)+IDAT+IEND ; head(sig+IHDR)=33
+  const head=base.slice(0,33), tail=base.slice(33);      // tEXt'i IHDR sonrası / IDAT öncesi ekle (geçerli chunk sırası)
+  const text=new TextEncoder().encode("Comment"+String.fromCharCode(0)+uuid());  // GEÇERLİ tEXt: keyword \0 text (rasgele -> benzersiz)
+  const t=_pngChunk("tEXt",text);
+  const out=new Uint8Array(head.length+t.length+tail.length); out.set(head,0); out.set(t,head.length); out.set(tail,head.length+t.length);
+  let s=""; for(let i=0;i<out.length;i++) s+=String.fromCharCode(out[i]); return btoa(s);
+}
+
 async function api(action:string, fields:Record<string,unknown>, jwt:string, extraHeaders:Record<string,string>={}){
   const r = await fetch(API,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+jwt,...extraHeaders},body:JSON.stringify({action,...fields})});
   let body:any=null; try{ body=await r.json(); }catch{ /*noop*/ }
@@ -45,7 +65,7 @@ async function delObject(bucket:string, path:string):Promise<{ok:boolean,status:
 async function mkPublishedTemplate(){
   const c = await api("create",{internal_name:"E2E "+uuid().slice(0,8),description:"e2e",email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
   assertEquals(c.status,200,"create"); const tid=c.body.template_id;
-  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const up = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);
   assertEquals(up.status,200,"asset_upload:"+JSON.stringify(up.body)); const aid=up.body.asset_id, path=up.body.path;
   const pub=`${API.replace(/\/functions\/v1\/email-api$/,"")}/storage/v1/object/public/email-assets-public/${path}`;
   const html=`<table><tr><td><img src="${pub}" alt="x" width="1" height="1"><a href="{{unsubscribe_url}}">çık</a></td></tr></table>`;
@@ -269,7 +289,7 @@ const PUBURL = (p:string)=>`${BASE}/storage/v1/object/public/email-assets-public
 
 // asset'i verilen template'in CURRENT DRAFT sürümüne bağla (save -> manifest). aid+path döndürür.
 async function bindAssetToCurrentDraft(tid:string, jwt:string){
-  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},jwt);
+  const up = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},jwt);
   assertEquals(up.status,200,"asset_upload:"+JSON.stringify(up.body));
   const aid=up.body.asset_id, path=up.body.path;
   const html=`<table><tr><td><img src="${PUBURL(path)}" alt="x" width="1" height="1"><a href="{{unsubscribe_url}}">çık</a></td></tr></table>`;
@@ -281,7 +301,7 @@ const FNSIG = "public.admin_q_email_asset_preview(uuid,uuid[],uuid)";
 
 // ---------- AP1: kendi yeni ve henüz bağlanmamış upload -> preview VAR (+ signed/token/no-store/ttl) ----------
 Deno.test("AP1: kendi taze (hiçbir sürüme bağlı olmayan) upload -> preview VAR; signed URL + token + no-store + ttl=600", async () => {
-  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const up = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);
   assertEquals(up.status,200,"asset_upload:"+JSON.stringify(up.body)); const aid=up.body.asset_id;
   const p = await api("asset_preview",{asset_ids:[aid]},CRM);          // template YOK -> yalnız branch (B) taze-upload yolu
   assertEquals(p.status,200,"preview:"+JSON.stringify(p.body));
@@ -343,7 +363,7 @@ Deno.test("AP4: aynı template'in non-current (pointer'ı kaldırılmış) draft
 
 // ---------- AP5: başka actor'ın bağlanmamış asset'i -> preview YOK ----------
 Deno.test("AP5: başka actor'ın (SUPER) taze/bağlanmamış asset'ini CRM önizleyemez -> preview YOK", async () => {
-  const up = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},SUPER); // created_by=SUPER
+  const up = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},SUPER); // created_by=SUPER
   assertEquals(up.status,200,"asset_upload:"+JSON.stringify(up.body)); const aid=up.body.asset_id;
   const r = await api("asset_preview",{asset_ids:[aid]},CRM);          // CRM sahibi değil, bağ yok -> her iki branch kapalı
   assertEquals(r.status,200,"r:"+JSON.stringify(r.body));
@@ -365,9 +385,9 @@ Deno.test("AP6: published asset -> signed draft preview YOK (status filtresi 'dr
 
 // ---------- AP7: 2 asset'ten biri yetkisiz -> previews yalnız yetkiliyi, unavailable diğerini döndürür ----------
 Deno.test("AP7: karışık istek -> previews yalnız yetkili asset'i, unavailable_asset_ids yalnız yetkisizi döndürür", async () => {
-  const upOwn = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);   // CRM taze -> yetkili (B)
+  const upOwn = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);   // CRM taze -> yetkili (B)
   const aOwn=upOwn.body.asset_id;
-  const upOther = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},SUPER); // SUPER taze -> CRM için yetkisiz
+  const upOther = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},SUPER); // SUPER taze -> CRM için yetkisiz
   const aOther=upOther.body.asset_id;
   const r = await api("asset_preview",{asset_ids:[aOwn,aOther]},CRM);
   assertEquals(r.status,200,"r:"+JSON.stringify(r.body));
@@ -379,10 +399,10 @@ Deno.test("AP7: karışık istek -> previews yalnız yetkili asset'i, unavailabl
 
 // ---------- AP8: CRM/super_admin izinli; yetkisiz rol/authenticated forbidden ----------
 Deno.test("AP8: CRM+SUPER izinli (200); RPC EXECUTE yalnız service_role (anon/authenticated FORBIDDEN)", async () => {
-  const upC = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const upC = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);
   const rc = await api("asset_preview",{asset_ids:[upC.body.asset_id]},CRM);
   assertEquals(rc.status,200,"CRM izinli:"+JSON.stringify(rc.body));
-  const upS = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},SUPER);
+  const upS = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},SUPER);
   const rs = await api("asset_preview",{asset_ids:[upS.body.asset_id]},SUPER);
   assertEquals(rs.status,200,"SUPER izinli:"+JSON.stringify(rs.body));
   // Yetki sınırı (deny-all): parametreli RPC yalnız service_role'e EXECUTE. anon/authenticated doğrudan çağıramaz.
@@ -398,7 +418,7 @@ Deno.test("AP8: CRM+SUPER izinli (200); RPC EXECUTE yalnız service_role (anon/a
 // ---------- AP9: ham UUID/path dışında storage hatası client'a sızmaz ----------
 Deno.test("AP9: yanıt sözleşmesi sızdırmaz — yalnız {ok,previews[{asset_id,url}],unavailable_asset_ids,ttl}; storage hata iç detayı YOK", async () => {
   // (1) yapısal: yetkili + yetkisiz karışık istek -> yanıt anahtarları sabit; preview öğeleri yalnız asset_id,url
-  const upOwn = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const upOwn = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);
   const rr = await api("asset_preview",{asset_ids:[upOwn.body.asset_id, uuid()]},CRM); // ikinci id: kayıtsız (RPC hiç dönmez)
   assertEquals(rr.status,200,"rr:"+JSON.stringify(rr.body));
   assertEquals(Object.keys(rr.body).sort().join(","),"ok,previews,ttl,unavailable_asset_ids","yanıt anahtarları tam sabit");
@@ -406,7 +426,7 @@ Deno.test("AP9: yanıt sözleşmesi sızdırmaz — yalnız {ok,previews[{asset_
   assert(!JSON.stringify(rr.body).includes("object_path"),"yanıtta object_path anahtarı yok");
   // (2) gerçek sign-hatası fault: bağlanmamış kendi asset'inin object_path'ini var-olmayan geçerli-biçimli path ile değiştir.
   //     RPC yine döner (branch B: created_by=CRM, bağsız), ama createSignedUrl 404 -> index.ts unavailable'a düşer, ham hata DÖNMEZ.
-  const upF = await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const upF = await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);
   const aF=upF.body.asset_id;
   // object_path check '<64hex>.<ext>' ve mime=png ister; storage'da fiziksel karşılığı OLMAYAN geçerli-biçimli path ata.
   const ghostPath="".padStart(64,"a")+".png"; // 64-hex + .png: biçim/mime-tutarlı, ama draft bucket'ta yok
@@ -478,7 +498,7 @@ Deno.test("GATE-CF: save+validate builder_json+html fail-closed (signed/draft/to
   v=await mkValidate(`<p><img src="${PUBURL("notinmanifest.png")}"></p>`);
   assert(v.status>=400,"validate unmanaged reddi:"+JSON.stringify(v.body)); assertEquals(v.body?.error,"unmanaged_asset_url");
   // 7) TEMİZ managed (manifest'li kanonik public; html + builder_json) -> save 200
-  const up=await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM); const aid=up.body.asset_id, path=up.body.path;
+  const up=await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM); const aid=up.body.asset_id, path=up.body.path;
   const okr=await mkSave({html:`<table><tr><td><img src="${PUBURL(path)}">{{unsubscribe_url}}</td></tr></table>`,builder_json:{blocks:[{src:PUBURL(path)}]},asset_manifest:[{asset_id:aid,public_path:path}]});
   assertEquals(okr.status,200,"temiz kanonik geçer:"+JSON.stringify(okr.body));
 });
@@ -494,4 +514,64 @@ Deno.test("GATE-CF-PUB: yayınlanan sanitized_html/source_html/builder_json sign
   assert(!/email-assets-draft/.test(blob),"published: draft bucket yok");
   assert(!/[?&]token=/.test(blob),"published: token yok");
   assert(!/data-asa-pub|data-asa-id/.test(blob),"published: geçici editör alanı yok");
+});
+
+// ==================== CDP-3B FIX doğrulama (Run #10 kök nedenleri A+B için zorunlu assertion'lar) ====================
+// (2) E2E alias YALNIZ EMAIL_API_E2E=1 iken kabul edilir -> POZİTİF taraf (save+alias public URL geçer) yukarıdaki
+//     mkPublishedTemplate/AP2/GATE-CF testlerinin artık geçmesiyle kanıtlanır (CI'da E2E=1).
+// (3) E2E=false iken aynı alias URL -> unmanaged_asset_url: index.ts'te `if(!E2E) return null` ile YAPISAL garanti;
+//     ampirik olarak Run #10'un kendisi (alias env'siz) tam da bu davranışı (127.0.0.1 URL -> unmanaged) gösterdi.
+
+// FIX-6: iki freshTestImage() -> FARKLI asset_id + FARKLI content_hash (dedupe tetiklenmez); magic+1x1 server'da geçti.
+Deno.test("FIX-6: iki freshTestImage benzersiz asset_id + content_hash üretir", async () => {
+  const a=await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);
+  const b=await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);
+  assertEquals(a.status,200,"a upload:"+JSON.stringify(a.body)); assertEquals(b.status,200,"b upload:"+JSON.stringify(b.body));
+  assertNotEquals(a.body.asset_id,b.body.asset_id,"farklı asset_id");
+  const rows=await db<{content_hash:string}>("select content_hash from public.email_assets where id = any($1)",[[a.body.asset_id,b.body.asset_id]]);
+  assertEquals(rows.length,2,"iki asset da kayıtlı");
+  assertNotEquals(rows[0].content_hash,rows[1].content_hash,"farklı content_hash (dedupe YOK)");
+  assertEquals(a.body.width,1,"magic+boyut: width=1"); assertEquals(a.body.height,1,"height=1");
+});
+
+// FIX-7: BİLİNÇLİ aynı içerik (PNG_1x1) iki kez -> dedupe KORUNUR (aynı asset_id/path).
+Deno.test("FIX-7: aynı içerik tekrar upload -> dedupe korunur (aynı asset_id)", async () => {
+  const a=await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  const b=await api("asset_upload",{data_base64:PNG_1x1,idem:uuid(),request_id:uuid()},CRM);
+  assertEquals(a.status,200,"a:"+JSON.stringify(a.body)); assertEquals(b.status,200,"b:"+JSON.stringify(b.body));
+  assertEquals(a.body.asset_id,b.body.asset_id,"aynı içerik -> aynı asset_id (dedupe)");
+  assertEquals(a.body.path,b.body.path,"aynı path (content-hash)");
+});
+
+// FIX-1: internal SUPABASE_URL DEĞİŞMEDİ -> asset_preview signed URL'i draft-bucket 'sign' endpoint'idir (internal storage istemcisi çalışır).
+Deno.test("FIX-1: signed preview internal storage istemcisiyle üretiliyor (SUPABASE_URL değişmedi)", async () => {
+  const up=await api("asset_upload",{data_base64:freshTestImage(),idem:uuid(),request_id:uuid()},CRM);
+  const p=await api("asset_preview",{asset_ids:[up.body.asset_id]},CRM);
+  assertEquals(p.status,200,"preview:"+JSON.stringify(p.body));
+  assertEquals((p.body.previews||[]).length,1,"taze upload -> 1 preview");
+  const u=p.body.previews[0].url;
+  assert(/\/storage\/v1\/object\/sign\/email-assets-draft\//.test(u),"signed draft-bucket endpoint (internal storage istemcisi çalışıyor)");
+  assert(/[?&]token=/.test(u),"kısa-ömürlü token");
+});
+
+// FIX-4: E2E alias host DOĞRU olsa da manifest DIŞI object_path (yanlış path) yine reddedilir.
+Deno.test("FIX-4: alias host doğru + manifest dışı path -> unmanaged_asset_url", async () => {
+  const c=await api("create",{internal_name:"FIX4 "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
+  const { aid, path }=await bindAssetToCurrentDraft(c.body.template_id, CRM);
+  const bogus=PUBURL("".padStart(64,"b")+".png");   // biçim-geçerli, ama hiçbir manifest asset'ine ait DEĞİL
+  const html=`<table><tr><td><img src="${PUBURL(path)}"><img src="${bogus}"><a href="{{unsubscribe_url}}">x</a></td></tr></table>`;
+  const s=await api("save",{template_id:c.body.template_id,email_class:"marketing",source_type:"visual_builder",subject:"FIX4",html,builder_json:{root:1},asset_manifest:[{asset_id:aid,public_path:path}],idem:uuid(),request_id:uuid()},CRM);
+  assert(s.status>=400,"manifest dışı path reddedilmeli:"+JSON.stringify(s.body));
+  assertEquals(s.body?.error,"unmanaged_asset_url","alias host doğru olsa da yanlış path -> unmanaged_asset_url");
+});
+
+// FIX-5: alias origin + token -> FORBIDDEN aynen çalışır (draft_asset_url_in_content); origin'den bağımsız.
+Deno.test("FIX-5: alias origin + token -> draft_asset_url_in_content (FORBIDDEN)", async () => {
+  const c=await api("create",{internal_name:"FIX5 "+uuid().slice(0,8),email_class:"marketing",source_type:"visual_builder",idem:uuid(),request_id:uuid()},CRM);
+  const { aid, path }=await bindAssetToCurrentDraft(c.body.template_id, CRM);
+  const tokened=`${PUBURL(path)}?token=ABC123`;     // doğru managed public URL fakat token'lı -> FORBIDDEN
+  const html=`<table><tr><td><img src="${tokened}"><a href="{{unsubscribe_url}}">x</a></td></tr></table>`;
+  const s=await api("save",{template_id:c.body.template_id,email_class:"marketing",source_type:"visual_builder",subject:"FIX5",html,builder_json:{root:1},asset_manifest:[{asset_id:aid,public_path:path}],idem:uuid(),request_id:uuid()},CRM);
+  assert(s.status>=400,"token'lı URL reddedilmeli:"+JSON.stringify(s.body));
+  assertEquals(s.body?.error,"draft_asset_url_in_content","alias üzerinden bile token/sign/draft FORBIDDEN");
 });
