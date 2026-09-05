@@ -24,6 +24,8 @@ jget(){ node -e 'const fs=require("fs");let o;try{o=JSON.parse(fs.readFileSync(0
 # 1) Şema: baseline (admin altyapısı) + CDP3B_up.sql — sessiz, çıktı log'a
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -q -f "$ROOT/gates/baseline_fixture.sql" >>"$LOG" 2>&1
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -q -f "$ROOT/CDP3B_up.sql"                 >>"$LOG" 2>&1
+# CDP-3B PATCH: taslak görsel önizleme yetki-kapısı RPC'si (additive; asset_preview e2e için gerekli)
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -q -f "$ROOT/CDP3B_patch_asset_preview_up.sql" >>"$LOG" 2>&1
 
 # 2) Benzersiz e-postalar + güçlü geçici parolalar (loglanmaz; maskeli)
 SUFFIX="ci$(date +%s)$$${RANDOM}"
@@ -92,7 +94,7 @@ VID1="$(jget id < "$TMP_USER_SUP")"; VID2="$(jget id < "$TMP_USER_CRM")"
 # 7) Baseline PREFLIGHT: gerekli nesneler + fonksiyonlar var mı? yoksa GATE_FAILED:baseline_missing
 MISS="$(psql "$SUPABASE_DB_URL" -tA -c "select count(*) from (values ('admin_users'),('admin_roles'),('admin_write_ops'),('admin_write_log'),('admin_settings'),('email_templates'),('email_template_versions'),('email_assets'),('email_version_assets')) t(n) where to_regclass('public.'||n) is null")"
 [ "${MISS//[[:space:]]/}" = "0" ] || { echo "GATE_FAILED:baseline_missing"; exit 1; }
-FNMISS="$(psql "$SUPABASE_DB_URL" -tA -c "select count(*) from (values ('_admin_active'),('_admin_has_role'),('_admin_writes_enabled'),('_email_fp'),('admin_w_email_publish')) t(n) where to_regproc('public.'||n) is null")"
+FNMISS="$(psql "$SUPABASE_DB_URL" -tA -c "select count(*) from (values ('_admin_active'),('_admin_has_role'),('_admin_writes_enabled'),('_email_fp'),('admin_w_email_publish'),('admin_q_email_asset_preview')) t(n) where to_regproc('public.'||n) is null")"
 [ "${FNMISS//[[:space:]]/}" = "0" ] || { echo "GATE_FAILED:baseline_missing"; exit 1; }
 
 # 8) Yalnız KEY=value env satırları ($OUT; ARTIFACT'a dahil DEĞİL). Token değerleri stdout'a YAZILMAZ.
