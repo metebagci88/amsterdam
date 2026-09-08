@@ -60,10 +60,14 @@ jobs:
             (cd CDP3C_package && supabase init --force) 2>&1 | tee "$LOGDIR/01_init.log"; rc=${PIPESTATUS[0]}
             [ $rc -eq 0 ] || { echo "GATE_FAILED:stack_init"; exit 1; }
           fi
-          (cd CDP3C_package && supabase start) 2>&1 | tee "$LOGDIR/01_start.log"; rc=${PIPESTATUS[0]}
+          # CI LOG-TAŞIMA KATMANI redaksiyonu (yalnız log/stdout): supabase start, her makinede AYNI olan
+          # yerel-dev anon/service_role JWT'lerini basar; bunlar gerçek gizli DEĞİLDİR ama final secret-scan'in
+          # JWT desenini tetikler. tee'ye/stdout'a ULAŞMADAN ÖNCE JWT-biçimli değerleri [REDACTED_LOCAL_JWT] yap.
+          # supabase'in GERÇEK exit code'u PIPESTATUS[0] (ilk boru öğesi = alt kabuk) ile korunur. Paket/SQL davranışı DEĞİŞMEZ.
+          (cd CDP3C_package && supabase start) 2>&1 | sed -E 's#eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}#[REDACTED_LOCAL_JWT]#g' | tee "$LOGDIR/01_start.log"; rc=${PIPESTATUS[0]}
           [ $rc -eq 0 ] || { echo "GATE_FAILED:stack_start"; exit 1; }
           ST="$(cd CDP3C_package && supabase status -o env 2>&1)"; rc=$?
-          [ $rc -eq 0 ] || { echo "GATE_FAILED:stack_status"; printf '%s\n' "$ST" | tee "$LOGDIR/01b_status.log"; exit 1; }
+          [ $rc -eq 0 ] || { echo "GATE_FAILED:stack_status"; printf '%s\n' "$ST" | sed -E 's#eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}#[REDACTED_LOCAL_JWT]#g' | tee "$LOGDIR/01b_status.log"; exit 1; }
           DB_URL="$(printf '%s\n' "$ST" | sed -n 's/^DB_URL=\"\{0,1\}\([^\"]*\)\"\{0,1\}$/\1/p')"
           [ -n "$DB_URL" ] || { echo "GATE_FAILED:db_url"; exit 1; }
           echo "::add-mask::$DB_URL"; echo "SUPABASE_DB_URL=$DB_URL" >> "$GITHUB_ENV"
