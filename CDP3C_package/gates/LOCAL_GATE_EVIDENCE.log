@@ -1,0 +1,62 @@
+# CDP-3C · LOCAL_GATE_EVIDENCE (v9) — YEREL. GitHub CI DEĞİL, production DEĞİL.
+# Gömülü Postgres + vault/auth/pgcrypto SHIM (gerçek extension prod/CI'da). PII/secret icermez.
+PG_VERSION: PostgreSQL 16.2 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 10.2.1 20210130 (Red Hat 10.2.1-11), 64-bit
+DATE_UTC: 2026-09-08T19:02:24Z
+# v9 kapsam: YALNIZ 3 harness düzeltmesi (SQL çekirdeği v8'de temiz bulundu, DEĞİŞTİRİLMEDİ).
+#   #1 preflight_objects fail-open  #2 gen_object_manifest gerçek-multiline  #3 guard_selftest mutasyon-öncesi 3-katman + workflow sıra
+
+## BÖLÜM A — YERELDE GEÇEN (exit=0)  [taze DB reset + shim + tam CI-mirror sıra]
+cdp3c_manifest_check.sh: exit=0 CDP3C_MANIFEST_CHECK_PASS (table=20 type=12 func=48; raw-declaration=table 20/type 12/func 48)
+cdp3c_manifest_selftest.sh: exit=0 MANIFEST_SELFTEST_PASS (gerçek multiline+uppercase; yorum-CREATE sızmadı; overload raw/uniq tutarsızlığı)
+secret_scan_selftest.sh: exit=0 SECRET_SCAN_SELFTEST_PASS
+secret_scan.sh CDP3C_package .github: exit=0 secret_scan_clean
+shim: exit=0
+baseline: exit=0
+guard_selftest.sh (baseline SONRASI): exit=0 GUARD_SELFTEST_PASS (3-katman mutasyon-öncesi; 4 negatif exit-before-mutation; sentinel geri yüklendi)
+preflight_objects(PRE-APPLY, 80 nesne yok): exit=0 CDP3C_PREFLIGHT_OBJECTS_PASS
+up_apply: exit=0
+up_reapply(idempotent): exit=0
+preflight_objects(POST-APPLY, nesneler VAR): exit=1 GATE_FAILED:preflight_objects (fail-closed — beklenen)
+invariants: exit=0 CDP3C_INVARIANTS_PASS
+privilege_matrix(manifest-scoped; trip_save reddedilmedi): exit=0 CDP3C_PRIVILEGE_MATRIX_PASS
+tests(T01–T39): exit=0 CDP3C_TESTS_PASS
+concurrency(5 senaryo): exit=0 CDP3C_CONCURRENCY_PASS
+down_soft: exit=0
+downsoft_assert: exit=0 DOWNSOFT_ASSERT_PASS
+preflight_selftest(AYRI ephemeral DB): exit=0 PREFLIGHT_SELFTEST_PASS
+
+## V9 DÜZELTME KANITLARI (gerçek komut + exit + stdout)
+
+### #1 — preflight_objects GEÇERSİZ DB URL fail-closed (fail-open DEĞİL)
+$ bash cdp3c_preflight_objects.sh 'postgresql://127.0.0.1:1/nope?connect_timeout=1' cdp3c_objects.manifest
+GATE_FAILED:preflight_objects_query(rc=2: psql:error:connectiontoserverat"127.0.0.1",port1failed:ConnectionrefusedIstheserverrunning...)
+exit=1
+# ZORUNLU: non-zero + GATE_FAILED:preflight_objects_query; ÇIKIŞTA HİÇBİR CDP3C_PREFLIGHT_OBJECTS_PASS yok. ✔
+# Kök neden düzeltmesi: sorgu exit code'u ANA shell'de yakalanır (run_q/bool_true); değer yalnız 't'/'f';
+#   eski `[ "$(qbool ...)" = "t" ]` command-substitution içindeki exit'i yutuyordu → fail-open. Artık kapalı.
+
+### #2 — gen_object_manifest GERÇEK multiline CREATE yakalar (satır-bazlı grep KAÇIRIRDI)
+$ printf 'CREATE TABLE\npublic.hidden_multiline(id int);' >> up.sql
+$ bash gen_object_manifest.sh up.sql | grep hidden_multiline
+table:hidden_multiline        # -> CAUGHT
+# Ek: CREATE\nTYPE ve CREATE OR REPLACE\nFUNCTION (ad SONRAKİ satırda) da yakalanır; yorumdaki sahte CREATE sızmaz.
+# Kök neden düzeltmesi: tüm dosya yorum-strip + whitespace-normalize edilir (satır sınırı yok), sonra regex;
+#   manifest_check çapraz-sayımı da --raw (multiline-aware, dup-inclusive) kullanır — overload/format kaçağı fail-closed.
+
+### #3 — guard_selftest sentinel-DOĞRULAMA-öncesi-mutasyon YOK (sentinel yokken ilk DROP'tan önce çıkar)
+$ (public._cdp3c_ephemeral_ok DROP edilmiş) CDP3C_ALLOW_DESTRUCTIVE=1 bash cdp3c_guard_selftest.sh "$URI"
+GUARD_FAILED:ephemeral_sentinel_missing_or_wrong_marker(beklenen 'CDP3C_CI_EPHEMERAL', bulunan '')
+exit=3
+# Script başında TAM 3-katman require_ephemeral (opt-in + yerel host + sentinel MARKER) → hiçbir mutasyon yapılmadan çıkar.
+# baseline sentinel'i yarattıktan SONRA çalıştırıldığında PASS (Bölüm A). Tüm mutasyonlar ON_ERROR_STOP+rc; sonda sentinel geri yüklenip DOĞRULANIR.
+# Workflow: 'baseline' artık 'guard_selftest'ten ÖNCE (sentinel MARKER hazır olsun diye).
+
+## #1(eski) KANIT: combined "drop database; create database" tek -c => ERROR "DROP DATABASE cannot run inside a transaction block". Workflow AYRI -c + rc kullanir.
+## #5(eski) KANIT: command-sub (ST=$(...)) hatada GATE_FAILED (exit=1) -> GATE_FAILED:stack_status(rc=1)
+
+## BÖLÜM B — YEREL preflight (contract): EXPECTED-FAIL (shim'de gerçek Vault yok; CI'da PASS)
+preflight(yerel contract): exit=3 — "PREFLIGHT: supabase_vault extension yok" (extensions adiminda BLOCKED; bolumler gecer)
+
+## BÖLÜM C — selftest negatifleri: preflight_selftest(contract+obje) + guard_selftest(4 negatif) + manifest_selftest(multiline/yorum/overload) yukarıda PASS
+
+## BÖLÜM D — HENÜZ ÇALIŞTIRILMAYAN: GitHub ephemeral CI + PRODUCTION preflight (onay olmadan başlatılmaz)

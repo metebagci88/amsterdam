@@ -1,0 +1,32 @@
+-- =====================================================================
+-- ASALOCAL · CDP-3C · YIKICI GERİ ALMA (INSECURE / DESTRUCTIVE) · REVİZE
+-- ⚠️ ASLA otomatik çalıştırılmaz. Tümü yorumludur. Consent/suppression KANITINI
+--    ve marketing hard-gate'i SİLER → KVKK/İYS kanıt kaybı + güvenlik riski.
+--    Yalnız hukuk onaylı, bilinçli, elle kararla. Vault pepper + kill-switch'e DOKUNMAZ.
+-- =====================================================================
+-- drop table if exists public.anon_consent_current;
+-- drop table if exists public.anon_consent_events;
+-- drop table if exists public.anon_consent_subject;
+-- drop table if exists public.app_privacy_config;
+-- drop table if exists public.member_service_pref_current;
+-- drop table if exists public.member_service_pref_events;
+-- drop table if exists public.service_pref_defaults;
+-- drop table if exists public.member_consent_current;
+-- drop table if exists public.member_consent_events;
+-- drop table if exists public.contact_suppression_current;
+-- drop table if exists public.contact_suppression_events;
+-- drop table if exists public.unsubscribe_tokens;
+-- drop table if exists public.legal_notice_events;
+-- drop table if exists public.readiness_attestations;
+-- drop table if exists public.marketing_config;
+-- drop table if exists public.consent_text_versions;
+-- drop table if exists public.consent_purpose_doc;
+-- drop table if exists public.controller_identity_versions;
+-- drop table if exists public.consent_write_ops;
+-- -- tipler (yalnız hiçbir bağımlılık kalmayınca):
+-- drop type if exists public.readiness_condition; drop type if exists public.readiness_domain;
+-- drop type if exists public.service_pref_key; drop type if exists public.suppression_reason;
+-- drop type if exists public.suppression_scope; drop type if exists public.suppression_channel;
+-- drop type if exists public.controller_type; drop type if exists public.consent_doc_type;
+-- drop type if exists public.consent_source; drop type if exists public.consent_state; drop type if exists public.consent_purpose;
+-- -- Vault pepper: KASITEN dokunulmaz (rotasyon/geçmiş HMAC doğrulaması için).
