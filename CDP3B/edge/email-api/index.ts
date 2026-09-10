@@ -7,6 +7,17 @@
 // - hata maskeleme: ham DB/storage detayı client'a DÖNMEZ; yalnız server log
 // - görsel boyutu gerçek binary'den (client'a güvenilmez)
 // Sanitize mantığı canonical ./email_sanitizer.js (SHA-256 11490786a1d5de4f685c0db25f9555af56cc95611c5e2f6ea09fc8cf15592bf9) ile AYNI; Deno'da deno-dom.
+//
+// ── CDP-3C ADDITIVE (bu dosya CDP-3B email-admin + CDP-3C consent yüzeyini AYNI Edge'de taşır) ──
+// - Yeni action'lar: consent_get / consent_set (yalnız pref_center) / service_pref_set.
+//   Bunlar KULLANICI JWT client'ı (userClient) ile çağrılır -> RLS/auth.uid() caller'a bağlı;
+//   service_role KULLANILMAZ. Herhangi bir authenticated ÜYE erişir.
+// - E-posta-admin action'ları (create/save/publish/...) DEĞİŞMEDEN kalır; svc(service_role)+p_actor
+//   ile çağrılır ve RPC'ler admin rol kapısıyla korunur -> normal üye bunlara ERİŞEMEZ (RPC 'forbidden').
+// - CORS: yalnız https://asalocal.club + https://www.asalocal.club. Bilinmeyen origin -> 403, YAN ETKİ YOK;
+//   ACAO yalnız allowlist origin için yazılır. Access-Control-Allow-Credentials KASITLI yok (JWT, cookie değil).
+// - verify_jwt=true ve tüm dependency pin'leri (std@0.224.0, supabase-js@2.45.4, deno_dom@v0.1.45) KORUNUR.
+// - Bu turda SEND/Resend/outbox/journey YOK; consent grant'i marketing metni olmadan RPC fail-closed reddeder.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -24,11 +35,30 @@ const ALLOWED_VARS = ["first_name","city_name","trip_start_date","trip_end_date"
 const DRAFT_BUCKET = "email-assets-draft", PUBLIC_BUCKET = "email-assets-public";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// ── CDP-3C · consent yüzeyi sunucu-taraflı allowlist'ler (client'a güvenilmez) ──
+// Pref-center'dan yönetilebilen purpose'lar = consent_purpose enum EKSİ cookie-akışı purpose'ları
+// (analytics_storage/advertising_storage yalnız cookie_banner akışına aittir; buradan REDDEDİLİR).
+const PREF_CENTER_PURPOSES = ["email_marketing","sms_marketing","push_marketing",
+  "on_site_personalized_messages","personalization_profiling"] as const;
+const SERVICE_PREF_KEYS = ["trip_created_confirmation","trip_updated_confirmation",
+  "trip_start_minus_7_days","trip_start_minus_1_day","plan_saved_confirmation",
+  "plan_reminder","welcome_service_email"] as const;
+const CONSENT_LOCALES = ["tr","en"] as const;
+
+// CORS allowlist: yalnız www + apex (ADMIN_ORIGINS). Bilinmeyen origin -> ACAO YAZILMAZ (serve girişinde
+// 403 ile yan-etkisiz reddedilir). Access-Control-Allow-Credentials KASITLI olarak yok: bu API kimliği
+// Authorization: Bearer (JWT) ile taşır, cookie kullanmaz -> credentialed CORS gerekmez, '*' de kullanılmaz.
+function originState(origin: string | null) {
+  const present = !!origin;
+  const allow = present && ADMIN_ORIGINS.includes(origin as string);
+  return { present, allow };
+}
 function cors(origin: string | null) {
-  const allow = origin && ADMIN_ORIGINS.includes(origin) ? origin : ADMIN_ORIGINS[0];
-  return { "Access-Control-Allow-Origin": allow, "Vary": "Origin",
+  const h: Record<string,string> = { "Vary": "Origin",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS" };
+  if (originState(origin).allow) h["Access-Control-Allow-Origin"] = origin as string; // yalnız allowlist origin yansıtılır
+  return h;
 }
 const j = (b: unknown, s = 200, origin: string | null = null) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...cors(origin), "Content-Type": "application/json" } });
@@ -121,6 +151,28 @@ function reqStr(v: unknown, max: number, name: string): string {
 }
 class HttpErr extends Error { code: number; constructor(code:number,msg:string){ super(msg); this.code=code; } }
 
+// ── CDP-3C strict şema yardımcıları (fail-closed) ──
+// GERÇEK boolean zorunlu: "false"/"0"/"true"/1/0 gibi truthy/stringy değerler REDDEDİLİR.
+function strictBool(v: unknown, name: string): boolean {
+  if (v !== true && v !== false) throw new HttpErr(422, "bad_bool:"+name);
+  return v;
+}
+// yalnız sunucu allowlist'inden değer; aksi 422 (purpose/service-pref key/locale)
+function inSet<T extends string>(v: unknown, allowed: readonly T[], name: string): T {
+  if (typeof v !== "string" || !(allowed as readonly string[]).includes(v)) throw new HttpErr(422, "bad_value:"+name);
+  return v as T;
+}
+// uuid veya null; başka her şey 422
+function optUuidOrNull(v: unknown, name: string): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== "string" || !UUID_RE.test(v)) throw new HttpErr(422, "bad_uuid:"+name);
+  return v;
+}
+// closed-field: yalnız izinli alan adları; bilinmeyen alan -> 400 (fail-closed)
+function closedFields(body: Record<string, unknown>, allowed: readonly string[]) {
+  for (const k of Object.keys(body)) if (!allowed.includes(k)) throw new HttpErr(400, "unknown_field:"+k);
+}
+
 // FAIL-CLOSED içerik denetimi (yalnız istemciye güvenilmez): kalıcı girdilerde (source_html + builder_json +
 // sanitized_html) YALNIZ manifest asset'lerinin SUNUCU-TÜRETİLMİŞ kanonik public URL'leri bulunabilir.
 // signed endpoint / draft bucket / token / geçici editör alanları YASAK. URL-parse + manifest eşleşmesi
@@ -159,6 +211,11 @@ async function assertCanonicalAssets(svc: any, supabaseUrl: string, manifest: an
 
 serve(async (req) => {
   const origin = req.headers.get("Origin");
+  const os = originState(origin);
+  // CORS fail-closed: origin VARSA ve allowlist'te DEĞİLSE 403, YAN ETKİ YOK (OPTIONS + POST; auth/DB'ye ulaşmaz).
+  // ACAO yazılmaz. no-origin (present=false) mevcut güvenli sözleşmeyle uyumlu: reddedilmez (same-origin/native;
+  // tarayıcı cross-origin isteklerinde Origin'i her zaman gönderir) ama ACAO yine yazılmaz.
+  if (os.present && !os.allow) return j({ ok:false, error:"forbidden_origin" }, 403, origin);
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors(origin) });
   if (req.method !== "POST") return j({ ok:false, error:"method_not_allowed" }, 405, origin);
 
@@ -181,7 +238,8 @@ serve(async (req) => {
   const actor = ures.user.id;
   const svc = createClient(SUPABASE_URL, SERVICE);
 
-  const WRITE = ["create","save","publish","new_version","duplicate","archive","asset_upload","import_host_images","asset_gc"];
+  const WRITE = ["create","save","publish","new_version","duplicate","archive","asset_upload","import_host_images","asset_gc",
+    "consent_set","service_pref_set"]; // CDP-3C consent write'ları da request_id+idem ZORUNLU
   // write'larda request_id + idem ZORUNLU (sessizce üretilmez)
   let reqId = "", idem = "";
   if (WRITE.includes(action)) {
@@ -405,6 +463,39 @@ serve(async (req) => {
         return j({ ...out, storage_failed }, 200, origin);
       }
 
+      // ── CDP-3C · üye consent / servis-tercihi yüzeyi (authenticated; SEND YOK) ──
+      // KULLANICI JWT client'ı (userClient) ile çağrılır -> RLS/auth.uid() caller'a bağlı; svc(service_role)
+      // KULLANILMAZ. Normal üye buraya erişir; e-posta-admin action'larına erişemez (onların RPC'leri admin kapılı).
+      // source client'tan ALINMAZ (RPC içinde pref_center sabit). Ham DB hatası maskelenir (aşağıdaki catch).
+      case "consent_get": {
+        closedFields(body, ["action"]); // salt-okuma; başka alan kabul edilmez
+        const data = await rpc(userClient, "consent_get_my_state", {});
+        return new Response(JSON.stringify({ ok:true, state:data }),
+          { status:200, headers:{ ...cors(origin), "Content-Type":"application/json", "Cache-Control":"no-store" } });
+      }
+      case "consent_set": {
+        // YALNIZ pref_center yönetimli purpose. request_id+idem yukarıdaki WRITE kapısında doğrulandı.
+        closedFields(body, ["action","purpose","grant","text_version_id","locale","request_id","idem"]);
+        const purpose = inSet(body.purpose, PREF_CENTER_PURPOSES, "purpose");   // analytics/advertising REDDEDİLİR
+        const grant = strictBool(body.grant, "grant");                          // "false"/"0" reddedilir
+        const locale = (body.locale===undefined || body.locale===null) ? "tr" : inSet(body.locale, CONSENT_LOCALES, "locale");
+        const tvid = optUuidOrNull(body.text_version_id, "text_version_id");
+        if (!grant && tvid !== null) throw new HttpErr(422, "withdraw_text_version_must_be_null"); // withdraw -> metin sürümü null
+        // Not: grant=true (marketing açma) aktif hukuk metni yoksa RPC fail-closed reddeder (no_active_controller /
+        // invalid_or_stale_consent_version / marketing_capture_disabled) -> catch bunları 409'a maskeler.
+        const data = await rpc(userClient, "consent_set_pref_center", {
+          p_purpose:purpose, p_grant:grant, p_text_version_id:tvid, p_locale:locale, p_request_id:reqId, p_idem:idem });
+        return j({ ok:true, result:data }, 200, origin);
+      }
+      case "service_pref_set": {
+        closedFields(body, ["action","key","enabled","request_id","idem"]);
+        const key = inSet(body.key, SERVICE_PREF_KEYS, "key");                  // yalnız servis e-posta anahtarları
+        const enabled = strictBool(body.enabled, "enabled");                    // "false"/"0" reddedilir
+        const data = await rpc(userClient, "service_pref_set", {
+          p_key:key, p_enabled:enabled, p_request_id:reqId, p_idem:idem });
+        return j({ ok:true, result:data }, 200, origin);
+      }
+
       default: return j({ ok:false, error:"unknown_action" }, 400, origin);
     }
   } catch (e) {
@@ -414,9 +505,17 @@ serve(async (req) => {
     const msg = String((e as Error)?.message || "");
     const known = ["forbidden","not_admin","not_found","idempotency_conflict","idem_required","admin_writes_disabled",
       "no_draft_version","already_published","empty_sanitized_html","validation_not_ok","missing_unsubscribe",
-      "asset_not_promoted","asset_not_found","content_hash_mismatch","bad_public_path","draft_exists","version_template_mismatch"];
+      "asset_not_promoted","asset_not_found","content_hash_mismatch","bad_public_path","draft_exists","version_template_mismatch",
+      // CDP-3C consent RPC kodları (maskeli):
+      "analytics_managed_by_cookie_flow","withdraw_text_version_must_be_null","no_active_controller",
+      "invalid_or_stale_consent_version","marketing_capture_disabled","cookie_purpose_requires_cookie_banner",
+      "cookie_banner_purpose_only","signup_cannot_grant_marketing","anon_purpose_not_allowed"];
     const hit = known.find(k => msg.includes(k));
-    return j({ ok:false, error: hit || "internal_error" }, hit==="forbidden"||hit==="not_admin" ? 403 : (hit==="idempotency_conflict" ? 409 : 400), origin);
+    // Sabit+maskeli durum kodları: 403 (yetki), 409 (çakışma/aktif-metin yok), 422 (kapalı-alan/şema), aksi 400.
+    const S409 = new Set(["idempotency_conflict","no_active_controller","invalid_or_stale_consent_version","marketing_capture_disabled","signup_cannot_grant_marketing"]);
+    const S422 = new Set(["analytics_managed_by_cookie_flow","withdraw_text_version_must_be_null","cookie_purpose_requires_cookie_banner","cookie_banner_purpose_only","anon_purpose_not_allowed"]);
+    const code = (hit==="forbidden"||hit==="not_admin") ? 403 : S409.has(hit as string) ? 409 : S422.has(hit as string) ? 422 : 400;
+    return j({ ok:false, error: hit || "internal_error" }, code, origin);
   }
 });
 

@@ -2471,7 +2471,7 @@ const ASA = (function(){
     el("asaLogout").onclick=()=>logout();
     renderSeg();
   }
-  const SEGS=[["passport","Kart"],["points","Puan & Seviye"],["likes","Beğeniler"],["posts","Paylaşımlarım"],["taste","Zevk Grupları"]];
+  const SEGS=[["passport","Kart"],["points","Puan & Seviye"],["likes","Beğeniler"],["posts","Paylaşımlarım"],["taste","Zevk Grupları"],["prefs","E-posta Tercihleri"]];
   function seg(s){ curSeg=s; render(); }
   function renderSeg(){
     const b=el("segBody"); if(!b) return;
@@ -2480,6 +2480,69 @@ const ASA = (function(){
     else if(curSeg==="likes"){ b.innerHTML=likesHtml(); }
     else if(curSeg==="posts"){ b.innerHTML=postsHtml(); loadPosts(); }
     else if(curSeg==="taste"){ b.innerHTML=tasteHtml(); loadTaste(); }
+    else if(curSeg==="prefs"){ b.innerHTML=prefsShellHtml(); loadPrefs(); }
+  }
+  /* ---------- CDP-3C · Üye Tercih Merkezi (yalnız SERVİS e-posta tercihleri) ----------
+     - Bugünkü ürün durumu: pazarlama/SMS/push/reklam/profilleme İZİN kutuları bu ekranda YOK (aktif hukuk metni yok).
+       Pazarlama yüzeyi bu turda AÇILMAZ ve "otomatik açılır" iddiası YOKTUR; ayrı bir fazın işidir.
+     - Yalnız consent_get_my_state (okuma) + service_pref_set (yazma), authenticated RPC (auth.uid()). source yok.
+     - config_pending dürüstçe "Varsayılan belirlenmedi" gösterilir. "Tümünü reddet" kontrolü YOK (bugün gösterilmiyor).
+     - İki mevcut kullanıcıya popup/backfill/zorunlu re-consent YOK: sekme yalnız kullanıcı açınca yüklenir. */
+  const CDP3C_PREF_LABELS={ trip_created_confirmation:"Seyahat oluşturuldu bilgisi", trip_updated_confirmation:"Seyahat güncellendi bilgisi",
+    trip_start_minus_7_days:"Seyahate 7 gün kala hatırlatma", trip_start_minus_1_day:"Seyahate 1 gün kala hatırlatma",
+    plan_saved_confirmation:"Plan kaydedildi bilgisi", plan_reminder:"Plan hatırlatma", welcome_service_email:"Hoş geldin e-postası" };
+  function prefsShellHtml(){
+    return '<div class="max-w-md mx-auto"><h2 class="font-headline-md text-headline-md text-on-surface mb-1">E-posta Tercihleri</h2>'
+      +'<p class="text-on-surface-variant text-body-sm mb-4">Sana gönderilen servis (işlemsel) e-postalarını buradan yönetebilirsin. '
+      +'Pazarlama e-postaları bu üründe henüz kullanımda değildir.</p>'
+      +'<div id="asaPrefsErr" class="text-error text-[13px] mb-2 empty:mb-0"></div>'
+      +'<div id="asaPrefsBody"></div></div>';
+  }
+  async function loadPrefs(){
+    const wrap=el("asaPrefsBody"); if(!wrap) return;
+    const er=el("asaPrefsErr"); if(er)er.textContent="";
+    if(!session||!db){ wrap.innerHTML='<p class="text-on-surface-variant text-body-sm">Tercihleri görüntülemek için giriş yapın.</p>'; return; }
+    wrap.innerHTML='<p class="text-on-surface-variant text-body-sm">Yükleniyor…</p>';
+    let st;
+    try{ const {data,error}=await db.rpc("consent_get_my_state"); if(error) throw error; st=data||{}; }
+    catch(e){ wrap.innerHTML='<p class="text-error text-body-sm">Tercihler yüklenemedi. Daha sonra tekrar deneyin.</p>'; return; }
+    const prefs=(st&&st.service_prefs)||{};
+    const keys=Object.keys(prefs);
+    // Bu turda YALNIZ servis e-posta tercihleri gösterilir; pazarlama yüzeyi/otomatik-açılma YOK.
+    let rows;
+    if(!keys.length){ rows='<p class="text-on-surface-variant text-body-sm">Gösterilecek servis tercihi yok.</p>'; }
+    else{
+      rows=keys.map(function(k){
+        const v=prefs[k]; const label=CDP3C_PREF_LABELS[k]||k;
+        const pending=(v==="config_pending"); const on=(v===true);
+        const stateTxt=pending?'<span class="text-on-surface-variant">Varsayılan belirlenmedi</span>':(on?'<span class="text-primary">Açık</span>':'<span class="text-on-surface-variant">Kapalı</span>');
+        // pending veya kapalı -> "Aç" (enabled=true); açık -> "Kapat" (enabled=false)
+        const nextEnabled=!on; const btnLabel=on?'Kapat':'Aç';
+        return '<div class="flex items-center justify-between gap-3 py-3 border-b border-outline-variant/60">'
+          +'<div class="min-w-0"><div class="text-body-lg text-on-surface truncate">'+esc(label)+'</div>'
+          +'<div class="text-[12.5px] mt-0.5">'+stateTxt+'</div></div>'
+          +'<button type="button" data-prefkey="'+esc(k)+'" data-enable="'+(nextEnabled?'1':'0')+'" '
+          +'class="shrink-0 rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-1.5 hover:bg-surface-container transition-colors">'+btnLabel+'</button>'
+          +'</div>';
+      }).join("");
+    }
+    wrap.innerHTML=rows; // yalnız servis tercihleri (pazarlama yüzeyi yok)
+    // buton kablolaması (inline onclick yok)
+    const btns=wrap.querySelectorAll("button[data-prefkey]");
+    for(let i=0;i<btns.length;i++){
+      btns[i].addEventListener("click", function(){ setServicePref(this.getAttribute("data-prefkey"), this.getAttribute("data-enable")==="1", this); });
+    }
+  }
+  async function setServicePref(key, enabled, btn){
+    if(!session||!db) return;
+    const er=el("asaPrefsErr"); if(er)er.textContent="";
+    const prev=btn.textContent; btn.disabled=true; btn.textContent="…";
+    const idem=(crypto&&crypto.randomUUID)?crypto.randomUUID():(String(Date.now())+Math.random());
+    try{
+      const {error}=await db.rpc("service_pref_set",{ p_key:key, p_enabled:(enabled===true), p_request_id:"pc-"+Date.now(), p_idem:idem });
+      if(error) throw error;
+    }catch(e){ btn.disabled=false; btn.textContent=prev; if(er)er.textContent="İşlem tamamlanamadı. Tekrar deneyin."; return; }
+    loadPrefs(); // sunucu durumunu yeniden oku (iyimser gösterim yok)
   }
   function passportHtml(){
     const points=(member&&member.points)||0; const t=tierFor(points);

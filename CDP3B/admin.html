@@ -253,6 +253,7 @@ function shell(body){
   if(CAPS.members)  segs.push(["members","Üyeler"]);
   if(CAPS.crm)      segs.push(["segments","Segmentler"]);
   if(CAPS.crm)      segs.push(["email","E-posta"]);   // CDP-3B
+  if(CAPS.crm||CAPS.members) segs.push(["consent","İzin Görünümü"]);   // CDP-3C (salt-okunur)
   if(CAPS.superadmin) segs.push(["changelog","Değişiklik Günlüğü"]);
   if(!segs.some(s=>s[0]===seg)) seg=segs[0][0];
   $("nav").innerHTML=segs.map(s=>'<button class="'+(seg===s[0]?"on":"")+'" onclick="go(\''+s[0]+'\')">'+s[1]+'</button>').join("");
@@ -272,6 +273,7 @@ function render(){
   if(seg==="members") return renderMembers();
   if(seg==="segments") return renderSegments();
   if(seg==="email") return renderEmail();
+  if(seg==="consent") return renderConsent();   // CDP-3C salt-okunur izin görünümü + pazarlama readiness
   if(seg==="changelog") return renderChangeLog();
   if(seg==="dhealth") return renderDataHealth();
 }
@@ -300,6 +302,66 @@ async function renderOzet(){
     +stat(n(c.trips_past),"Geçmiş")+stat(n(c.trips_archived),"Arşiv")
     +stat(n(c.favorites),"Favori")+stat(n(c.comments),"Yorum")+stat(n(c.point_events),"Puan olayı")
     +'</div><div class="panel"><p class="muted">Kullanıcı/üye/seyahat sayıları güvenli admin veri katmanından (canlı) gelir.</p></div>';
+}
+
+/* ---------- CDP-3C · İZİN GÖRÜNÜMÜ (SALT-OKUNUR) + PAZARLAMA READINESS ----------
+   - Admin opt-in VEREMEZ: bu ekranda hiçbir consent yazma/aç-kapa kontrolü YOKTUR.
+   - q_member_consent + marketing_readiness_check yalnız admin-api üzerinden (rol kapılı).
+   - Yanıt allowlist alanlarıyla sınırlı; ham HMAC/parmak izi/idempotency/request_id/evidence GELMEZ/GÖSTERİLMEZ.
+   - Tüm değerler esc() ile basılır. CDP-3B e-posta editörüne DOKUNMAZ (ayrı segment). */
+const CDP3C_PURPOSE_TR={ email_marketing:"E-posta pazarlama", sms_marketing:"SMS pazarlama", push_marketing:"Push pazarlama",
+  on_site_personalized_messages:"Site içi kişiselleştirilmiş mesaj", personalization_profiling:"Kişiselleştirme profili",
+  analytics_storage:"Analitik çerezleri", advertising_storage:"Reklam çerezleri" };
+const CDP3C_SVCKEY_TR={ trip_created_confirmation:"Seyahat oluşturuldu bilgisi", trip_updated_confirmation:"Seyahat güncellendi bilgisi",
+  trip_start_minus_7_days:"Seyahate 7 gün kala", trip_start_minus_1_day:"Seyahate 1 gün kala",
+  plan_saved_confirmation:"Plan kaydedildi bilgisi", plan_reminder:"Plan hatırlatma", welcome_service_email:"Hoş geldin servis e-postası" };
+const CDP3C_STATE_TR={ granted:"Onaylı", denied:"Reddedildi", unknown:"Belirsiz", withdrawn:"Geri çekildi" };
+const cdp3cUuidRe=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function cdp3cLbl(map,k){ return map[k]||k; }
+async function renderConsent(){
+  const head='<div class="panel"><h3 style="margin-bottom:4px">İzin Görünümü (salt-okunur)</h3>'
+    +'<p class="muted">Bu ekran yalnız görüntülemedir. Admin hiçbir kullanıcı için izin (opt-in) veremez. '
+    +'Pazarlama gönderimi ve aktif hukuk metni bu üründe henüz açık değildir.</p></div>';
+  shell('<div id="consentBody">'+head+'<div class="panel skel" style="height:80px"></div></div>');
+  if(!(await isPrivAuthed())){ $("consentBody").innerHTML=head+privLoginHTML(); wirePrivLogin(()=>renderConsent()); return; }
+  // --- Pazarlama readiness durum kutusu (yalnız okuma) ---
+  const rk=await adminApi("marketing_readiness_check",{});
+  let readinessHtml;
+  if(rk.status===401){ $("consentBody").innerHTML=head+privLoginHTML("Oturum sona erdi, tekrar giriş yap."); wirePrivLogin(()=>renderConsent()); return; }
+  if(rk.status!==200){ readinessHtml='<div class="notice err">Pazarlama hazırlık durumu okunamadı ('+esc(apiErrText(rk.status))+').</div>'; }
+  else{
+    const d=(rk.body&&rk.body.data)||{}; const ready=d.ready===true; const missing=Array.isArray(d.missing)?d.missing:[];
+    readinessHtml='<div class="panel"><h3 style="margin-bottom:6px">Pazarlama hazırlığı (readiness)</h3>'
+      +'<p><b>Durum:</b> '+(ready?'<span style="color:#2e7d32">Hazır</span>':'<span style="color:#b26a00">Hazır değil</span>')+'</p>'
+      +(missing.length? '<p class="muted" style="margin-top:4px">Eksik koşullar:</p><ul style="margin:4px 0 0 18px">'+missing.map(m=>'<li>'+esc(String(m))+'</li>').join("")+'</ul>'
+                      : '<p class="muted" style="margin-top:4px">Eksik readiness koşulu yok.</p>')
+      +'<p class="muted" style="margin-top:8px">Not: Pazarlama aktivasyonu bu ekrandan yapılamaz; yalnız durum gösterir.</p></div>';
+  }
+  // --- Üye izin sorgusu (user_id ile) ---
+  const lookup='<div class="panel"><h3 style="margin-bottom:6px">Üye izin durumu</h3>'
+    +'<div class="fld" style="max-width:520px"><label>Kullanıcı ID (UUID)</label>'
+    +'<input id="cc_uid" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off"></div>'
+    +'<button class="btn primary sm" id="cc_go" style="margin-top:8px">İzinleri getir</button>'
+    +'<div class="err" id="cc_err" style="margin-top:6px"></div><div id="cc_out" style="margin-top:12px"></div></div>';
+  $("consentBody").innerHTML=head+readinessHtml+lookup;
+  $("cc_go").onclick=async()=>{
+    const uid=($("cc_uid").value||"").trim(); $("cc_err").textContent=""; $("cc_out").innerHTML="";
+    if(!cdp3cUuidRe.test(uid)){ $("cc_err").textContent="Geçerli bir kullanıcı ID (UUID) girin."; return; }
+    $("cc_go").disabled=true; $("cc_go").textContent="Getiriliyor…";
+    const r=await adminApi("q_member_consent",{user_id:uid});
+    $("cc_go").disabled=false; $("cc_go").textContent="İzinleri getir";
+    if(r.status!==200){ $("cc_err").textContent=apiErrText(r.status); return; }
+    const d=(r.body&&r.body.data)||{}; const cons=Array.isArray(d.consent)?d.consent:[]; const tl=Array.isArray(d.consent_timeline)?d.consent_timeline:[]; const sp=Array.isArray(d.service_prefs)?d.service_prefs:[];
+    const consRows=cons.length? cons.map(x=>'<tr><td>'+esc(cdp3cLbl(CDP3C_PURPOSE_TR,x.purpose))+'</td><td>'+esc(cdp3cLbl(CDP3C_STATE_TR,x.state))+'</td><td>'+esc(String(x.epoch==null?"—":x.epoch))+'</td><td>'+esc(String(x.updated_at||"—"))+'</td></tr>').join("") : '<tr><td colspan="4" class="muted">kayıt yok</td></tr>';
+    const tlRows=tl.length? tl.map(x=>'<tr><td>'+esc(cdp3cLbl(CDP3C_PURPOSE_TR,x.purpose))+'</td><td>'+esc(String(x.action||"—"))+'</td><td>'+esc(String(x.source||"—"))+'</td><td>'+esc(String(x.occurred_at||"—"))+'</td></tr>').join("") : '<tr><td colspan="4" class="muted">kayıt yok</td></tr>';
+    const spRows=sp.length? sp.map(x=>'<tr><td>'+esc(cdp3cLbl(CDP3C_SVCKEY_TR,x.key))+'</td><td>'+(x.enabled===true?"Açık":(x.enabled===false?"Kapalı":"—"))+'</td><td>'+esc(String(x.updated_at||"—"))+'</td></tr>').join("") : '<tr><td colspan="3" class="muted">kayıt yok</td></tr>';
+    $("cc_out").innerHTML=
+      '<h4 style="margin:6px 0">İzin durumu</h4><div class="tablewrap"><table><thead><tr><th>Amaç</th><th>Durum</th><th>Epoch</th><th>Güncelleme</th></tr></thead><tbody>'+consRows+'</tbody></table></div>'
+      +'<h4 style="margin:12px 0 6px">İzin zaman çizelgesi</h4><div class="tablewrap"><table><thead><tr><th>Amaç</th><th>Eylem</th><th>Kaynak</th><th>Zaman</th></tr></thead><tbody>'+tlRows+'</tbody></table></div>'
+      +'<h4 style="margin:12px 0 6px">Servis e-posta tercihleri</h4><div class="tablewrap"><table><thead><tr><th>Tercih</th><th>Durum</th><th>Güncelleme</th></tr></thead><tbody>'+spRows+'</tbody></table></div>'
+      +'<p class="muted" style="margin-top:8px">Salt-okunur. Admin opt-in veremez; ham parmak izi / HMAC / idempotency anahtarı gösterilmez.</p>';
+  };
+  $("cc_uid").onkeydown=e=>{ if(e.key==="Enter")$("cc_go").click(); };
 }
 
 /* ---------- MEKANLAR (değiştirilmedi) ---------- */

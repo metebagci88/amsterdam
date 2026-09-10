@@ -4,7 +4,13 @@
 >
 > _(v8: 8 kapanış — `CDP3C_package/CDP3C_CHANGES_v7_to_v8.md`.)_
 
-**Production etkisi = none.** commit/push yok, GitHub Run yok, migration/Edge/admin deploy yok, kill-switch v3 değişmedi, mevcut iki kullanıcıya backfill/consent/re-consent yok.
+## PRODUCTION UYGULAMA DURUMU (güncel)
+DB katmanı **production'a uygulandı** (asa-local `tosqsabuaomgqjtogdrn`):
+- Migration `cdp3c_consent_v9` (`20260909111712`) — `CDP3C_up.sql` (SHA `19cd2438…`); 20 tablo / 12 type / 48 fonksiyon; RLS enabled+forced+deny-all; marketing kapalı; aktif controller/metin yok; pepper kurulu.
+- Migration `cdp3c_consent_v9_search_path_hardening` (`20260909132039`) — `CDP3C_up_search_path_hardening.sql` (SHA `132718a268569a3a6247142cf343f27fcf58a4a6e2f342db4b8d9879fcbf0389`); 18 fonksiyona sabit `search_path`; gövde değişmedi; advisor `function_search_path_mutable` WARN'ları kapandı.
+- Kayıt adı = dosya adı; dosya SHA'ları repo-kökü `SHA256SUMS`'ta (36/36 OK). Edge/admin/statik **DEPLOY EDİLMEDİ**; kill-switch v3 ve mevcut iki kullanıcı değişmedi.
+
+**CI paketi etkisi = none.** GitHub Run yok, Edge/admin deploy yok, kill-switch v3 değişmedi, mevcut iki kullanıcıya backfill/consent/re-consent yok.
 
 ## 1. Repo hedef ağacı (kanonik)
 ```
