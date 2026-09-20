@@ -1,0 +1,184 @@
+name: CDP-3C Edge Integration Gate
+# Gerçek birleşik Edge handler'larını (email-api + admin-api) ephemeral Supabase üzerinde
+# `supabase functions serve` ile çalıştırır ve GERÇEK HTTP + GERÇEK DB RPC kabul testlerini koşar.
+# CDP-3B gate'leri (cdp3b-gates.yml) DEĞİŞMEZ; bu ayrı bir workflow'dur. Yalnız manuel dispatch.
+on:
+  workflow_dispatch: {}
+  # PR ile OTOMATİK tetiklenir (diğer iki gate gibi). workflow_dispatch tek başına UI'da görünmez
+  # çünkü manuel dispatch yalnız workflow default branch'te (main) varsa listelenir; merge etmediğimiz
+  # için PR tetikleyicisi kullanılır. Same-repo PR -> secrets + docker (supabase start) erişimi var.
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  edge-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI (pinned)
+        uses: supabase/setup-cli@v1
+        with:
+          version: 1.226.4
+
+      - name: SHA256SUMS doğrula (paket bütünlüğü)
+        run: sha256sum -c SHA256SUMS
+
+      - name: Destekleyici testler (birim + statik sözleşme)
+        run: |
+          set -euo pipefail
+          node CDP3C_package/gates/cdp3c_edge_tests.mjs | tee /tmp/supporting.log
+          grep -q "CDP3C_EDGE_TESTS_RESULT=PASS" /tmp/supporting.log || { echo "GATE_FAILED:supporting_tests"; exit 1; }
+
+      - name: Supabase başlat (ephemeral)
+        run: |
+          set -euo pipefail
+          supabase init --force >/dev/null 2>&1 || true
+          supabase start 2>&1 | sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g'
+
+      - name: DB URL + anahtarları yakala
+        id: cfg
+        run: |
+          set -euo pipefail
+          ST=$(supabase status -o json)
+          echo "api_url=$(echo "$ST" | jq -r '.API_URL')" >> "$GITHUB_OUTPUT"
+          echo "db_url=$(echo "$ST" | jq -r '.DB_URL')" >> "$GITHUB_OUTPUT"
+          # anahtarlar log'a BASILMAZ; env dosyasına yazılır
+          echo "$ST" | jq -r '"ANON_KEY="+.ANON_KEY, "SERVICE_KEY="+.SERVICE_ROLE_KEY' > /tmp/keys.env
+          chmod 600 /tmp/keys.env
+
+      - name: Şema uygula (baseline doubles + up + hardening)  [PROD DEĞİL]
+        run: |
+          set -euo pipefail
+          DBURL='${{ steps.cfg.outputs.db_url }}'
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/gates/cdp3c_baseline.sql
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/gates/cdp3c_edge_integration_baseline.sql
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/CDP3C_up.sql
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/CDP3C_up_search_path_hardening.sql
+
+      - name: Fonksiyonları hazırla (gerçek birleşik dosyalar)
+        run: |
+          set -euo pipefail
+          mkdir -p supabase/functions/email-api supabase/functions/admin-api
+          cp CDP3B/edge/email-api/index.ts          supabase/functions/email-api/index.ts
+          cp CDP3B/edge/email-api/email_sanitizer.js supabase/functions/email-api/email_sanitizer.js
+          cp CDP3B/edge/admin-api/index.ts           supabase/functions/admin-api/index.ts
+          # Sunulan dosyaların repo ile byte-exact olduğunu kanıtla
+          diff <(sha256sum CDP3B/edge/email-api/index.ts | cut -d' ' -f1) <(sha256sum supabase/functions/email-api/index.ts | cut -d' ' -f1)
+          diff <(sha256sum CDP3B/edge/admin-api/index.ts | cut -d' ' -f1) <(sha256sum supabase/functions/admin-api/index.ts | cut -d' ' -f1)
+
+      - name: Functions serve (arka plan)
+        run: |
+          set -euo pipefail
+          # --no-verify-jwt: platform kapısını devre dışı bırakır ki handler'ın KENDİ auth/origin mantığı
+          # (origin->403, getUser->401, method->405) test edilebilsin. Prod'da verify_jwt=true ayrı platform ayarıdır.
+          nohup supabase functions serve --no-verify-jwt > /tmp/serve.log 2>&1 &
+          echo $! > /tmp/serve.pid
+
+      - name: "Functions readiness (FAIL-CLOSED: gercek 405 gorulene kadar)"
+        run: |
+          set -euo pipefail
+          URL='${{ steps.cfg.outputs.api_url }}/functions/v1/email-api'
+          ok=0
+          for i in $(seq 1 45); do
+            # GET (POST değil) -> handler method kontrolü -> 405. Yalnız GERÇEK 405 hazır sayılır.
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X GET "$URL" || echo "000")
+            if [ "$code" = "405" ]; then ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "GATE_FAILED:functions_readiness (email-api beklenen 405 vermedi; son kod=$code)"
+            echo "---- serve.log (redakte) ----"
+            sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g' /tmp/serve.log | tail -50 || true
+            exit 1
+          fi
+          echo "functions_ready (405 alındı)"
+
+      - name: Test kullanıcıları + rol + hedef üye seed
+        run: |
+          set -euo pipefail
+          source /tmp/keys.env
+          API='${{ steps.cfg.outputs.api_url }}'; DBURL='${{ steps.cfg.outputs.db_url }}'
+          mkuser(){ curl -s -X POST "$API/auth/v1/admin/users" -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" -H "Content-Type: application/json" --data "{\"email\":\"$1\",\"password\":\"$2\",\"email_confirm\":true}" | jq -r '.id'; }
+          signin(){ curl -s -X POST "$API/auth/v1/token?grant_type=password" -H "apikey: $ANON_KEY" -H "Content-Type: application/json" --data "{\"email\":\"$1\",\"password\":\"$2\"}" | jq -r '.access_token'; }
+          MUID=$(mkuser "ci-member@asalocal.test" "Passw0rd!123")
+          AUID=$(mkuser "ci-admin@asalocal.test"  "Passw0rd!123")
+          MEMBER_JWT=$(signin "ci-member@asalocal.test" "Passw0rd!123")
+          ADMIN_JWT=$(signin "ci-admin@asalocal.test"  "Passw0rd!123")
+          [ -n "$MEMBER_JWT" ] && [ "$MEMBER_JWT" != "null" ] || { echo "GATE_FAILED:member_jwt"; exit 1; }
+          [ -n "$ADMIN_JWT" ] && [ "$ADMIN_JWT" != "null" ] || { echo "GATE_FAILED:admin_jwt"; exit 1; }
+          psql "$DBURL" -v ON_ERROR_STOP=1 -c "insert into public.members(user_id,email) values ('$MUID','ci-member@asalocal.test') on conflict do nothing;"
+          psql "$DBURL" -v ON_ERROR_STOP=1 -c "insert into public.admin_users(user_id,active) values ('$AUID',true) on conflict do nothing;"
+          psql "$DBURL" -v ON_ERROR_STOP=1 -c "insert into public.admin_roles(user_id,role) values ('$AUID','super_admin') on conflict do nothing;"
+          # JWT'ler log'a basılmaz; env dosyasına yazılır
+          { echo "MEMBER_JWT=$MEMBER_JWT"; echo "ADMIN_JWT=$ADMIN_JWT"; echo "TARGET_UID=$MUID"; } > /tmp/jwts.env
+          chmod 600 /tmp/jwts.env
+
+      - name: HTTP suite (gerçek HTTP/RPC)
+        run: |
+          set -o pipefail
+          source /tmp/keys.env; source /tmp/jwts.env
+          export API_URL='${{ steps.cfg.outputs.api_url }}'
+          export FN_EMAIL="$API_URL/functions/v1/email-api"
+          export FN_ADMIN="$API_URL/functions/v1/admin-api"
+          export ANON_KEY SERVICE_KEY MEMBER_JWT ADMIN_JWT TARGET_UID
+          export DBURL='${{ steps.cfg.outputs.db_url }}'
+          # tee ile log'a yaz; pipefail ile GERÇEK exit code korunur
+          bash CDP3C_package/gates/cdp3c_edge_integration.sh 2>&1 | tee /tmp/integration.log
+          grep -q "CDP3C_EDGE_HTTP_SUITE_PASS" /tmp/integration.log || { echo "GATE_FAILED:http_suite"; exit 1; }
+
+      - name: Artifact loglarını REDAKTE et (JWT/anahtar çıkar)
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/artifact
+          REDACT="s#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g"
+          for f in supporting serve integration; do
+            [ -f /tmp/$f.log ] && sed -E "$REDACT" /tmp/$f.log > /tmp/artifact/$f.log || true
+          done
+
+      - name: Secret scan (redakte artifact temiz olmalı)
+        if: always()
+        run: |
+          set -euo pipefail
+          leak=0
+          for f in /tmp/artifact/*.log; do
+            [ -f "$f" ] || continue
+            if grep -Eo 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}' "$f"; then
+              echo "leak in $f"; rm -f "$f"; leak=1   # sızıntılı dosya artifact'e KONMAZ
+            fi
+          done
+          echo "secret_scan leak=$leak" | tee /tmp/artifact/secret_scan.txt
+          [ "$leak" = "0" ] || { echo "GATE_FAILED:secret_scan"; exit 1; }
+          echo "SECRET_SCAN_CLEAN"
+
+      - name: Teardown + residue=0 (stop exit + container + volume)
+        if: always()
+        run: |
+          set -uo pipefail
+          supabase stop --no-backup > /tmp/teardown.log 2>&1
+          STOP_RC=$?
+          sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g' /tmp/teardown.log > /tmp/artifact/teardown.log || true
+          C=$(docker ps -a --filter "name=supabase" --format '{{.Names}}' | wc -l | tr -d ' ')
+          V=$(docker volume ls --filter "name=supabase" --format '{{.Name}}' | wc -l | tr -d ' ')
+          echo "stop_exit=$STOP_RC container_count=$C volume_count=$V" | tee -a /tmp/artifact/teardown.log
+          if [ "$STOP_RC" != "0" ] || [ "$C" != "0" ] || [ "$V" != "0" ]; then
+            echo "GATE_FAILED:teardown_residue stop_exit=$STOP_RC c=$C v=$V"; exit 1; fi
+          echo "TEARDOWN_RESIDUE_ZERO"
+
+      - name: Nihai sentinel (yalnız her şey yeşilse)
+        if: success()
+        run: echo "LOCAL_CDP3C_EDGE_INTEGRATION_PASS"
+
+      - name: Tek artifact yükle (redakte; her durumda)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdp3c-edge-integration-logs
+          path: /tmp/artifact/
+          if-no-files-found: warn

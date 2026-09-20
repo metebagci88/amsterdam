@@ -11,6 +11,13 @@
 
 **Durum:** production'a **uygulanmadı**, CI **koşulmadı**, commit/push **yok**. Mevcut hesaplara veri yazılmadı, aktif hukuk metni oluşturulmadı, Resend/DNS/outbox/journey açılmadı, mevcut iki kullanıcıya backfill/consent/re-consent yapılmadı. admin-delete-user **kill-switch v3** canlı ve **dokunulmadı** (bu paket onu içermez/değiştirmez). **Production etkisi = none.**
 
+### 0.1 GÜNCELLEME — DB katmanı production'a UYGULANDI (Part A)
+Yukarıdaki "uygulanmadı" ifadeleri v9 paket-hazırlık anına aittir. Sonrasında **yalnız DB katmanı** kontrollü olarak production'a (`tosqsabuaomgqjtogdrn`) uygulandı; Edge/admin/statik **hâlâ deploy EDİLMEDİ**:
+- `cdp3c_consent_v9` (`20260909111712`) — `CDP3C_up.sql` SHA `19cd24384d2715e306ab5fff3df96ab73b6aa2780fd01925a1ae8fecac0dc079`. Fidelity: prosrc/enum/kolon byte-exact MATCH; 20 tablo / 12 type / 48 fonksiyon; RLS enabled+forced+deny-all; marketing+capture OFF; aktif controller/metin YOK; pepper kuruldu (değer gösterilmedi); iki kullanıcı ve kill-switch v3 değişmedi.
+- `cdp3c_consent_v9_search_path_hardening` (`20260909132039`) — `CDP3C_up_search_path_hardening.sql` SHA `132718a268569a3a6247142cf343f27fcf58a4a6e2f342db4b8d9879fcbf0389`. 18 fonksiyona `SET search_path=public,extensions`; gövde (prosrc) değişmedi; advisor `function_search_path_mutable` 18→0; 3 authenticated RPC ve ayrıcalıklar değişmedi.
+
+**Source-control paritesi:** Her iki dosya repo-kökü `SHA256SUMS`'ta (36/36 `-c` OK); production migration **kayıt adı = dosya adı**; kayıt version'ı ile dosya SHA'sı eşleşir. Hardening production'a **yeniden uygulanmadı** — bu tur yalnız repo paritesi eklendi.
+
 **Bu turun farkı:** 16 bağımsız-inceleme bulgusu gerçek dosyalarda düzeltildi (eşleme: `CDP3C_CHANGES_v3_to_v4.md`) ve tüm SQL + gate'ler **gerçek gömülü Postgres 16.2 üzerinde (yerel, production değil)** çalıştırılıp doğrulandı.
 
 ## 1. Yerel çalıştırma kanıtı (CI DEĞİL, production DEĞİL)
