@@ -154,6 +154,21 @@ Bağımsız inceleme, gate'in yanlış-pozitif/negatif riskini işaret etti. YAL
 Yerel doğrulama: `bash -n` OK, 3 workflow YAML OK, destekleyici test 56/56 PASS. email-api/admin-api/admin.html/
 şehir SPA'ları/cookie/SQL **byte-değişmedi** (git status ile doğrulandı).
 
+## EK-3: CDP-3B gate re-pin + teardown sertleştirme (yalnız manifest/workflow; ürün kodu byte-exact)
+PR #3'te CDP-3B Gates kırmızıydı; kök neden `GATE_FAILED:sha256sums_mismatch` — CDP-3B kendi iç manifesti
+`CDP3B/SHA256SUMS` ile dosyaları byte-pinliyor; consent yüzeyini CDP-3B dosyalarına additive eklediğimiz için
+`admin.html` + `edge/email-api/index.ts` hash'leri değişti ve yeni `edge/admin-api/index.ts` pinli değildi.
+Onaylı düzeltme (yalnız manifest/workflow, ürün mantığına DOKUNULMADAN):
+1. `CDP3B/SHA256SUMS` bilinçli re-pin: `admin.html`→`dc87f68d…`, `edge/email-api/index.ts`→`3464cddb…`,
+   yeni `edge/admin-api/index.ts`→`880dd2c4…`. Diğer CDP-3B girdileri byte-değişmedi. (`sha256sum -c` = 22/22 OK.)
+2. `cdp3b-gates.yml` teardown sertleştirme: `functions serve` PID'i `/tmp/cdp3b_serve.pid`'e yazılır; teardown
+   başında TERM + sınırlı bekleme, gerekirse KILL + tekrar doğrulama; sonra `supabase stop --no-backup`.
+   Artık TÜM koşullar istenir ve maskelenmez: `serve_process=stopped`, `supabase_stop=ok`, `container_count=0`,
+   `volume_count=0`, `residue=zero`. (teardown residue artık "ikincil" sayılmıyor; ilk sınıf gate koşulu.)
+Ürün dosyaları (admin.html, email-api, admin-api, şehir SPA'ları, CDP-3C SQL, cookie) `a6bc486` ile **byte-exact**
+kalır (git diff ile kanıtlandı). CDP-3B eski suite'i (SHA, sanitizer, deno check/test, edge runtime, E2E, admin
+reopen, GrapesJS serialize) re-pin sonrası eksiksiz koşar; assertion gevşetme/skip YOK.
+
 ## Durma
-Tüm 10 kapanış + 5 kabul düzeltmesi + 6 harness düzeltmesi tamamlandı. Gerçek bir güvenlik riski/çakışma
-bulunmadı. Branch push + entegrasyon gate dispatch → yeşilse tek kontrollü deploy + canlı kabul (sonraki adım).
+Tüm 10 kapanış + 5 kabul + 6 harness + CDP-3B re-pin/teardown düzeltmesi tamamlandı. Gerçek bir güvenlik
+riski/çakışma bulunmadı. Push + PR #3'te üç gate yeşilse: merge YOK, tek kontrollü deploy + canlı kabul (sonraki adım).
