@@ -46,6 +46,8 @@ jobs:
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/gates/cdp3c_edge_integration_baseline.sql
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/CDP3C_up.sql
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/CDP3C_up_search_path_hardening.sql
+          # CI-ONLY: CDP-3B önceki-faz seed (email_templates) — production'da ZATEN var; CDP3D FK'si için gerekli
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/gates/cdp3d_ci_baseline.sql
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/CDP3D_up.sql
           # ikinci apply idempotent olmalı (additive/if-not-exists)
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/CDP3D_up.sql
