@@ -3,7 +3,12 @@ name: CDP-3C Edge Integration Gate
 # `supabase functions serve` ile çalıştırır ve GERÇEK HTTP + GERÇEK DB RPC kabul testlerini koşar.
 # CDP-3B gate'leri (cdp3b-gates.yml) DEĞİŞMEZ; bu ayrı bir workflow'dur. Yalnız manuel dispatch.
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
+  # PR ile OTOMATİK tetiklenir (diğer iki gate gibi). workflow_dispatch tek başına UI'da görünmez
+  # çünkü manuel dispatch yalnız workflow default branch'te (main) varsa listelenir; merge etmediğimiz
+  # için PR tetikleyicisi kullanılır. Same-repo PR -> secrets + docker (supabase start) erişimi var.
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
