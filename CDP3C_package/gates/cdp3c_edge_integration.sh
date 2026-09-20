@@ -13,7 +13,7 @@
 #   ADMIN_JWT        -> super_admin access_token
 #   TARGET_UID       -> q_member_consent için hedef üye uid (members'ta var)
 #   DBURL            -> psql bağlantı dizesi (yan-etki doğrulaması için)
-# Çıkış: tüm testler geçerse "CDP3C_EDGE_INTEGRATION_PASS", aksi ilk hatada exit 1.
+# Çıkış: tüm HTTP testleri geçerse "CDP3C_EDGE_HTTP_SUITE_PASS", aksi ilk hatada exit 1.
 # =====================================================================
 set -uo pipefail
 ORIGIN_OK="https://www.asalocal.club"
@@ -101,12 +101,27 @@ after=$(count_consent_events); [ "$before" = "$after" ] || die "marketing_grant_
 before=$(count_consent_events); req POST "$FN_EMAIL" "$ORIGIN_OK" "$MEMBER_JWT" '{"action":"consent_get"}' >/dev/null; after=$(count_consent_events)
 [ "$before" = "$after" ] || die "no_auto_write" "consent_get consent_events üretti (backfill/otomatik yazım olmamalı)"; okk; note "otomatik backfill/yazım yok (consent_get yan etkisiz)"
 
-# --- 13) admin-api q_member_consent: super_admin -> 200 + yalnız allowlist alanlar ---
+# --- 13) admin-api q_member_consent: super_admin -> 200 + YALNIZ .data allowlist ---
+# NOT: Üst seviye {request_id,data} MEŞRU admin sözleşmesidir; leak kontrolü YALNIZ .data üzerinde yapılır.
 QMC='{"action":"q_member_consent","params":{"user_id":"'$TARGET_UID'"}}'
 s=$(req POST "$FN_ADMIN" "$ORIGIN_OK" "$ADMIN_JWT" "$QMC"); [ "$s" = "200" ] || die "admin_qmc_200" "beklenen 200, gelen $s ($(body))"
-B=$(body)
-echo "$B" | grep -q '"consent"' && echo "$B" | grep -q '"consent_timeline"' && echo "$B" | grep -q '"service_prefs"' || die "admin_qmc_allowlist" "allowlist alanları eksik: $B"
-echo "$B" | grep -Eiq 'hmac|fingerprint|idempotency|evidence|request_id' && die "admin_qmc_leak" "yasak alan sızdı: $B"; okk; note "admin q_member_consent super_admin -> 200 allowlist, sızıntı yok"
+B=$(body); DATA=$(echo "$B" | jq -c '.data' 2>/dev/null)
+[ -n "$DATA" ] && [ "$DATA" != "null" ] || die "admin_qmc_data" ".data yok: $B"
+# .data üst seviye anahtarları YALNIZ consent, consent_timeline, service_prefs
+TOPKEYS=$(echo "$DATA" | jq -r 'keys_unsorted | sort | join(",")')
+[ "$TOPKEYS" = "consent,consent_timeline,service_prefs" ] || die "admin_qmc_topkeys" "beklenen 3 anahtar; gelen: $TOPKEYS"
+# consent[] yalnız: purpose,state,text_version_id,epoch,updated_at
+CBAD=$(echo "$DATA" | jq -r '[.consent[]?|keys_unsorted[]]|unique - ["purpose","state","text_version_id","epoch","updated_at"]|join(",")')
+[ -z "$CBAD" ] || die "admin_qmc_consent_keys" "consent fazla anahtar: $CBAD"
+# consent_timeline[] yalnız: purpose,action,text_version_id,source,occurred_at
+TBAD=$(echo "$DATA" | jq -r '[.consent_timeline[]?|keys_unsorted[]]|unique - ["purpose","action","text_version_id","source","occurred_at"]|join(",")')
+[ -z "$TBAD" ] || die "admin_qmc_timeline_keys" "consent_timeline fazla anahtar: $TBAD"
+# service_prefs[] yalnız: key,enabled,updated_at
+SBAD=$(echo "$DATA" | jq -r '[.service_prefs[]?|keys_unsorted[]]|unique - ["key","enabled","updated_at"]|join(",")')
+[ -z "$SBAD" ] || die "admin_qmc_prefs_keys" "service_prefs fazla anahtar: $SBAD"
+# .data İÇİNDE yasak alan (üst seviye request_id hariç): hmac/fingerprint/idempotency/evidence/request_id
+echo "$DATA" | grep -Eiq 'hmac|fingerprint|idempotency|evidence|request_id' && die "admin_qmc_leak" ".data içinde yasak alan: $DATA"
+okk; note "admin q_member_consent -> 200; .data yalnız allowlist (üst seviye request_id meşru)"
 
 # --- 14) admin-api q_member_consent: normal üye -> 403 ---
 s=$(req POST "$FN_ADMIN" "$ORIGIN_OK" "$MEMBER_JWT" "$QMC"); { [ "$s" = "403" ]; } || die "admin_qmc_member_403" "beklenen 403, gelen $s ($(body))"; okk; note "admin q_member_consent normal üye -> 403"
@@ -119,5 +134,7 @@ echo "$(body)" | grep -q '"ready":false' || die "readiness_false" "ready:false d
 s=$(req POST "$FN_ADMIN" "$ORIGIN_OK" "$ADMIN_JWT" '{"action":"consent_set","params":{}}'); [ "$s" = "400" ] || die "admin_no_optin" "admin consent_set kabul edilmemeli, gelen $s"; okk; note "admin opt-in/consent yazma action'ı yok -> 400"
 
 echo "==============================="
-echo "CDP3C_EDGE_INTEGRATION pass=$pass fail=$fail"
-echo "CDP3C_EDGE_INTEGRATION_PASS"
+echo "CDP3C_EDGE_HTTP_SUITE pass=$pass fail=$fail"
+# Bu YALNIZ HTTP-suite sonucudur. Nihai başarı sentinel'i (LOCAL_CDP3C_EDGE_INTEGRATION_PASS)
+# workflow'da secret-scan + teardown'dan SONRA ayrı if:success adımında basılır.
+echo "CDP3C_EDGE_HTTP_SUITE_PASS"

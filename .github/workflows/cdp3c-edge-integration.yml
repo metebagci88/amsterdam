@@ -24,6 +24,12 @@ jobs:
       - name: SHA256SUMS doğrula (paket bütünlüğü)
         run: sha256sum -c SHA256SUMS
 
+      - name: Destekleyici testler (birim + statik sözleşme)
+        run: |
+          set -euo pipefail
+          node CDP3C_package/gates/cdp3c_edge_tests.mjs | tee /tmp/supporting.log
+          grep -q "CDP3C_EDGE_TESTS_RESULT=PASS" /tmp/supporting.log || { echo "GATE_FAILED:supporting_tests"; exit 1; }
+
       - name: Supabase başlat (ephemeral)
         run: |
           set -euo pipefail
@@ -65,14 +71,30 @@ jobs:
         run: |
           set -euo pipefail
           # --no-verify-jwt: platform kapısını devre dışı bırakır ki handler'ın KENDİ auth/origin mantığı
-          # (origin->403, getUser->401) test edilebilsin. Prod'da verify_jwt=true ayrı platform ayarıdır.
+          # (origin->403, getUser->401, method->405) test edilebilsin. Prod'da verify_jwt=true ayrı platform ayarıdır.
           nohup supabase functions serve --no-verify-jwt > /tmp/serve.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -s -o /dev/null "${{ steps.cfg.outputs.api_url }}/functions/v1/email-api" && break || sleep 2
+          echo $! > /tmp/serve.pid
+
+      - name: "Functions readiness (FAIL-CLOSED: gercek 405 gorulene kadar)"
+        run: |
+          set -euo pipefail
+          URL='${{ steps.cfg.outputs.api_url }}/functions/v1/email-api'
+          ok=0
+          for i in $(seq 1 45); do
+            # GET (POST değil) -> handler method kontrolü -> 405. Yalnız GERÇEK 405 hazır sayılır.
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X GET "$URL" || echo "000")
+            if [ "$code" = "405" ]; then ok=1; break; fi
+            sleep 2
           done
+          if [ "$ok" != "1" ]; then
+            echo "GATE_FAILED:functions_readiness (email-api beklenen 405 vermedi; son kod=$code)"
+            echo "---- serve.log (redakte) ----"
+            sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g' /tmp/serve.log | tail -50 || true
+            exit 1
+          fi
+          echo "functions_ready (405 alındı)"
 
       - name: Test kullanıcıları + rol + hedef üye seed
-        id: seed
         run: |
           set -euo pipefail
           source /tmp/keys.env
@@ -92,33 +114,66 @@ jobs:
           { echo "MEMBER_JWT=$MEMBER_JWT"; echo "ADMIN_JWT=$ADMIN_JWT"; echo "TARGET_UID=$MUID"; } > /tmp/jwts.env
           chmod 600 /tmp/jwts.env
 
-      - name: Kabul testlerini çalıştır (gerçek HTTP/RPC)
+      - name: HTTP suite (gerçek HTTP/RPC)
         run: |
-          set -euo pipefail
+          set -o pipefail
           source /tmp/keys.env; source /tmp/jwts.env
           export API_URL='${{ steps.cfg.outputs.api_url }}'
           export FN_EMAIL="$API_URL/functions/v1/email-api"
           export FN_ADMIN="$API_URL/functions/v1/admin-api"
           export ANON_KEY SERVICE_KEY MEMBER_JWT ADMIN_JWT TARGET_UID
           export DBURL='${{ steps.cfg.outputs.db_url }}'
-          bash CDP3C_package/gates/cdp3c_edge_integration.sh
+          # tee ile log'a yaz; pipefail ile GERÇEK exit code korunur
+          bash CDP3C_package/gates/cdp3c_edge_integration.sh 2>&1 | tee /tmp/integration.log
+          grep -q "CDP3C_EDGE_HTTP_SUITE_PASS" /tmp/integration.log || { echo "GATE_FAILED:http_suite"; exit 1; }
 
-      - name: Secret scan (serve + start logları)
+      - name: Artifact loglarını REDAKTE et (JWT/anahtar çıkar)
         if: always()
         run: |
           set -euo pipefail
-          # redakte edilmemiş JWT/anahtar sızıntısı log'da OLMAMALI (serve.log fonksiyon çıktısı)
-          if grep -Eo 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}' /tmp/serve.log; then
-            echo "GATE_FAILED:secret_scan serve.log içinde ham JWT"; exit 1; fi
+          mkdir -p /tmp/artifact
+          REDACT="s#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g"
+          for f in supporting serve integration; do
+            [ -f /tmp/$f.log ] && sed -E "$REDACT" /tmp/$f.log > /tmp/artifact/$f.log || true
+          done
+
+      - name: Secret scan (redakte artifact temiz olmalı)
+        if: always()
+        run: |
+          set -euo pipefail
+          leak=0
+          for f in /tmp/artifact/*.log; do
+            [ -f "$f" ] || continue
+            if grep -Eo 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}' "$f"; then
+              echo "leak in $f"; rm -f "$f"; leak=1   # sızıntılı dosya artifact'e KONMAZ
+            fi
+          done
+          echo "secret_scan leak=$leak" | tee /tmp/artifact/secret_scan.txt
+          [ "$leak" = "0" ] || { echo "GATE_FAILED:secret_scan"; exit 1; }
           echo "SECRET_SCAN_CLEAN"
 
-      - name: Teardown + residue=0
+      - name: Teardown + residue=0 (stop exit + container + volume)
         if: always()
         run: |
-          set -euo pipefail
-          supabase stop --no-backup 2>&1 | sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g' || true
+          set -uo pipefail
+          supabase stop --no-backup > /tmp/teardown.log 2>&1
+          STOP_RC=$?
+          sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g' /tmp/teardown.log > /tmp/artifact/teardown.log || true
           C=$(docker ps -a --filter "name=supabase" --format '{{.Names}}' | wc -l | tr -d ' ')
           V=$(docker volume ls --filter "name=supabase" --format '{{.Name}}' | wc -l | tr -d ' ')
-          echo "residue containers=$C volumes=$V"
-          [ "$C" = "0" ] && [ "$V" = "0" ] || { echo "GATE_FAILED:teardown_residue c=$C v=$V"; exit 1; }
+          echo "stop_exit=$STOP_RC container_count=$C volume_count=$V" | tee -a /tmp/artifact/teardown.log
+          if [ "$STOP_RC" != "0" ] || [ "$C" != "0" ] || [ "$V" != "0" ]; then
+            echo "GATE_FAILED:teardown_residue stop_exit=$STOP_RC c=$C v=$V"; exit 1; fi
           echo "TEARDOWN_RESIDUE_ZERO"
+
+      - name: Nihai sentinel (yalnız her şey yeşilse)
+        if: success()
+        run: echo "LOCAL_CDP3C_EDGE_INTEGRATION_PASS"
+
+      - name: Tek artifact yükle (redakte; her durumda)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdp3c-edge-integration-logs
+          path: /tmp/artifact/
+          if-no-files-found: warn

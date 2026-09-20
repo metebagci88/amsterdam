@@ -134,6 +134,26 @@ Bağımsız incelemenin ardından, deploy öncesi sınırlı kabul turu:
   - `admin-api`: main'de YOK → base = deployed v13 (id `75a6554b…`, version 13, ezbr_sha256 `d48a4a76…`).
 - YENİ dosya SHA'ları: `CDP3C_CLOSURE_SHA256SUMS.txt` (byte-exact, commit ağacından doğrulandı).
 
+## EK-2: Entegrasyon gate harness düzeltmeleri (yalnız workflow + script; ürün kodu DOKUNULMADI)
+Bağımsız inceleme, gate'in yanlış-pozitif/negatif riskini işaret etti. YALNIZ
+`cdp3c-edge-integration.yml` + `cdp3c_edge_integration.sh` (+ manifest/SHA) değişti:
+1. **admin_qmc leak** kontrolü artık YALNIZ `.data` üzerinde ve tam allowlist ile: `.data` üst anahtarları
+   {consent,consent_timeline,service_prefs}; `consent[]`={purpose,state,text_version_id,epoch,updated_at};
+   `consent_timeline[]`={purpose,action,text_version_id,source,occurred_at}; `service_prefs[]`={key,enabled,updated_at}.
+   Üst seviye meşru `request_id` yasak sayılmaz; `.data` içinde request_id/hmac/fingerprint/idempotency/evidence → fail.
+2. **Functions readiness FAIL-CLOSED**: email-api'den gerçek **405** görülene kadar poll; süre sonunda 405 yoksa
+   `GATE_FAILED:functions_readiness` + serve.log (redakte) + dur.
+3. **Destekleyici test ayrı adım**: `node cdp3c_edge_tests.mjs`; `CDP3C_EDGE_TESTS_RESULT=PASS` yoksa
+   `GATE_FAILED:supporting_tests`.
+4. HTTP suite çıktısı `tee /tmp/integration.log`; `pipefail` ile gerçek exit code korunur.
+5. Suite sentinel'i `CDP3C_EDGE_HTTP_SUITE_PASS` (yalnız HTTP sonucu). Nihai sentinel
+   `LOCAL_CDP3C_EDGE_INTEGRATION_PASS` ayrı `if:success` adımında, secret-scan + teardown'dan SONRA.
+   Teardown: `supabase stop` exit code YUTULMAZ; stop_exit=0 + container=0 + volume=0 üçü de doğrulanır.
+6. Tek artifact `if:always`: supporting/serve/integration/teardown/secret_scan logları (JWT/anahtar REDAKTE).
+   Secret scan redakte artifact'te sızıntı bulursa dosyayı çıkarır ve `GATE_FAILED:secret_scan`.
+Yerel doğrulama: `bash -n` OK, 3 workflow YAML OK, destekleyici test 56/56 PASS. email-api/admin-api/admin.html/
+şehir SPA'ları/cookie/SQL **byte-değişmedi** (git status ile doğrulandı).
+
 ## Durma
-Tüm 10 kapanış + 5 kabul düzeltmesi tamamlandı. Gerçek bir güvenlik riski/çakışma bulunmadı.
-Branch push + entegrasyon gate dispatch → yeşilse tek kontrollü deploy + canlı kabul (sonraki adım).
+Tüm 10 kapanış + 5 kabul düzeltmesi + 6 harness düzeltmesi tamamlandı. Gerçek bir güvenlik riski/çakışma
+bulunmadı. Branch push + entegrasyon gate dispatch → yeşilse tek kontrollü deploy + canlı kabul (sonraki adım).
