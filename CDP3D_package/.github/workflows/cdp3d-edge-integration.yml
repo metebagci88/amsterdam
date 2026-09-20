@@ -1,0 +1,153 @@
+name: CDP-3D Edge Integration Gate (ephemeral Supabase — production'a DOKUNMAZ)
+# Gerçek birleşik Edge + gerçek Postgres üzerinde: migration + ikinci apply, node DB suite
+# (concurrency/ACL/monoton/dedupe/bounce/negatifler), Edge HTTP reddetme yolları, soft rollback
+# + residue, secret scan. GERÇEK e-posta GÖNDERMEZ (RESEND_API_KEY set edilmez). Yalnız manuel/PR.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+    paths: ["CDP3D_package/**"]
+permissions: { contents: read }
+jobs:
+  edge-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with: { version: 1.226.4 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+
+      - name: SHA256SUMS doğrula (paket bütünlüğü)
+        run: cd CDP3D_package && sha256sum -c SHA256SUMS
+
+      - name: Secret-scan SELF-TEST (pozitif + negatif) — DB gerekmez
+        run: |
+          set -euo pipefail
+          bash CDP3D_package/gates/cdp3d_secret_scan_selftest.sh | tee /tmp/scan_selftest.log
+          grep -q "SECRET_SCAN_SELFTEST_PASS" /tmp/scan_selftest.log || { echo "GATE_FAILED:secret_scan_selftest"; exit 1; }
+
+      - name: Supabase başlat (ephemeral)
+        run: |
+          set -euo pipefail
+          supabase init --force >/dev/null 2>&1 || true
+          supabase start 2>&1 | sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g'
+
+      - name: DB URL + anahtarlar
+        id: cfg
+        run: |
+          set -euo pipefail
+          ST=$(supabase status -o json)
+          echo "db_url=$(echo "$ST" | jq -r '.DB_URL')" >> "$GITHUB_OUTPUT"
+          echo "api_url=$(echo "$ST" | jq -r '.API_URL')" >> "$GITHUB_OUTPUT"
+          echo "$ST" | jq -r '"ANON_KEY="+.ANON_KEY, "SERVICE_KEY="+.SERVICE_ROLE_KEY' > /tmp/keys.env
+          chmod 600 /tmp/keys.env
+
+      - name: Önceki-faz + CI baseline uygula (CDP-3C prereq + hardening + CDP-3D CI double) [PROD DEĞİL]
+        run: |
+          set -euo pipefail
+          DBURL='${{ steps.cfg.outputs.db_url }}'
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/gates/cdp3c_baseline.sql
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/gates/cdp3c_edge_integration_baseline.sql
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/CDP3C_up.sql
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/CDP3C_up_search_path_hardening.sql
+          # CI-ONLY: CDP-3B önceki-faz kontrat double'ı (email_templates.id + members.blocked)
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/gates/cdp3d_ci_baseline.sql
+          echo "prior-phase + CI baseline applied"
+
+      - name: Baseline contract gate (fail-closed) — CDP-3D önceki-faz kontratı
+        run: |
+          set -euo pipefail
+          psql "${{ steps.cfg.outputs.db_url }}" -v ON_ERROR_STOP=1 -f CDP3D_package/gates/cdp3d_baseline_contract.sql 2>&1 | tee /tmp/contract.log
+          grep -q "BASELINE_CONTRACT_OK" /tmp/contract.log || { echo "GATE_FAILED:baseline_contract"; exit 1; }
+
+      - name: CDP-3D migration + ikinci apply (idempotent)
+        run: |
+          set -euo pipefail
+          DBURL='${{ steps.cfg.outputs.db_url }}'
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/CDP3D_up.sql
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/CDP3D_up.sql
+          echo "CDP3D migration applied (x2)"
+
+      - name: node DB suite (concurrency/ACL/monoton/dedupe/bounce/negatifler)
+        run: |
+          set -euo pipefail
+          cd CDP3D_package && npm init -y >/dev/null 2>&1 && npm i pg@8 >/tmp/pg.log 2>&1
+          DBURL='${{ steps.cfg.outputs.db_url }}' node gates/cdp3d_db_suite.mjs | tee /tmp/dbsuite.log
+          grep -q "CDP3D_DB_SUITE_PASS" /tmp/dbsuite.log || { echo "GATE_FAILED:db_suite"; exit 1; }
+
+      - name: Fonksiyonları hazırla (byte-exact) + serve (RESEND_API_KEY YOK)
+        run: |
+          set -euo pipefail
+          mkdir -p supabase/functions/service-email-dispatch supabase/functions/resend-webhook
+          cp CDP3D_package/edge/service-email-dispatch/index.ts supabase/functions/service-email-dispatch/index.ts
+          cp CDP3D_package/edge/resend-webhook/index.ts          supabase/functions/resend-webhook/index.ts
+          diff <(sha256sum CDP3D_package/edge/service-email-dispatch/index.ts | cut -d' ' -f1) <(sha256sum supabase/functions/service-email-dispatch/index.ts | cut -d' ' -f1)
+          diff <(sha256sum CDP3D_package/edge/resend-webhook/index.ts | cut -d' ' -f1) <(sha256sum supabase/functions/resend-webhook/index.ts | cut -d' ' -f1)
+          # env: yalnız webhook secret (dispatch service_role -> 503 key yok; webhook kötü imza -> 401)
+          printf 'RESEND_WEBHOOK_SECRET=whsec_%s\n' "$(printf 'ci-webhook-secret' | base64)" > /tmp/e2e.env
+          nohup supabase functions serve --no-verify-jwt --env-file /tmp/e2e.env > /tmp/serve.log 2>&1 &
+          echo $! > /tmp/serve.pid
+
+      - name: Readiness (dispatch GET->405)
+        run: |
+          set -euo pipefail
+          URL='${{ steps.cfg.outputs.api_url }}/functions/v1/service-email-dispatch'
+          ok=0
+          for i in $(seq 1 45); do
+            c=$(curl -s -o /dev/null -w '%{http_code}' -X GET "$URL" || echo 000)
+            [ "$c" = "405" ] && { ok=1; break; }
+            sleep 2
+          done
+          [ "$ok" = "1" ] || { echo "GATE_FAILED:readiness (son=$c)"; sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g' /tmp/serve.log | tail -40; exit 1; }
+
+      - name: Edge HTTP reddetme suite
+        run: |
+          set -euo pipefail
+          source /tmp/keys.env
+          export FN_DISPATCH='${{ steps.cfg.outputs.api_url }}/functions/v1/service-email-dispatch'
+          export FN_WEBHOOK='${{ steps.cfg.outputs.api_url }}/functions/v1/resend-webhook'
+          export SERVICE_JWT="$SERVICE_KEY" ANON_JWT="$ANON_KEY"
+          bash CDP3D_package/gates/cdp3d_edge_integration.sh 2>&1 | tee /tmp/http.log
+          grep -q "CDP3D_EDGE_HTTP_SUITE_PASS" /tmp/http.log || { echo "GATE_FAILED:http_suite"; exit 1; }
+
+      - name: Soft rollback + residue (CDP-3D gitti, CDP-3C korundu)
+        run: |
+          set -euo pipefail
+          DBURL='${{ steps.cfg.outputs.db_url }}'
+          psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/CDP3D_down_soft.sql
+          R=$(psql "$DBURL" -tA -c "select count(*) from information_schema.tables where table_schema='public' and table_name in ('email_outbox','email_send_events','email_send_allowlist','email_provider_config')")
+          C=$(psql "$DBURL" -tA -c "select count(*) from information_schema.tables where table_schema='public' and table_name='contact_suppression_current'")
+          H=$(psql "$DBURL" -tA -c "select count(*) from pg_proc where proname='_contact_hmac'")
+          echo "cdp3d_tables_left=$R cdp3c_supp=$C contact_hmac=$H"
+          [ "$R" = "0" ] && [ "$C" = "1" ] && [ "$H" -ge "1" ] || { echo "GATE_FAILED:rollback_residue"; exit 1; }
+          echo "ROLLBACK_RESIDUE_OK"
+
+      - name: Secret scan (genel desenler; yalnız bilinen local sırlar redakte)
+        if: always()
+        run: |
+          set -uo pipefail
+          # Bilinen local ephemeral sırları redakte listesine koy (anon/service JWT + DBURL).
+          # Genel desen taraması (JWT/sb_secret_/re_/PEM/gh-token/conn-string) REDAKSİYON SONRASI koşar.
+          . /tmp/keys.env 2>/dev/null || true
+          DBURL='${{ steps.cfg.outputs.db_url }}'
+          export LOCAL_SECRETS="$(printf '%s\n%s\n%s\n' "${ANON_KEY:-}" "${SERVICE_KEY:-}" "$DBURL")"
+          # NOT: scan_selftest.log bilinçli fake sır fixture'ları içerir; taramaya DAHİL EDİLMEZ.
+          bash CDP3D_package/gates/cdp3d_secret_scan.sh /tmp/serve.log /tmp/http.log /tmp/dbsuite.log /tmp/contract.log | tee /tmp/secretscan.log
+          grep -q "SECRET_SCAN_CLEAN" /tmp/secretscan.log || { echo "GATE_FAILED:secret_scan"; exit 1; }
+
+      - name: Teardown + residue=0
+        if: always()
+        run: |
+          set -uo pipefail
+          [ -f /tmp/serve.pid ] && kill "$(cat /tmp/serve.pid)" 2>/dev/null || true
+          supabase stop --no-backup > /tmp/teardown.log 2>&1; RC=$?
+          Cn=$(docker ps -a --filter "name=supabase" --format '{{.Names}}' | wc -l | tr -d ' ')
+          Vn=$(docker volume ls --filter "name=supabase" --format '{{.Name}}' | wc -l | tr -d ' ')
+          echo "stop_rc=$RC containers=$Cn volumes=$Vn"
+          [ "$RC" = "0" ] && [ "$Cn" = "0" ] && [ "$Vn" = "0" ] || { echo "GATE_FAILED:teardown_residue"; exit 1; }
+
+      - name: Nihai sentinel
+        if: success()
+        run: echo "LOCAL_CDP3D_EDGE_INTEGRATION_PASS"
