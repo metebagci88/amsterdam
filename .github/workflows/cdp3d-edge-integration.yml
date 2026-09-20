@@ -22,6 +22,12 @@ jobs:
       - name: SHA256SUMS doğrula (paket bütünlüğü)
         run: cd CDP3D_package && sha256sum -c SHA256SUMS
 
+      - name: Secret-scan SELF-TEST (pozitif + negatif) — DB gerekmez
+        run: |
+          set -euo pipefail
+          bash CDP3D_package/gates/cdp3d_secret_scan_selftest.sh | tee /tmp/scan_selftest.log
+          grep -q "SECRET_SCAN_SELFTEST_PASS" /tmp/scan_selftest.log || { echo "GATE_FAILED:secret_scan_selftest"; exit 1; }
+
       - name: Supabase başlat (ephemeral)
         run: |
           set -euo pipefail
@@ -38,7 +44,7 @@ jobs:
           echo "$ST" | jq -r '"ANON_KEY="+.ANON_KEY, "SERVICE_KEY="+.SERVICE_ROLE_KEY' > /tmp/keys.env
           chmod 600 /tmp/keys.env
 
-      - name: Şema uygula (CDP-3C prereq + hardening + CDP-3D) [PROD DEĞİL] + ikinci apply
+      - name: Önceki-faz + CI baseline uygula (CDP-3C prereq + hardening + CDP-3D CI double) [PROD DEĞİL]
         run: |
           set -euo pipefail
           DBURL='${{ steps.cfg.outputs.db_url }}'
@@ -46,12 +52,23 @@ jobs:
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/gates/cdp3c_edge_integration_baseline.sql
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/CDP3C_up.sql
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3C_package/CDP3C_up_search_path_hardening.sql
-          # CI-ONLY: CDP-3B önceki-faz seed (email_templates) — production'da ZATEN var; CDP3D FK'si için gerekli
+          # CI-ONLY: CDP-3B önceki-faz kontrat double'ı (email_templates.id + members.blocked)
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/gates/cdp3d_ci_baseline.sql
+          echo "prior-phase + CI baseline applied"
+
+      - name: Baseline contract gate (fail-closed) — CDP-3D önceki-faz kontratı
+        run: |
+          set -euo pipefail
+          psql "${{ steps.cfg.outputs.db_url }}" -v ON_ERROR_STOP=1 -f CDP3D_package/gates/cdp3d_baseline_contract.sql 2>&1 | tee /tmp/contract.log
+          grep -q "BASELINE_CONTRACT_OK" /tmp/contract.log || { echo "GATE_FAILED:baseline_contract"; exit 1; }
+
+      - name: CDP-3D migration + ikinci apply (idempotent)
+        run: |
+          set -euo pipefail
+          DBURL='${{ steps.cfg.outputs.db_url }}'
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/CDP3D_up.sql
-          # ikinci apply idempotent olmalı (additive/if-not-exists)
           psql "$DBURL" -v ON_ERROR_STOP=1 -f CDP3D_package/CDP3D_up.sql
-          echo "schema applied (x2)"
+          echo "CDP3D migration applied (x2)"
 
       - name: node DB suite (concurrency/ACL/monoton/dedupe/bounce/negatifler)
         run: |
@@ -107,17 +124,18 @@ jobs:
           [ "$R" = "0" ] && [ "$C" = "1" ] && [ "$H" -ge "1" ] || { echo "GATE_FAILED:rollback_residue"; exit 1; }
           echo "ROLLBACK_RESIDUE_OK"
 
-      - name: Secret scan (loglarda JWT/secret sızıntısı = FAIL)
+      - name: Secret scan (genel desenler; yalnız bilinen local sırlar redakte)
         if: always()
         run: |
           set -uo pipefail
-          leak=0
-          for f in /tmp/serve.log /tmp/http.log /tmp/dbsuite.log; do
-            [ -f "$f" ] || continue
-            if grep -Eo 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}' "$f" >/dev/null; then echo "leak in $f"; leak=1; fi
-            if grep -Eo 're_[A-Za-z0-9]{16,}' "$f" >/dev/null; then echo "resend key leak in $f"; leak=1; fi
-          done
-          [ "$leak" = "0" ] && echo "SECRET_SCAN_CLEAN" || { echo "GATE_FAILED:secret_scan"; exit 1; }
+          # Bilinen local ephemeral sırları redakte listesine koy (anon/service JWT + DBURL).
+          # Genel desen taraması (JWT/sb_secret_/re_/PEM/gh-token/conn-string) REDAKSİYON SONRASI koşar.
+          . /tmp/keys.env 2>/dev/null || true
+          DBURL='${{ steps.cfg.outputs.db_url }}'
+          export LOCAL_SECRETS="$(printf '%s\n%s\n%s\n' "${ANON_KEY:-}" "${SERVICE_KEY:-}" "$DBURL")"
+          # NOT: scan_selftest.log bilinçli fake sır fixture'ları içerir; taramaya DAHİL EDİLMEZ.
+          bash CDP3D_package/gates/cdp3d_secret_scan.sh /tmp/serve.log /tmp/http.log /tmp/dbsuite.log /tmp/contract.log | tee /tmp/secretscan.log
+          grep -q "SECRET_SCAN_CLEAN" /tmp/secretscan.log || { echo "GATE_FAILED:secret_scan"; exit 1; }
 
       - name: Teardown + residue=0
         if: always()
