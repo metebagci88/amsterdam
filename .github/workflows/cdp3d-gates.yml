@@ -1,0 +1,53 @@
+name: CDP-3D Gates (PGlite SQL + Svix birim + Edge parse — production'a DOKUNMAZ)
+# Docker/Supabase gerektirmez; ücretli kaynak açmaz. Gerçek Postgres (PGlite/WASM) üzerinde
+# CDP3D_up.sql yüklenir, fail-closed karar/suppression matrisi/PII-min/append-only/rollback
+# testleri koşar; Svix imza doğrulama birim testi + iki Edge fonksiyonunun parse'ı doğrulanır.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths: ["CDP3D_package/**"]
+permissions: { contents: read }
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: CDP3D_package, shell: bash } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+
+      - name: SHA256SUMS doğrula (paket bütünlüğü)
+        run: sha256sum -c SHA256SUMS
+
+      - name: Bağımlılıklar (PGlite + pgcrypto contrib + esbuild)
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm i @electric-sql/pglite@latest esbuild@latest >/tmp/npm.log 2>&1
+          echo "deps kuruldu"
+
+      - name: "PGlite SQL gate (karar/suppression/PII/append-only/rollback)"
+        run: |
+          set -euo pipefail
+          node gates/cdp3d_pglite_gate.mjs | tee /tmp/pglite.log
+          grep -q "CDP3D_LOCAL_GATES_PASS" /tmp/pglite.log || { echo "GATE_FAILED:pglite"; exit 1; }
+
+      - name: Svix imza doğrulama birim testi
+        run: |
+          set -euo pipefail
+          node gates/cdp3d_svix_test.mjs | tee /tmp/svix.log
+          grep -q "SVIX_PASS" /tmp/svix.log || { echo "GATE_FAILED:svix"; exit 1; }
+
+      - name: Edge fonksiyonları parse (esbuild, harici https import'lar external)
+        run: |
+          set -euo pipefail
+          for f in service-email-dispatch resend-webhook; do
+            ./node_modules/.bin/esbuild edge/$f/index.ts --bundle --external:https://* --format=esm --platform=neutral --outfile=/dev/null
+            echo "PARSE_OK $f"
+          done
+
+      - name: Nihai sentinel
+        if: success()
+        run: echo "LOCAL_CDP3D_GATES_PASS"
+# NOT: Yalnız yerel/ephemeral WASM Postgres + statik parse; hiçbir production kaynağına dokunmaz.
+# Gerçek canlı HTTP reddetme testleri kontrollü production apply aşamasında ayrıca koşulur.
