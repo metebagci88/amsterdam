@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="asa-city-code" content="nl-ams" />
-<title>Amsterdam · Lokal Yaşam Rehberi (11–31 Temmuz)</title>
+<title>Amsterdam · Lokal Yaşam Rehberi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,0,700;9..144,1,400;9..144,1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
@@ -433,8 +433,8 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     <div id="adMasthead"></div>
     <div class="hero">
       <h2 data-ck="app.pano.h">Bugün ne yapmak istiyorsun?</h2>
-      <p data-ck="app.pano.p">Rembrandtpark’taki dairen merkez. Klasik turist değil, lokal yaşam modundasın: iyi kahve, güzel öğle yemeği, bisikletle keşif, akşam şarabı. Aşağıdan hızlı seç ya da “Karar” sekmesinden sana özel öneri al.</p>
-      <span class="pill" id="heroLoc">📍 Referans konum: Rembrandtpark</span>
+      <p data-ck="app.pano.p">Klasik turist değil, lokal yaşam modundasın: iyi kahve, güzel öğle yemeği, bisikletle keşif, akşam şarabı. Aşağıdan hızlı seç ya da “Karar” sekmesinden sana özel öneri al.</p>
+      <span class="pill" id="heroLoc">📍 Referans konum: Merkez</span>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8" id="ctaGrid"></div>
     <div id="adCityBanner"></div>
@@ -450,9 +450,6 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     <div class="flex flex-wrap gap-2">
       <select class="asasel" id="mapCity">
         <option value="Amsterdam">Amsterdam</option>
-        <option value="Antwerp">Antwerp (hafta sonu)</option>
-        <option value="Brussels">Brüksel (hafta sonu)</option>
-        <option value="Bruges">Brugge (günübirlik)</option>
       </select>
       <select class="asasel" id="mapCat"><option value="">Tüm kategoriler</option></select>
       <select class="asasel" id="mapSrc">
@@ -479,7 +476,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     <div id="mapWrap">
       <div id="lmap" style="height:62vh;min-height:380px;border-radius:16px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(40,35,25,.06)"></div>
     </div>
-    <p class="section-sub" style="margin-top:10px">Gerçek sokak haritası (OpenStreetMap). Bir pine dokun → mekan kartı + Google Maps linki açılır. Renk = kaynak, kalp = favori, altın nokta = konumun. Filtreler pinleri anında günceller; şehir menüsünden Antwerp / Brüksel / Brugge haritasına da geçebilirsin.</p>
+    <p class="section-sub" style="margin-top:10px">Gerçek sokak haritası (OpenStreetMap). Bir pine dokun → mekan kartı + Google Maps linki açılır. Renk = kaynak, kalp = favori, altın nokta = konumun. Filtreler pinleri anında günceller.</p>
   </section>
 
   <!-- MEKANLAR -->
@@ -491,7 +488,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
         <input id="q" placeholder="Ara: isim, mahalle, mutfak…" class="w-full bg-surface-container rounded-full border-0 pl-12 pr-4 py-3.5 text-body-lg text-on-surface placeholder:text-on-surface-variant focus:ring-2 focus:ring-primary focus:outline-none" />
       </div>
       <div class="flex flex-wrap gap-2 mb-3">
-        <select class="asasel" id="fCity"><option value="">Tüm şehirler</option><option>Amsterdam</option><option>Antwerp</option><option>Brussels</option></select>
+        <select class="asasel" id="fCity"><option value="">Tüm şehirler</option><option>Amsterdam</option></select>
         <select class="asasel" id="fArea"><option value="">Tüm bölgeler</option></select>
         <select class="asasel" id="fSrc">
           <option value="">Tüm kaynaklar</option>
@@ -527,23 +524,6 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     <div id="cal"></div>
   </section>
 
-  <!-- HAFTA SONU -->
-  <section class="view" id="v-trip">
-    <h2 class="section-title">Hafta sonu kaçamakları</h2>
-    <p class="section-sub">İki hafta sonun var: 18–19 ve 25–26 Temmuz. Cumartesi sabah git, pazar akşam dön.</p>
-    <div id="tripReco"></div>
-    <div id="adPlan"></div>
-    <h3 class="section-title" style="font-size:18px">Şehir karşılaştırması</h3>
-    <div class="cmp-wrap"><table class="cmp" id="cmp"></table></div>
-    <p class="section-sub">Skorlar 1–5. “Yorucu” düşükse daha rahat demektir. Tren süreleri Amsterdam Centraal’dan yaklaşık.</p>
-    <h3 class="section-title" style="font-size:18px">Antwerp · 1 gece 2 gün</h3>
-    <div id="antwerpPlan"></div>
-    <h3 class="section-title" style="font-size:18px">Brüksel · 1 gece 2 gün</h3>
-    <div id="brusselsPlan"></div>
-    <h3 class="section-title" style="font-size:18px">Brugge · 1 günlük (günübirlik)</h3>
-    <div id="brugesPlan"></div>
-  </section>
-
   <!-- KARAR -->
   <section class="view" id="v-de">
     <h2 class="section-title" data-ck="app.de.h">Karar motoru</h2>
@@ -554,46 +534,9 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     <div id="adKarar"></div>
   </section>
 
-  <!-- NOTLAR -->
-  <section class="view" id="v-notes">
-    <h2 class="section-title">Veri notları & kontrol listesi</h2>
-
-    <div class="notebox audio-warn">
-      <h3>🎙️ Ses kayıtları — durum</h3>
-      <p style="font-size:13px;color:var(--ink2);margin:0">İki WhatsApp ses kaydı (<b>2026-06-19 11.35.05</b> ve <b>2026-06-20 13.41.03</b>) yüklendi. Bu çalışma ortamı, konuşma-metin (whisper vb.) modellerinin indirildiği tüm sunuculara (HuggingFace, GitHub release CDN, Azure) erişimi engellediği için ses <b>otomatik olarak transkribe edilemedi</b>. Uydurma yapmamak adına bu kayıtlardan mekan eklenmedi.</p>
-      <ul>
-        <li>Çözüm 1: Kayıtların kısa bir metin özetini bana yapıştır; mekanları envantere “Ses kaydı” rozetiyle eklerim.</li>
-        <li>Çözüm 2: Bu dosyayı model erişimi olan bir ortamda çalıştırırsam transkripsiyonu ben yaparım.</li>
-        <li>“Ses kaydı önerileri” filtresi ve harita rengi hazır; metin gelince anında dolar.</li>
-      </ul>
-    </div>
-
-    <div class="notebox">
-      <h3>Kaynaklar</h3>
-      <ul>
-        <li><b>Benim listem</b> — senin elle verdiğin mekanlar + notların (mavi rozet). Favorilerin ❤️ ile işaretli.</li>
-        <li><b>Önceki araştırmam</b> — yüklediğin Amsterdam.pptx içindeki kafe/restoran seçkisi (teal rozet).</li>
-        <li><b>Ek araştırma</b> — Rembrandtpark çevresi & bisiklet mesafesi için eklenen lokal öneriler ve çalışma kafeleri (yeşil rozet).</li>
-        <li><b>Ses kaydı</b> — yukarıdaki nota bakın (mor rozet).</li>
-      </ul>
-    </div>
-
-    <div class="notebox">
-      <h3>⚠️ Gitmeden önce kontrol et</h3>
-      <ul id="checkList"></ul>
-    </div>
-
-    <div class="notebox">
-      <h3>🗺️ Harita & konum nasıl çalışıyor</h3>
-      <p style="font-size:13px;color:var(--ink2);margin:0">Harita tamamen bu dosyanın içinde, kendi çizimimle çalışır — Google Maps API anahtarı, harici kütüphane veya internet gerekmez. Mekanlar gerçek koordinatlarına göre yerleştirilir; noktaya dokununca kart açılır.</p>
-      <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 0"><b>Konum:</b> Tarayıcılar yerel dosyada (file://) GPS’i çoğunlukla engeller. Bu yüzden konumu iki şekilde verebilirsin: haritada <b>“📌 Konumu haritadan seç”</b> ile dokun, ya da <b>“Neredesin?”</b> menüsünden bulunduğun mahalleyi seç. “Bana yakınlık” sıralaması ve karar motoru bu referansa göre çalışır. GPS denemek istersen dosyayı Firefox’ta ya da https üzerinden aç.</p>
-      <p style="font-size:12.5px;color:var(--ink2);margin:8px 0 0">Tüm butonların ve linklerin sorunsuz açılması için dosyayı gerçek bir tarayıcıda (Chrome/Safari/Firefox) aç; uygulama içi önizlemede dış bağlantılar engellenebilir.</p>
-    </div>
-  </section>
-
   <section class="view" id="v-member">
     <h2 class="section-title" data-ck="app.member.h">Üyelik</h2>
-    <p class="section-sub">E-posta + ortak şifre ile giriş yap; favorilerin buluta kaydolsun, profilin ve seviyen oluşsun. Seviyeler: 🧭 Kaşif · 🏙️ Şehirli · 🎨 Küratör · 💎 Insider.</p>
+    <p class="section-sub">Hesabınla giriş yap; favorilerin buluta kaydolsun, profilin ve seviyen oluşsun. Seviyeler: 🧭 Kaşif · 🏙️ Şehirli · 🎨 Küratör · 💎 Insider.</p>
     <div id="memberBody"></div>
   </section>
 
@@ -694,7 +637,7 @@ window.__snapshotPlan=async function(){
 /* ===== referans noktaları ===== */
 const CITY=(()=>{try{var p=new URLSearchParams(location.search).get('city');if(p)return p;var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';}catch(e){}return 'Amsterdam';})();
 const CITYCONF={
- "Amsterdam":{home:{lat:52.3680,lng:4.8470,name:"Rembrandtpark"},view:[52.370,4.895,12],sub:"Amsterdam \u00b7 yerel gibi gez",blurb:"Klasik turist de\u011fil, lokal ya\u015fam modundas\u0131n: iyi kahve, g\u00fczel \u00f6\u011fle yeme\u011fi, bisikletle ke\u015fif, ak\u015fam \u015farab\u0131."},
+ "Amsterdam":{home:{lat:52.370,lng:4.895,name:"Merkez"},view:[52.370,4.895,12],sub:"Amsterdam \u00b7 yerel gibi gez",blurb:"Klasik turist de\u011fil, lokal ya\u015fam modundas\u0131n: iyi kahve, g\u00fczel \u00f6\u011fle yeme\u011fi, bisikletle ke\u015fif, ak\u015fam \u015farab\u0131."},
  "Kopenhag":{home:{lat:55.6805,lng:12.5615,name:"Indre By (merkez)"},view:[55.6805,12.5615,13],sub:"Kopenhag \u00b7 yerel gibi gez",blurb:"\u0130skandinav tasar\u0131m\u0131, \u00fc\u00e7\u00fcnc\u00fc dalga kahve, efsane f\u0131r\u0131nlar ve liman kenar\u0131: Kopenhag'\u0131 turist de\u011fil, yerel gibi ke\u015ffet."}
 };
 const CC=CITYCONF[CITY]||CITYCONF["Amsterdam"];
@@ -774,9 +717,9 @@ let V=[
 {id:"barpif",hours:"17:00–00:00",garden:false,type:"Natürel şarap barı",tags:["öğlen","şarap","akşam"],tip:"Rezervasyon şart; natürel şarap + küçük tabaklar. Akşamları dolu olur.",name:"Bar Pif",city:"Amsterdam",area:"Jordaan",cats:["wine bar","restoran"],best:["öğlen","şarap","akşam"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.37790,lng:4.88330,conf:"high",
  web:"https://barpif.nl/en/",ig:"https://www.instagram.com/barpifamsterdam/",
  desc:"Rebel Wines ekibinden natürel şarap barı + küçük tabaklar.",note:"<b>Senin notun:</b> Rezervasyonla. Öğlen de olabilir. ❤️ Öncelikli favori."},
-{id:"oficina",hours:"09:00–22:00",garden:true,type:"Gündüz kafesi",tags:["kahve","öğlen","şarap","tatlı"],tip:"Rembrandtpark'a yakın; gündüz kahve/öğle, akşam şarap. Ortak masalar, kısa oturmalık.",name:"Oficina",city:"Amsterdam",area:"De Baarsjes",cats:["kafe","wine bar","restoran"],best:["öğlen","kahve","şarap","tatlı"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.37190,lng:4.85620,conf:"medium",
+{id:"oficina",hours:"09:00–22:00",garden:true,type:"Gündüz kafesi",tags:["kahve","öğlen","şarap","tatlı"],tip:"Gündüz kahve/öğle, akşam şarap. Ortak masalar, kısa oturmalık.",name:"Oficina",city:"Amsterdam",area:"De Baarsjes",cats:["kafe","wine bar","restoran"],best:["öğlen","kahve","şarap","tatlı"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.37190,lng:4.85620,conf:"medium",
  web:"https://oficinaoficina.com/",ig:"https://www.instagram.com/oficina.amsterdam/",
- desc:"Gündüz kantini & yemek-tasarım stüdyosu: kahvaltı, öğle, çay, pasta, şarap. Rembrandtpark’a çok yakın.",note:"<b>Senin notun:</b> Rezervasyon almıyor. Şarap, tatlı, öğlen için uygun."},
+ desc:"Gündüz kantini & yemek-tasarım stüdyosu: kahvaltı, öğle, çay, pasta, şarap.",note:"<b>Senin notun:</b> Rezervasyon almıyor. Şarap, tatlı, öğlen için uygun."},
 {id:"shiraz",hours:"16:00–00:00",garden:false,type:"Şarap barı",tags:["akşam","şarap"],tip:"Kanal kenarı; şarap + peynir/kanepe. Rezervasyon durumunu kontrol et.",name:"Shiraz (Jardin des Vins)",city:"Amsterdam",area:"Centrum",cats:["wine bar"],best:["şarap","akşam"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36280,lng:4.88290,conf:"medium",
  web:"https://shirazamsterdam.nl/en/",ig:"",
  desc:"Kanal kenarı samimi şarap barı, geniş kadeh listesi.",note:"<b>Senin notun:</b> Wine bar. Şarapla gelen peynir/kanepe çok iyiymiş. Rezervasyon almıyor. ❤️ Favori. <i>(Araştırmada bazı kaynaklar rezervasyonu öneriyor — kontrol et.)</i>"},
@@ -816,7 +759,7 @@ let V=[
 {id:"brutdemer",hours:"16:00–23:00",garden:false,type:"Deniz mahsulleri barı",tags:["akşam","şarap","deniz mahsulleri"],tip:"İstiridye + şampanya; küçük mekan.",name:"Brut de Mer",city:"Amsterdam",area:"De Pijp",cats:["restoran","deniz mahsulleri","wine bar"],best:["akşam","şarap","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.35470,lng:4.89200,conf:"high",
  web:"",ig:"https://www.instagram.com/brut_de_mer/",
  desc:"İstiridye & deniz mahsulleri barı, şampanya/şarap.",note:"<b>Senin notun:</b> Deniz mahsulleri."},
-{id:"flos",hours:"08:00–16:00",garden:false,type:"Bagel / deli",tags:["öğlen","take-away","parkta yemek","bagel"],tip:"Parkta yemek için buradan sandviç al; Rembrandtpark'a yakın.",name:"Flo's Appetizing",city:"Amsterdam",area:"Oud-West",cats:["take-away","bagel","brunch"],best:["öğlen","take-away","parkta yemek","brunch"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36430,lng:4.86680,conf:"high",
+{id:"flos",hours:"08:00–16:00",garden:false,type:"Bagel / deli",tags:["öğlen","take-away","parkta yemek","bagel"],tip:"Parkta yemek için buradan sandviç al.",name:"Flo's Appetizing",city:"Amsterdam",area:"Oud-West",cats:["take-away","bagel","brunch"],best:["öğlen","take-away","parkta yemek","brunch"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36430,lng:4.86680,conf:"high",
  web:"https://www.flosdeli.nl/",ig:"https://www.instagram.com/flos_appetizing_ams/",
  desc:"Elde sarılan bagel & NYC tarzı deli.",note:"<b>Senin notun:</b> Bagelci. Parkta yemek için sandviç alınabilir."},
 {id:"deklos",hours:"16:30–23:00",garden:false,type:"Izgara / kaburga",tags:["akşam"],tip:"Sadece walk-in, sıra olur; 1971'den klasik spare-ribs.",name:"Café de Klos",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36320,lng:4.88660,conf:"high",
@@ -831,7 +774,7 @@ let V=[
 
 {id:"saintjean",hours:"08:00–17:00",garden:false,type:"Fırın & kafe",tags:["kahve","kahvaltı","öğlen"],tip:"Bitki bazlı fırın + specialty kahve. Oturma az.",name:"Saint-Jean",city:"Amsterdam",area:"Jordaan",cats:["kafe","kahvaltı","take-away"],best:["kahve","kahvaltı","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.saintjean.nl/",ig:"https://www.instagram.com/saintjean.nl/",
- desc:"Bitki bazlı fırın & deli, specialty kahve, hamur işleri.",note:"Önceki araştırmandan (Amsterdam.pptx)."},
+ desc:"Bitki bazlı fırın & deli, specialty kahve, hamur işleri.",note:"Önceki araştırmandan."},
 {id:"bocca",hours:"08:00–18:00",garden:false,type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"Hollanda specialty kahvenin öncüsü; laptop uygun, küçük olabilir.",name:"Bocca Coffee",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://bocca.nl/en",ig:"https://www.instagram.com/boccacoffee/",
  desc:"Hollanda specialty kahvenin öncüsü; amiral kafe.",note:"Önceki araştırmandan."},
@@ -893,15 +836,15 @@ let V=[
 {id:"glouglou",hours:"16:00–00:00",garden:false,type:"Natürel şarap barı",tags:["akşam","şarap"],tip:"Amsterdam'ın ilk natürel şarap barı; küçük atıştırmalık.",name:"GlouGlou",city:"Amsterdam",area:"De Pijp",cats:["wine bar","bar"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://glouglou.nl/",ig:"https://www.instagram.com/glouglou_amsterdam/",
  desc:"Amsterdam’ın ilk natürel şarap barı; katkısız şaraplar, küçük atıştırmalıklar.",note:"Ek araştırma."},
-{id:"barcentraal",hours:"17:00–01:00",garden:false,type:"Natürel şarap barı",tags:["akşam","şarap"],tip:"Mum ışığı + düşük-müdahale şarap; Rembrandtpark'a yakın.",name:"Bar Centraal",city:"Amsterdam",area:"Oud-West (Ten Katemarkt)",cats:["wine bar","bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
+{id:"barcentraal",hours:"17:00–01:00",garden:false,type:"Natürel şarap barı",tags:["akşam","şarap"],tip:"Mum ışığı + düşük-müdahale şarap.",name:"Bar Centraal",city:"Amsterdam",area:"Oud-West (Ten Katemarkt)",cats:["wine bar","bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://barcentraal.nl/",ig:"https://www.instagram.com/barcentraal/",
- desc:"Mum ışığında düşük-müdahale şarap barı, harika küçük tabaklar (GlouGlou’nun kardeşi).",note:"Ek araştırma. Rembrandtpark’a yakın."},
+ desc:"Mum ışığında düşük-müdahale şarap barı, harika küçük tabaklar (GlouGlou’nun kardeşi).",note:"Ek araştırma."},
 {id:"fabus",hours:"17:00–00:00",garden:false,type:"Şarap barı & mutfak",tags:["akşam","şarap"],tip:"Natürel şarap + Levanten tabaklar; adresini kontrol et.",name:"Fabus Wijnbar",city:"Amsterdam",area:"Oud-West",cats:["wine bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"low",
  web:"https://www.fabuswijnbar.nl/",ig:"https://www.instagram.com/fabus.amsterdam/",
  desc:"Kadın liderliğinde, az bilinen bölgelerden natürel şaraplar + Levanten mutfak.",note:"Ek araştırma. Adres kontrol edilmeli."},
-{id:"lusconi",hours:"12:00–00:00",garden:true,type:"İtalyan bar-restoran",tags:["öğlen","akşam","italyan"],tip:"Meydan terası, odun fırını pizza; Rembrandtpark'a yakın.",name:"Bar Lusconi",city:"Amsterdam",area:"De Baarsjes (Mercatorplein)",cats:["restoran","italyan","bar"],best:["akşam","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"medium",
+{id:"lusconi",hours:"12:00–00:00",garden:true,type:"İtalyan bar-restoran",tags:["öğlen","akşam","italyan"],tip:"Meydan terası, odun fırını pizza.",name:"Bar Lusconi",city:"Amsterdam",area:"De Baarsjes (Mercatorplein)",cats:["restoran","italyan","bar"],best:["akşam","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"medium",
  web:"https://barlusconi.nl/",ig:"https://www.instagram.com/barlusconi/",
- desc:"Rahat İtalyan bar-restoran; odun fırını pizza, antipasti, kokteyl; meydan terası.",note:"Ek araştırma. Rembrandtpark’a yakın."},
+ desc:"Rahat İtalyan bar-restoran; odun fırını pizza, antipasti, kokteyl; meydan terası.",note:"Ek araştırma."},
 {id:"september",hours:"09:00–23:00",garden:false,type:"Tüm-gün restoran",tags:["öğlen","akşam","brunch"],tip:"Mevsimsel, yerel ürün; adresini kontrol et.",name:"Restaurant September",city:"Amsterdam",area:"Oud-Zuid",cats:["restoran","brunch","kafe"],best:["akşam","öğlen","brunch"],src:"extra",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"low",
  web:"https://restaurantseptember.nl/",ig:"https://www.instagram.com/restaurant_september/",
  desc:"Mevsimsel, yerel ürün odaklı çağdaş tüm-gün restoran.",note:"Ek araştırma. Adres kontrol edilmeli."},
@@ -914,9 +857,6 @@ let V=[
 {id:"troost",hours:"12:00–01:00",garden:true,type:"Bira evi",tags:["akşam","park","öğlen"],tip:"Westergas'ta craft bira; geniş teras. Laptop için değil.",name:"Brouwerij Troost Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["bar","park"],best:["akşam","park","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"low",
  web:"https://brouwerijtroost.nl/",ig:"https://www.instagram.com/brouwerijtroost/",
  desc:"Westergas’ta yerel craft bira fabrikası & taproom; park kenarı geniş teras.",note:"Ek araştırma."},
-{id:"rembrandtpark",hours:"24 saat",garden:true,type:"Park",tags:["park","parkta yemek"],tip:"Dairenin yanı; piknik/koşu. Flo's veya Chun'dan sandviç al gel.",name:"Rembrandtpark",city:"Amsterdam",area:"De Baarsjes/West",cats:["park"],best:["park","parkta yemek"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3680,lng:4.8470,conf:"high",
- web:"https://www.iamsterdam.com/en/see-and-do/things-to-do/parks-and-gardens",ig:"",
- desc:"Dairenin hemen yanındaki büyük yeşil park; piknik, koşu, hızlı kaçış.",note:"Ek araştırma. <b>Parkta yemek:</b> Flo’s veya Chun’dan sandviç al, buraya gel."},
 {id:"westerpark",hours:"24 saat",garden:true,type:"Park",tags:["park","parkta yemek","öğlen"],tip:"Westergas'a bitişik; piknik çayırı + kafeler/bira.",name:"Westerpark",city:"Amsterdam",area:"Westerpark",cats:["park"],best:["park","parkta yemek","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3865,lng:4.8760,conf:"high",
  web:"https://westergas.nl/",ig:"",
  desc:"Westergas kültür parkına bitişik canlı park; piknik çayırları + kafeler/bira fabrikaları.",note:"Ek araştırma."}
@@ -985,75 +925,7 @@ V=V.concat([
  {id:"poi_kissing",name:"Kissing Couple XXXL Heykeli",city:"Amsterdam",area:"Noord",lat:52.3838,lng:4.9008,alloc:"local_discovery",type:"Heykel/Landmark",cats:["gezilecek yer"],tags:["heykel","fotoğraf"],best:["afternoon","evening"],tw:["afternoon","evening"],visit:15,resv:"no",hours:"00:00-24:00",src:"poi",fav:false,walkIn:true,work:false,conf:"low",desc:"Eye/A'DAM yakınında dev öpüşen çift heykeli; popüler fotoğraf noktası."}
 ]);
 
-/* ===== ANTWERP & BRUSSELS ===== */
-const TRIPS={
-Antwerp:[
- {name:"Osaka",area:"Zurenborg",cat:"yemek",resv:"rec",desc:"Izakaya tarzı bar-restoran, mevsimsel paylaşımlık tabaklar, geniş natürel şarap.",lat:51.2056,lng:4.4286,ig:"https://instagram.com/osakaantwerp",web:"https://www.osaka-camino-tapout.com/"},
- {name:"MEA",area:"Zurenborg",cat:"yemek",resv:"rec",desc:"Çağdaş Doğu Akdeniz restoranı & kokteyl barı (Via Antwerp otelinde).",lat:51.2114,lng:4.4288,ig:"https://instagram.com/mea.antwerp",web:"https://meaantwerp.com/"},
- {name:"Glou Glou",area:"Borgerhout",cat:"yemek",resv:"rec",desc:"Rahat natürel şarap barı, paylaşımlık tabaklar.",lat:51.2122,lng:4.4378,ig:"https://instagram.com/glouglouborgerhout",web:"https://glouglou-borgerhout.be/"},
- {name:"Le Pristine",area:"Tarihi Merkez",cat:"yemek",resv:"req",desc:"Sergio Herman’ın Michelin yıldızlı restoranı; İtalyan + Flaman.",lat:51.2152,lng:4.4046,ig:"https://instagram.com/le_pristine_antwerp",web:"https://www.lepristine.com/"},
- {name:"Hertog Jan at Botanic",area:"Tarihi Merkez",cat:"yemek",resv:"req",desc:"Çift Michelin yıldızlı fine-dining (Botanic Sanctuary içinde).",lat:51.2126,lng:4.4078,ig:"https://instagram.com/hertog_jan_at_botanic",web:"https://hertog-jan.com/en/"},
- {name:"Hotel FRANQ",area:"Tarihi Merkez",cat:"otel",resv:"req",desc:"Eski bankadan dönüşen tasarım butik otel; Michelin yıldızlı restoran.",lat:51.2207,lng:4.4070,ig:"https://instagram.com/hotelfranq",web:"https://www.hotelfranq.com/"},
- {name:"VIA Antwerp",area:"Zurenborg",cat:"otel",resv:"req",desc:"Zurenborg girişinde lifestyle butik otel; MEA restoranı burada.",lat:51.2114,lng:4.4288,ig:"https://instagram.com/viaantwerp",web:"https://www.viaantwerp.com/"},
- {name:"Hotel De Witte Lelie",area:"Tarihi Merkez",cat:"otel",resv:"req",desc:"16. yy evlerinde lüks butik otel, avlu & Bronze Bar.",lat:51.2227,lng:4.4053,ig:"https://instagram.com/hoteldewittelelie",web:"https://www.dewittelelie.be/"},
- {name:"Millésime",area:"Zuid",cat:"içki",resv:"rec",desc:"Şarap & şampanya odaklı samimi bar (ithalatçı işletmesi).",lat:51.2068,lng:4.3960,ig:"https://instagram.com/millesime.antwerp",web:"https://www.millesime-antwerp.be/"},
- {name:"Dogma Cocktails",area:"Tarihi Merkez",cat:"içki",resv:"no",desc:"Speakeasy havasında kokteyl barı; klasikler & imzalar.",lat:51.2214,lng:4.4046,ig:"https://instagram.com/dogmacocktails",web:"https://dogmacocktails.be/"},
- {name:"Café Bobby",area:"Zurenborg",cat:"içki",resv:"no",desc:"Sıcak mahalle ‘brown café’; bira, şarap, kokteyl, yemek.",lat:51.2055,lng:4.4222,ig:"https://instagram.com/cafe.bobby",web:""},
- {name:"Café Zeezicht",area:"Zurenborg",cat:"içki",resv:"no",desc:"Dageraadplaats’ta klasik kafe; Belçika birası, ev yemeği, kalabalık teras.",lat:51.2090,lng:4.4287,ig:"https://instagram.com/cafezeezicht",web:"https://www.cafezeezicht.be/"},
- {name:"Billie's Bier Kafétaria",area:"Tarihi Merkez",cat:"içki",resv:"rec",desc:"~180 çeşit Belçika/dünya birası olan craft bira barı.",lat:51.2169,lng:4.4006,ig:"https://instagram.com/billiesbierkafetaria",web:"https://www.billiesbier.be/"},
- {name:"Bakkerij FUNK",area:"Zuid",cat:"kahve",resv:"no",desc:"Bitki bazlı fırın; ekşi maya ekmek, pasta, specialty kahve, natürel şarap.",lat:51.2049,lng:4.3940,ig:"https://instagram.com/bakkerijfunk",web:"https://bakkerijfunk.com/"},
- {name:"POLLY",area:"Zurenborg/Haringrode",cat:"kahve",resv:"no",desc:"Minimalist specialty kahve barı; ev yapımı tatlılar, affogato.",lat:51.2073,lng:4.4310,ig:"https://instagram.com/polly.antwerp",web:""},
- {name:"Café Betty",area:"Berchem",cat:"kahve",resv:"no",desc:"Andy Roasters’ın mahalle kahvecisi; natürel şarap, ekşi maya pasta.",lat:51.1985,lng:4.4290,ig:"https://instagram.com/cafe.betty",web:""},
- {name:"TINSEL",area:"Tarihi Merkez",cat:"kahve",resv:"no",desc:"Sint-Paulusplaats’ta mevsimsel kahvaltı & öğle kafesi, meydan terası.",lat:51.2247,lng:4.4030,ig:"https://instagram.com/tinsel_antwerp",web:"https://www.tinsel.be/"},
- {name:"Caffènation",area:"Tarihi Merkez",cat:"kahve",resv:"no",desc:"Antwerp specialty kahvenin öncü kavurucusu; merkez şubesi.",lat:51.2120,lng:4.4115,ig:"https://instagram.com/caffenation_coffee",web:"https://caffenation.be/"},
- {name:"PAKT (Dakboerderij)",area:"Brederode/Groen Kwartier",cat:"aktivite",resv:"no",desc:"Sürdürülebilir depo alanı; çatı çiftliği, yeme noktaları, yeşil avlu.",lat:51.2024,lng:4.4220,ig:"https://instagram.com/paktantwerpen",web:"https://www.pakt-antwerpen.be/"},
- {name:"Antwaarpe Goeiemorgen",area:"Zuid (Kloosterstraat)",cat:"mağaza",resv:"no",desc:"İkinci el/kringloop dükkanı; antika sokağı Kloosterstraat’ta. Açık günleri sınırlı — kontrol et.",lat:51.2138,lng:4.3962,ig:"",web:"https://antwaarpegoeiemorgen.be/"},
- {name:"MoMu — Moda Müzesi",area:"Tarihi Merkez",cat:"müze",resv:"rec",desc:"Antwerp moda müzesi; dünyanın en büyük çağdaş Belçika moda koleksiyonu.",lat:51.2167,lng:4.3996,ig:"https://instagram.com/momuantwerp",web:"https://www.momu.be/"},
- {name:"Rubenshuis",area:"Tarihi Merkez",cat:"müze",resv:"rec",desc:"Rubens’in evi & atölyesi. ⚠️ Ana ev restorasyonda olabilir; sergi/bahçe açık mı kontrol et.",lat:51.2178,lng:4.4116,ig:"https://instagram.com/rubenshuisantwerpen",web:"https://rubenshuis.be/"}
-],
-Brussels:[
- {name:"Belga & Co (Brugmann)",area:"Saint-Gilles",cat:"kahve",resv:"no",desc:"Sevilen yerel kavurucunun amiral kafesi; harika espresso & pasta. Pazar açık.",lat:50.8254,lng:4.3506,ig:"https://instagram.com/belgacoffee",web:"https://www.belgacoffee.com"},
- {name:"Pardon",area:"Saint-Gilles",cat:"kahve",resv:"no",desc:"Yaratıcı tatlı/tuzlu waffle’larıyla ünlü specialty kahveci. Pazar açık (Çar–Per kapalı).",lat:50.8294,lng:4.3438,ig:"https://instagram.com/pardonbrussels",web:""},
- {name:"Titulus",area:"Ixelles",cat:"içki",resv:"rec",desc:"Natürel şarap barı + dükkan + mutfak; 400+ etiket, mevsimsel tabaklar. Pazar kapalı.",lat:50.8359,lng:4.3719,ig:"https://instagram.com/tituluspictus",web:"https://titulus.be"},
- {name:"Le Stoefer",area:"Ixelles (Châtelain)",cat:"içki",resv:"rec",desc:"Châtelain’de craft kokteyl barı; gizli mezcaleria speakeasy. Pazar kapalı.",lat:50.8275,lng:4.3614,ig:"https://instagram.com/lestoefer",web:"https://lestoefer.be"},
- {name:"Woodpecker 47",area:"Sainte-Catherine",cat:"yemek",resv:"no",desc:"Popüler tüm-gün brunch; tuzlu waffle, poşe yumurta. Pazar açık.",lat:50.8487,lng:4.3490,ig:"https://instagram.com/woodpecker.family",web:"https://woodpecker.family/en/woodpecker-47/"},
- {name:"Le Café des Spores",area:"Saint-Gilles",cat:"yemek",resv:"req",desc:"Mantar odaklı mevsimsel restoran, değişen tadım menüsü. Pazar kapalı.",lat:50.8264,lng:4.3438,ig:"https://instagram.com/cafedesspores",web:"https://www.cafedesspores.be"},
- {name:"Mixage Concept Store",area:"Dansaert",cat:"mağaza",resv:"no",desc:"Dönüşümlü ‘made-in-Belgium’ tasarımcıları öne çıkaran concept store. Pazar dahil her gün.",lat:50.8497,lng:4.3460,ig:"https://instagram.com/mixage_creator_concept_store",web:"https://www.mixage.be"},
- {name:"La Fabrika",area:"Dansaert",cat:"mağaza",resv:"no",desc:"Yerel & İskandinav markalarla iç tasarım showroom’u. Pazar kapalı.",lat:50.8488,lng:4.3447,ig:"https://instagram.com/lafabrika.be",web:"https://www.lafabrika.be"}
-],
-Bruges:[
- {name:"Markt & Belfort (Çan Kulesi)",area:"Merkez (Markt)",cat:"aktivite",resv:"no",desc:"Şehrin film seti gibi ana meydanı; 83 m çan kulesine çıkış ~14€, tepeden panorama.",lat:51.2085,lng:3.2247,ig:"",web:""},
- {name:"Burg & Kutsal Kan Bazilikası",area:"Merkez (Burg)",cat:"müze",resv:"no",desc:"İsa’nın kanı olduğu söylenen kutsal emaneti barındıran bazilika; hemen yanında görkemli Burg meydanı.",lat:51.2086,lng:3.2277,ig:"",web:""},
- {name:"Kanal Turu (Rozenhoedkaai)",area:"Merkez",cat:"aktivite",resv:"no",desc:"Kuzeyin Venedik’ini sudan keşfet; ~30 dk tekne turu, iskeleler Rozenhoedkaai çevresinde.",lat:51.2069,lng:3.2273,ig:"",web:""},
- {name:"Church of Our Lady (O.L.V.-kerk)",area:"Merkez",cat:"müze",resv:"rec",desc:"Michelangelo’nun Madonna ve Çocuk heykeline ev sahipliği yapan yüksek kuleli kilise.",lat:51.2043,lng:3.2244,ig:"",web:""},
- {name:"Sint-Janshospitaal (Memling)",area:"Merkez",cat:"müze",resv:"rec",desc:"Ortaçağ hastanesi, bugün Memling müzesi; kanal turu güzergâhında.",lat:51.2039,lng:3.2237,ig:"",web:""},
- {name:"Begijnhof",area:"Güney",cat:"aktivite",resv:"no",desc:"Bembeyaz evleriyle sessiz, huzurlu avlu; girişi ücretsiz, fotoğraf yasak, sessiz olun.",lat:51.2010,lng:3.2240,ig:"",web:""},
- {name:"Minnewater (Aşk Gölü) & park",area:"Güney",cat:"aktivite",resv:"no",desc:"Kuğulu göl ve park; açık havada dinlenmek için ideal (blogdaki park önerisinin karşılığı).",lat:51.1998,lng:3.2262,ig:"",web:""},
- {name:"Kruisvest yel değirmenleri",area:"Doğu (Kruisvest)",cat:"aktivite",resv:"no",desc:"Sint-Janshuismolen & Koeleweimolen tarihi yel değirmenleri; sur boyu yürüyüş.",lat:51.2112,lng:3.2333,ig:"",web:""},
- {name:"De Halve Maan Brewery",area:"Merkez (Walplein)",cat:"içki",resv:"rec",desc:"Ünlü Brugse Zot birasının fabrikası; tur + tadım, çatı manzarası.",lat:51.2020,lng:3.2247,ig:"",web:"https://www.halvemaan.be/"},
- {name:"Bourgogne des Flandres",area:"Merkez",cat:"içki",resv:"rec",desc:"Kanal kenarı bira fabrikası & müzesi; tur ve tadım.",lat:51.2062,lng:3.2270,ig:"",web:"https://bourgognedesflandres.be/"},
- {name:"De Garre",area:"Merkez (gizli sokak)",cat:"içki",resv:"no",desc:"Gizli aralıkta efsane bira barı; kendi %11’lik Garre birası (kişi başı max 3).",lat:51.2081,lng:3.2262,ig:"",web:""},
- {name:"Le Trappiste",area:"Merkez",cat:"içki",resv:"no",desc:"800 yıllık mahzende geniş Belçika birası seçkisi; Markt’a ~300 m.",lat:51.2093,lng:3.2255,ig:"",web:""},
- {name:"’t Brugs Beertje",area:"Merkez",cat:"içki",resv:"no",desc:"Merkezde klasik bira tadım barı; yanında peynir/turşu atıştırmalık.",lat:51.2065,lng:3.2210,ig:"",web:""},
- {name:"de Vlaamsche Pot",area:"Merkez",cat:"yemek",resv:"rec",desc:"Geleneksel Flaman mutfağı, tatlı ambiyans; özel bir akşam için (biraz pahalı).",lat:51.2098,lng:3.2202,ig:"",web:""},
- {name:"’t Zwart Huis",area:"Merkez",cat:"yemek",resv:"rec",desc:"Akşam yemeği; kışın şömine başı, iyi bira. Rezervasyon önerili.",lat:51.2109,lng:3.2237,ig:"",web:""},
- {name:"2be Bar",area:"Merkez (Wollestraat)",cat:"içki",resv:"no",desc:"Kanal manzaralı, turistik bar/restoran; içki + yemek.",lat:51.2076,lng:3.2278,ig:"",web:""},
- {name:"Ellis Gourmet Burger",area:"Merkez",cat:"yemek",resv:"no",desc:"Şehirdeki en iyi burgerlerden; hızlı ve doyurucu öğle.",lat:51.2088,lng:3.2245,ig:"",web:""},
- {name:"Sanseveria Bagelsalon",area:"Merkez",cat:"kahve",resv:"no",desc:"Kahvaltı, bagel ve Belçika çikolatalı waffle; güne başlamak için.",lat:51.2100,lng:3.2270,ig:"",web:""}
-]
-};
-
-const CITIES=[
- {city:"Antwerp",trainMin:75,foodDrink:5,localVibe:5,worthOvernight:5,tiring:2,take:"Öne çıkan tercih: hızlı direkt tren, dünya çapında yeme-içme/kahve/natürel şarap, yürünebilir mahalleler (Zurenborg, Zuid). Rahat lokal hafta sonu için birebir."},
- {city:"Brüksel",trainMin:110,foodDrink:5,localVibe:4,worthOvernight:4,tiring:3,take:"2 saatin altında direkt tren. Turist merkezini atla; Saint-Gilles/Ixelles’e yerleş — kahve, şarap barı, brunch çok güçlü."},
- {city:"Ghent",trainMin:140,foodDrink:5,localVibe:5,worthOvernight:4,tiring:3,take:"Aktarma gerekir ama ödülü büyük: kanallarla dolu, canlı öğrenci şehri, kafe cenneti. Geceleme güzel."},
- {city:"Bruges",trainMin:165,foodDrink:4,localVibe:3,worthOvernight:4,tiring:4,take:"En uzun & yorucu yol, gündüz çok turistik; ama günübirlikçiler gidince romantik, sakin bir geceleme."},
- {city:"Rotterdam",trainMin:40,foodDrink:4,localVibe:4,worthOvernight:3,tiring:1,take:"Hızlı direkt sıçrama; cesur mimari, Markthal, iyi food hall’lar. Geceleme yerine eğlenceli günübirlik."},
- {city:"Utrecht",trainMin:30,foodDrink:4,localVibe:5,worthOvernight:3,tiring:1,take:"En kolay kaçış: kanal-rıhtım kafeleri, telaşsız yerel hava. Düşük efor, rahat gün ya da kısa geceleme."},
- {city:"The Hague",trainMin:50,foodDrink:4,localVibe:4,worthOvernight:3,tiring:2,take:"Direkt & kolay; ağırbaşlı sokaklar + Scheveningen plajı. Hoş ama Utrecht kadar kafe-yoğun değil."},
- {city:"Haarlem",trainMin:15,foodDrink:4,localVibe:5,worthOvernight:2,tiring:1,take:"15 dakikada ‘kaçamak’; şirin, sakin kasaba, güzel kafeler. Geceleme yerine rahat yarım gün."}
-];
-
+const TRIPS={};
 /* ===== HELPERS ===== */
 function coordsOf(v){if(v.lat!=null&&v.lng!=null)return{lat:v.lat,lng:v.lng,approx:false};
  const c=AREA_CENTERS[areaKey(v.area)]||[HOME.lat,HOME.lng];return{lat:c[0],lng:c[1],approx:true};}
@@ -1133,11 +1005,11 @@ CTAS.forEach(c=>{const d=document.createElement("button");
 
 /* ===== SCENARIOS ===== */
 const SCN=[
- {id:"rembrandt",t:"Rembrandtpark çevresinde kal",m:"Düşük efor · yürüme",stops:["oficina","lusconi","barcentraal","rembrandtpark"]},
+ {id:"west",t:"De Baarsjes ve Oud-West",m:"Düşük efor · yürüme",stops:["oficina","lusconi","barcentraal"]},
  {id:"oudwest-jordaan",t:"Bisikletle Oud-West + Jordaan",m:"Bisiklet · tam gün",stops:["monks","flos","barpif","winkel43","saintjean"]},
  {id:"noord",t:"Noord’a geç: öğleden sonra + akşam",m:"Feribot · bisiklet",stops:["coffeevirus","ceuvel","coba","pllek"]},
  {id:"depijp",t:"De Pijp: brunch + akşam drink",m:"Bisiklet · tam gün",stops:["bakers","annanina","brutdemer","glouglou"]},
- {id:"park",t:"Parkta sandviç + kahve günü",m:"Düşük efor · güneşli",stops:["flos","monks","rembrandtpark","westerpark"]},
+ {id:"park",t:"Parkta sandviç + kahve günü",m:"Düşük efor · güneşli",stops:["flos","monks","westerpark"]},
  {id:"dinner-bar",t:"Akşam yemeği + sonrasında bar",m:"Akşam",stops:["bouillon","deklos","shiraz","barcentraal"]},
  {id:"work-lunch",t:"Laptopla çalışma + iyi öğle",m:"Hafta içi · çalışma",stops:["kanarie","monks","chun","4850"]},
  {id:"rain",t:"Yağmurlu gün planı",m:"İçeride · konforlu",stops:["lottis","bocca","tij","deklos"]},
@@ -1305,14 +1177,14 @@ function renderCards(){
  else{_h=list.map(cardHtml).join("");}
  document.getElementById("cards").innerHTML=_h;
  document.getElementById("count").textContent=list.length+" mekan"+
-   (document.getElementById("fSort").value==="dist"?(" · "+(userLoc?"konumuna":"Rembrandtpark’a")+" göre sıralı"):"");
+   (document.getElementById("fSort").value==="dist"?(" · "+(userLoc?"konumuna":"merkeze")+" göre sıralı"):"");
  syncChips();
 }
 function applyFilters(){renderCards();}
 
 /* ===== SELF-CONTAINED SVG MAP ===== */
 /* ===== LEAFLET / OpenStreetMap MAP ===== */
-const CITY_VIEW={Amsterdam:[52.370,4.895,12],Antwerp:[51.215,4.410,13],Brussels:[50.845,4.360,13],Bruges:[51.208,3.224,14]};if(!CITY_VIEW[CITY])CITY_VIEW[CITY]=CC.view;
+const CITY_VIEW={Amsterdam:[52.370,4.895,12]};if(!CITY_VIEW[CITY])CITY_VIEW[CITY]=CC.view;
 const MAP={city:CITY,map:null,layer:null,userMarker:null,ready:false,pickMode:false};
 function hexColor(v){if(isFav(v.id))return"#c25a52";return v.src==="user"?"#5b7a96":v.src==="deck"?"#5a9a93":v.src==="extra"?"#7d9a5a":"#8a6fa3";}
 function initMap(){
@@ -1389,7 +1261,7 @@ function setRef(lat,lng,label){
 }
 function clearRef(){userLoc=null;
  const btn=document.getElementById("locBtn");if(btn){btn.textContent="📍 Konumumu kullan";btn.classList.remove("on");}
- const hl=document.getElementById("heroLoc");if(hl)hl.textContent="📍 Referans konum: Rembrandtpark";
+ const hl=document.getElementById("heroLoc");if(hl)hl.textContent="📍 Referans konum: "+(HOME&&HOME.name?HOME.name:"Merkez");
  if(MAP.map)placeUser();renderCards();
  try{ if(window.__tripDirty)window.__tripDirty(); }catch(e){}}
 /* accommodation tek kaynak: userLoc (etiketli). Autosave + geri yükleme bunu kullanır. */
@@ -1423,30 +1295,6 @@ function populateRefSels(){
 document.getElementById("locBtn").onclick=getLoc;
 
 /* ===== CALENDAR ===== */
-const PLANS={
- 11:{tag:"Yerleşme",txt:"Daireye yerleş, Rembrandtpark turu, akşam Oficina/Bar Lusconi."},
- 12:{tag:"Lokal",txt:"De Baarsjes & Oud-West yürüyüşü, Monks’ta kahve, akşam Bar Centraal."},
- 13:{tag:"Çalışma",txt:"Kanarie Club’da çalış, Chun’dan öğle, akşam Café Binnenvisser."},
- 14:{tag:"Çalışma",txt:"White Label’da kahve+çalış, Flo’s sandviç parkta, akşam Bar Pif (rez)."},
- 15:{tag:"Keşif",txt:"Bisikletle Jordaan: Winkel 43, Saint-Jean, akşam Café de Klos."},
- 16:{tag:"Çalışma",txt:"Coffee Room sabah, öğle Oficina, akşam Shiraz şarap."},
- 17:{tag:"Lokal",txt:"De Pijp günü: Bakers&Roasters brunch, Anna+Nina, GlouGlou."},
- 18:{tag:"🚆 Hafta sonu",txt:"Antwerp! Cumartesi sabah trenle git (≈1s15)."},
- 19:{tag:"🚆 Hafta sonu",txt:"Antwerp pazar brunch (Tinsel/Funk), akşam Amsterdam’a dön."},
- 20:{tag:"Çalışma",txt:"Toparlanma + 4850’de kahve/çalış, akşam Bouillon."},
- 21:{tag:"Çalışma",txt:"Uncommon/Coffee District çalış, akşam Alba şarap barı."},
- 22:{tag:"Noord",txt:"Feribotla Noord: Coffee Virus, Coba taco, gün batımı Pllek."},
- 23:{tag:"Çalışma",txt:"Monks sabah, öğle Lotti’s, akşam Brut de Mer deniz mahsulleri."},
- 24:{tag:"Lokal",txt:"Westerpark/Westergas: Espressofabriek, Troost, piknik."},
- 25:{tag:"🚆 Hafta sonu",txt:"Brüksel! (ya da Ghent). Saint-Gilles/Ixelles’e yerleş."},
- 26:{tag:"🚆 Hafta sonu",txt:"Brüksel pazar: Belga&Co, Woodpecker brunch, akşam dön."},
- 27:{tag:"Favori",txt:"Favori turu: Chun, Bar Pif, akşam Pllek."},
- 28:{tag:"Çalışma",txt:"Son çalışma günleri: Kanarie, öğle Bar Lusconi."},
- 29:{tag:"Eksikler",txt:"Kaçırdıklarını tamamla; Escobar/Coba (rez & açık mı kontrol)."},
- 30:{tag:"Rahat",txt:"Sakin gün: Café de Ceuvel, Brouwerij ’t IJ."},
- 31:{tag:"Veda",txt:"Son kahve Monks, öğle Oficina, veda akşamı Bar Pif/Shiraz."}
-};
-const WEEKEND=new Set([18,19,25,26]);
 const DOW=["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
 let calNotes={};try{calNotes=JSON.parse(localStorage.getItem("ams_cal")||"{}");}catch(e){}
 let calPlans={},calPhotos={};
@@ -1832,79 +1680,7 @@ function renderDay(d){
  const pi=document.getElementById("dayPhotoInput");if(pi)pi.addEventListener("change",ev=>addPhoto(d,ev));
 }
 
-/* ===== WEEKEND ===== */
-function renderTrips(){
- if(typeof CITY!=='undefined'&&CITY!=='Amsterdam'){return;}
- if(!isMember()){
-   document.getElementById("tripReco").innerHTML='<div class="reco"><h3>Hafta sonu kaçamakları</h3><p>Antwerp, Brüksel ve Brugge için tren süreleri, lokal kalınacak mahalleler ve saatlik günübirlik planlar — hepsi üyelere özel.</p></div>'+gateCard('Hafta sonu planlarının tamamı üyelere özel');
-   var _c=document.getElementById("cmp");if(_c)_c.innerHTML="";
-   ["antwerpPlan","brusselsPlan","brugesPlan"].forEach(function(id){var e=document.getElementById(id);if(e)e.innerHTML="";});
-   return;
- }
- document.getElementById("tripReco").innerHTML='<div class="reco">'+
-   '<h3>Önerim</h3>'+
-   '<p><b>1. hafta sonu (18–19 Tem): Antwerp.</b> En güçlü aday — hızlı direkt tren (≈1s15), olağanüstü yeme-içme/kahve/natürel şarap ve birebir senin sevdiğin yürünebilir mahalleler (Zurenborg, Zuid). 1 gece için ideal, yormaz.</p>'+
-   '<p style="margin-top:8px"><b>2. hafta sonu (25–26 Tem): Brüksel.</b> Saint-Gilles & Ixelles’te lokal kal; turist merkezini atla. Alternatif: <b>Ghent</b> (daha şirin, biraz daha yorucu ulaşım) ya da çok rahat istersen <b>Utrecht/Haarlem</b> günübirlik.</p>'+
-   '<p style="margin-top:8px;font-size:12.5px;color:#cfc7b8">Bruges’ü <b>günübirlik</b> olarak ekledim (aşağıda). Brüksel hafta sonuna cumartesi veya pazar günübirlik Brugge sığdırabilirsin — ikisi de Belçika’da ve aralarında ~1 saat. İki yorucu gecelemeyi üst üste koymamak için Brugge’u konaklama olarak önermedim.</p></div>';
- const cmp=document.getElementById("cmp");
- cmp.innerHTML='<tr><th>Şehir</th><th>Tren</th><th>Yeme-içme</th><th>Lokal</th><th>Geceleme</th><th>Yorucu</th></tr>'+
-   CITIES.map(c=>'<tr><td>'+c.city+'</td><td>≈'+c.trainMin+' dk</td>'+
-     '<td>'+"●".repeat(c.foodDrink)+'</td><td>'+"●".repeat(c.localVibe)+'</td>'+
-     '<td>'+"●".repeat(c.worthOvernight)+'</td><td>'+"●".repeat(c.tiring)+'</td></tr>'+
-     '<tr><td colspan="6" style="text-align:left;color:var(--ink2);font-size:11.5px;padding-top:0">'+c.take+'</td></tr>').join("");
- renderTripPlan("Antwerp","antwerpPlan",[
-   ["Cmt sabah","Geliş + kahve","Caffènation / TINSEL — meydan terası, ilk kahve"],
-   ["Cmt öğle","Öğle yemeği","Glou Glou (Borgerhout) ya da PAKT çatı çiftliğinde rahat öğle"],
-   ["Cmt öğleden sonra","Mahalle + mağaza","Zuid: Kloosterstraat antikaları, MoMu moda müzesi, Bakkerij FUNK molası"],
-   ["Cmt akşam","Akşam yemeği","Osaka veya MEA (rez) — paylaşımlık + natürel şarap"],
-   ["Cmt gece","İçki","Dogma Cocktails ya da Billie’s craft bira"],
-   ["Paz sabah","Brunch/kahve","POLLY veya Café Betty (Berchem) — sakin pazar"],
-   ["Paz öğle","Son rota","Zurenborg güzel evleri + Dageraadplaats’ta Café Zeezicht, sonra tren"]
- ],[
-   "<b>Rota 1 — Yeme-içme:</b> Caffènation → Glou Glou → Millésime şarap → Osaka/MEA → Dogma.",
-   "<b>Rota 2 — Tasarım/müze:</b> TINSEL → MoMu → Kloosterstraat & Antwaarpe Goeiemorgen → PAKT → FUNK.",
-   "<b>Rota 3 — Rahat (yormaz):</b> Café Betty → Zurenborg yürüyüşü → Café Zeezicht terası → POLLY."
- ]);
- renderTripPlan("Brussels","brusselsPlan",[
-   ["Cmt sabah","Geliş + kahve","Belga & Co (Saint-Gilles) — espresso + pasta"],
-   ["Cmt öğle","Öğle/brunch","Woodpecker 47 (Sainte-Catherine) tuzlu waffle"],
-   ["Cmt öğleden sonra","Mahalle + mağaza","Dansaert: Mixage & La Fabrika tasarım, Sainte-Catherine yürüyüşü"],
-   ["Cmt akşam","Akşam yemeği","Le Café des Spores (mantar, rez) — Saint-Gilles"],
-   ["Cmt gece","İçki","Le Stoefer kokteyl / Titulus natürel şarap"],
-   ["Paz sabah","Brunch/kahve","Pardon (waffle) — pazar açık"],
-   ["Paz öğle","Son rota","Ixelles/Châtelain yürüyüşü, sonra tren (≈1s50)"]
- ],[
-   "<b>Not:</b> Pazar günü Titulus, Le Stoefer, La Fabrika, Spores kapalı olabilir — pazarı Belga&Co, Pardon, Woodpecker, Mixage’a göre kur.",
-   "<b>Lokal mahalleler:</b> Saint-Gilles, Ixelles (Châtelain), Dansaert.",
-   "<b>Alternatif:</b> Çok rahat istersen Brüksel yerine Utrecht (≈30 dk) ya da Haarlem (≈15 dk)."
- ]);
- renderTripPlan("Bruges","brugesPlan",[
-   ["Sabah","Kahvaltı","Sanseveria Bagelsalon — bagel + Belçika çikolatalı waffle ile başla"],
-   ["Sabah","Meydan & manzara","Markt + Belfort çan kulesine çık (~14€), tepeden panorama"],
-   ["Öğleye doğru","Tarih & kanal","Burg meydanı & Kutsal Kan Bazilikası, sonra Rozenhoedkaai’den ~30 dk kanal turu"],
-   ["Öğle","Öğle yemeği","Ellis Gourmet Burger (hızlı) ya da ’t Brugs Beertje (bira + atıştırmalık)"],
-   ["Öğleden sonra","Yürüyüş","Church of Our Lady → Sint-Janshospitaal → Begijnhof → Minnewater (Aşk Gölü)"],
-   ["İkindi","Bira molası","De Halve Maan turu + tadım, ya da gizli De Garre barında Garre birası"],
-   ["Akşam","Akşam yemeği","de Vlaamsche Pot (geleneksel Flaman) veya ’t Zwart Huis (rez önerili), sonra son trenle dön"]
- ],[
-   "<b>Klasik rota:</b> Markt/Belfort → Burg & Bazilika → Rozenhoedkaai kanal turu → Church of Our Lady → Begijnhof → Minnewater.",
-   "<b>Bira sevenler:</b> De Halve Maan → De Garre (gizli bar) → Le Trappiste → ’t Brugs Beertje.",
-   "<b>Not:</b> Brugge Brüksel’e ~1 saat, Amsterdam’a ~3 saat (genelde Antwerp/Brüksel aktarmalı). Günübirlik için erken çık; şehir merkezi tamamen yürünebilir, gün batımını Rozenhoedkaai’de yakala."
- ]);
-}
-function renderTripPlan(city,elId,rows,routes){
- const arr=TRIPS[city]||[];
- const html='<div class="trip">'+
-   '<div class="route">'+rows.map((r,i)=>'<div class="stop"><div class="n">'+(i+1)+'</div>'+
-     '<div class="x"><b>'+r[0]+' · '+r[1]+'</b><div class="sub">'+r[2]+'</div></div></div>').join("")+'</div>'+
-   '<div style="margin-top:14px">'+routes.map(r=>'<div class="note">'+r+'</div>').join("")+'</div>'+
-   '<h3 style="font-size:15px;margin:14px 0 8px">'+city+' mekan listesi</h3>'+
-   '<div class="badges">'+arr.map(v=>{const q=encodeURIComponent(v.name+" "+city);
-     return '<span class="badge" style="cursor:pointer" title="'+v.desc.replace(/"/g,"")+'" onclick="winopen(\'https://www.google.com/maps/search/?api=1&query='+q+'\')">'+v.name+' · '+v.cat+'</span>';
-   }).join("")+'</div></div>';
- document.getElementById(elId).innerHTML=html;
-}
-
+function renderTrips(){ return; }
 /* ===== DECISION ENGINE (tamamen yerel) ===== */
 const DE_Q=[
  {id:"time",l:"Zaman",opts:["Sabah","Öğlen","Öğleden sonra","Akşam","Gece"]},
@@ -2143,23 +1919,6 @@ function runDE(){
   deRenderLocBar();
   out.innerHTML=deRenderResults(res);
 }
-
-/* ===== CHECK LIST ===== */
-const CHECKS=[
- "Rezervasyon: Bar Pif, CS Noord, Chez Nina/Noof, De Plantage, Escobar, Alba, Gebr. Hartering, Le Pristine, Hertog Jan, Le Café des Spores için önceden ayır.",
- "Açılış saatleri: Küçük yerler (Saint-Jean, Winkel 43) erken kapanabilir; gitmeden saat bak.",
- "Pazar günü: Brüksel’de Titulus, Le Stoefer, La Fabrika, Spores pazar kapalı olabilir — planı Belga&Co/Pardon/Woodpecker’a göre kur.",
- "Brugge (günübirlik): 't Zwart Huis & de Vlaamsche Pot için akşam rezervasyonu; De Halve Maan turu için gün içinde bilet/saat kontrol et.",
- "Escobar: Bazı kaynaklar kapandığını yazıyor — gitmeden mutlaka doğrula.",
- "Chez Nina → ‘Noof’ olarak yenilenmiş olabilir (konsept değişmiş); kontrol et.",
- "Rubenshuis (Antwerp): ana ev restorasyonda olabilir; sergi/bahçe açık mı bak.",
- "Tatil/özel gün: 21 Temmuz Belçika ulusal günü civarı bazı yerler farklı çalışabilir.",
- "Tren saatleri: Antwerp/Brüksel/Brugge için NS International / SNCB saatlerini önceden kontrol et; hafta sonu seyrekleşebilir. Brugge Amsterdam’a ~3 saat (aktarmalı).",
- "Müzeler: MoMu, Brugge Belfort/Memling ve Amsterdam müzelerinde geçici sergi & bilet saati olabilir, online al.",
- "Ses kayıtları: Bu ortamda transkribe edilemedi — kayıtlardaki öneriler henüz eklenmedi (yukarıdaki nota bak).",
- "Koordinatlar: ‘~konum’ etiketli pinler mahalle merkezine yaklaşıktır; navigasyon için ‘Google Maps’te aç’ı kullan."
-];
-document.getElementById("checkList").innerHTML=CHECKS.map(c=>'<li>'+c+'</li>').join("");
 
 /* ===== INIT ===== */
 (function cityInit(){try{
