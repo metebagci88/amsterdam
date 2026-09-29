@@ -106,12 +106,28 @@ ok("T05e renderConsent salt-okunur (q_member_consent + readiness)", /q_member_co
 ok("T08b renderEmail (CDP-3B editör) hâlâ var", /function renderEmail\(/.test(adminHtml));
 
 grp("(B) STATİK · üye Tercih Merkezi (yalnız servis; marketing gizli)");
-for(const [nm,src] of [["amsterdam",ams],["kopenhag",cph]]){
+function assertCityPrefsShell(nm, src){
   ok("T06d "+nm+": marketing UI tamamen YOK (auto-open/capability iddiası yok)", !/marketing_available/.test(src) && !/asaMktBlock|marketingBlock/.test(src));
   ok("T09 "+nm+": save sonrası server'dan yeniden okur (optimistic yok)", /loadPrefs\(\);\s*\/\/ sunucu durumunu yeniden oku/.test(src));
   ok("Txx "+nm+": 'Tümünü reddet' kontrolü yok", !/reject-all|Tümünü reddet<\/button>|pc-reject-all/.test(src));
   ok("T14 "+nm+": pref sekmesi yalnız kullanıcı açınca (auto-invoke/popup yok)", /else if\(curSeg==="prefs"\)\{ b.innerHTML=prefsShellHtml\(\); loadPrefs\(\); \}/.test(src) && !/loadPrefs\(\);\s*\/\/\s*auto/.test(src));
   ok("T06e "+nm+": yalnız service_pref_set yazar (consent_set yok)", /db.rpc\("service_pref_set"/.test(src) && !/db.rpc\("consent_set_pref_center"/.test(src));
+}
+assertCityPrefsShell("amsterdam", ams);
+const cphStub = /data-asa-city-state\s*=\s*["']stub["']/.test(cph);
+if(cphStub){
+  ok("CPH-stub marker data-asa-city-state=stub", cphStub);
+  ok("CPH-stub başlık ve alt başlık Kopenhag", /<title>[^<]*Kopenhag[^<]*<\/title>/.test(cph) && !/<title>[^<]*Amsterdam/i.test(cph) && /class="sub"[^>]*>\s*Kopenhag\s*</.test(cph));
+  ok("CPH-stub hazırlanıyor durumu", cph.includes("Kopenhag içerikleri hazırlanıyor"));
+  ok("CPH-stub Amsterdam başlık veya prototip içeriği yok", !/Amsterdam/i.test(cph) && !/Rembrandtpark/.test(cph));
+  ok("CPH-stub kişisel seyahat tarihi veya itinerary yok", !/11–31 Temmuz|Antwerp|Brüksel|Brugge|Brussels|Bruges/.test(cph));
+  ok("CPH-stub ortak şifre yok", !/ortak şifre/.test(cph));
+  ok("CPH-stub WhatsApp, whisper, veri notu veya file yolu yok", !/WhatsApp/i.test(cph) && !/whisper/i.test(cph) && !/Veri notları/.test(cph) && !/file:\/\//.test(cph));
+  ok("CPH-stub preference UI veya yarım save/read yok", !/loadPrefs|prefsShellHtml|service_pref_set|consent_set_pref_center|curSeg==="prefs"|<script\b/i.test(cph));
+  ok("CPH-stub marketing UI yok", !/marketing_available|asaMktBlock|marketingBlock/.test(cph));
+  ok("CPH-stub uydurma mekân yok", !/\bconst V\b|CITYCONF|Nyhavn|Tivoli|Noma|Torvehallerne|kafe|restoran/i.test(cph));
+}else{
+  assertCityPrefsShell("kopenhag", cph);
 }
 
 grp("(B) STATİK · çerez modülü (fail-closed)");
