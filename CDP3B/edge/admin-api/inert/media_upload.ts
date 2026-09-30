@@ -1,5 +1,7 @@
-// ASALOCAL · STORAGE_MEDIA_UPLOAD_DESIGN — INERT reference helper.
-// ChatGPT EVET B revision. NOT imported by ../index.ts. NOT deployed.
+// ASALOCAL · STORAGE_MEDIA_UPLOAD — reference helper.
+// ChatGPT EVET B revision. Imported by ../index.ts (repo splice only).
+// NOT production-deployed. Hosted admin-api stays on the pre-splice v16 text
+// until a later deploy EVET, and that deploy is still blocked (§8).
 //
 // Default transport is multipart/form-data for media_upload only.
 // Other admin actions stay application/json with MAX_BODY = 8KB.
@@ -189,6 +191,55 @@ export function classifyMultipartContentLength(contentLength: number | null): "o
 export function assertMultipartBufferedLength(len: number): "ok" | "too_large" {
   if (!Number.isSafeInteger(len) || len < 0 || len > MEDIA_MULTIPART_MAX) return "too_large";
   return "ok";
+}
+
+/**
+ * Edge splice body read. Stops at max+1 bytes so the caller can tell an
+ * exact-cap body from a larger one via assertMultipartBufferedLength.
+ * Does not call req.text() (binary-unsafe) or an uncapped arrayBuffer().
+ */
+export async function readCapped(
+  req: { body: ReadableStream<Uint8Array> | null },
+  max: number,
+): Promise<Uint8Array> {
+  const overflow = MEDIA_MULTIPART_MAX + 1;
+  if (!Number.isSafeInteger(max) || max < 0 || max > MEDIA_MULTIPART_MAX) {
+    return new Uint8Array(overflow);
+  }
+  const limit = max + 1;
+  const body = req.body;
+  if (!body) return new Uint8Array(0);
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < limit) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      const room = limit - total;
+      if (value.byteLength > room) {
+        chunks.push(value.subarray(0, room));
+        total += room;
+        break;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      /* stream already closed */
+    }
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
 }
 
 export function base64DecodedLength(b64: string): number | null {

@@ -1,8 +1,8 @@
 # STORAGE_MEDIA_UPLOAD_DESIGN
 
-**Status: INERT.** This package is a spec plus an unwired helper. It does not deploy Edge, does not change `CDP3B/edge/admin-api/index.ts`, does not edit `admin.html` or `CDP3B/admin.html`, and does not drop or create storage policies.
+**Status: EDGE_IMPLEMENT in-repo. NOT deployed.** The multipart splice is in `CDP3B/edge/admin-api/index.ts` and imports `inert/media_upload.ts`. Production admin-api remains hosted v16 (`verify_jwt=true`) on the pre-splice source. This change does not deploy the function, does not edit `admin.html` or `CDP3B/admin.html`, and does not drop or create storage policies.
 
-**Revision: ChatGPT EVET B (2026-09-30).** Default transport for `media_upload` is `multipart/form-data`. The global JSON body cap stays 8KB. Role gates stay aligned to the live `_can_edit_venues` / `_can_edit_ads` helpers. Two items below are **DEPLOY BLOCKERS** for `STORAGE_MEDIA_UPLOAD_EDGE`.
+**Revision: ChatGPT EVET B (2026-09-30), spliced in-repo 2026-09-30.** Default transport for `media_upload` is `multipart/form-data`. The global JSON body cap stays 8KB. Role gates stay aligned to the live `_can_edit_venues` / `_can_edit_ads` helpers. Two items below are still **DEPLOY BLOCKERS** before any future deploy EVET.
 
 ```
 NO_EDGE_DEPLOY=true
@@ -10,13 +10,15 @@ NO_POLICY_DROP=true
 NO_ADMIN_HTML_EDIT=true
 NO_BROWSER_STORAGE_WIRING=true
 MERGE_IS_NOT_DEPLOY=true
+APPLY=NO
+DEPLOY_BLOCKERS=open
 ```
 
-Merge of this PR leaves production admin-api v16, the `media` bucket, and the admin UI on their current paths. A later **STORAGE_MEDIA_UPLOAD_EDGE** approval is required before any splice or deploy, and that approval is blocked until the two deploy blockers in §8 pass. Admin UI wiring is a further **STORAGE_MEDIA_ADMIN_WIRE** approval. Policy lock is **STORAGE_MEDIA_LOCK_ACTIVATE** and stays blocked until Edge upload has passed smoke.
+Merge of this PR leaves production admin-api v16, the `media` bucket, and the admin UI on their current paths. Deploy stays blocked until the two deploy blockers in §8 pass. Admin UI wiring is a further **STORAGE_MEDIA_ADMIN_WIRE** approval. Policy lock is **STORAGE_MEDIA_LOCK_ACTIVATE** and stays blocked until Edge upload has passed smoke.
 
 ## 0. Evidence (read-only SELECT, 2026-09-30)
 
-Repo file `CDP3B/edge/admin-api/index.ts` SHA-256 `880dd2c4b75814949aff35d9e6a478dbfc9563da74137c2cfc7093e3482fae7b`. Hosted slug `admin-api` is ACTIVE version 16, `verify_jwt=true`, same source text. `MAX_BODY = 8 * 1024` is applied in `index.ts` before the action is known (the `req.text()` line immediately after the `application/json` check).
+Pre-splice repo file `CDP3B/edge/admin-api/index.ts` SHA-256 `880dd2c4b75814949aff35d9e6a478dbfc9563da74137c2cfc7093e3482fae7b`. Hosted slug `admin-api` is ACTIVE version 16, `verify_jwt=true`, that same source text. This PR changes the repo file and does not deploy it, so production stays on that hash until a later EVET. `MAX_BODY = 8 * 1024` is still the JSON ceiling. `req.text()` runs only on the `application/json` branch, after `contentTypeBranch`, and still before the JSON action is trusted. Multipart uses `readCapped` at `5_000_000 + 65_536` and never calls `req.text()`.
 
 Live enum `public.admin_role` labels, `enumsortorder` 1 through 8:
 
@@ -79,7 +81,7 @@ One write action on the existing `admin-api` function:
 | Public read | `media.public` stays true. Public URL only. No signed URL. |
 | Policies | The four `media anon *` policies stay until a later lock EVET. |
 
-`inert/media_upload.ts` is the reference implementation. `index.ts` must not import it until the Edge EVET.
+`inert/media_upload.ts` is the reference implementation. `index.ts` imports it. That import is repo-only until a future deploy, and that deploy stays blocked on §8.
 
 ## 2. Discovered constraints (locked, not open)
 
@@ -136,7 +138,7 @@ Multipart whose `action` field is not exactly `media_upload` (for example `count
 
 The handler always calls `admin_rate_check`. The live function raises `bad action` unless `p_action` is in a fixed list. The handler maps that RPC error to 500 `internal`.
 
-Deploying the TypeScript splice without extending that list makes every `media_upload` return 500 and write nothing. The extension is a `CREATE OR REPLACE` of `public.admin_rate_check` only. It is not a storage policy change. It is **not applied by this PR**.
+Deploying the TypeScript splice without extending that list makes every `media_upload` return 500 and write nothing. The extension is a `CREATE OR REPLACE` of `public.admin_rate_check` only. It is not a storage policy change. The repo artifact is `inert/admin_rate_check_media_upload.APPLY_NO.sql`. **APPLY=NO.** It is not applied by this PR.
 
 The replace must keep every action string that is in the function today and add only `media_upload`. It must not DROP the function. It must not add `q_member_consent` or `marketing_readiness_check` in the same change: those names are already in the Edge `LIMITS` map and already absent from the SQL list, so they 500 today. That gap is pre-existing and out of scope.
 
@@ -291,17 +293,17 @@ Success uses the existing `json()` helper: 200, `Content-Type: application/json`
 
 Error bodies stay `{ "error": "<code>" }`. Do not attach storage messages or a signed URL.
 
-## 6. Future splice map (do not apply in this PR)
+## 6. Repo splice (applied in this change; not deployed)
 
-File: `CDP3B/edge/admin-api/index.ts`. Deploy copy remains the single-file `cp` in `.github/workflows/cdp3c-edge-integration.yml`. Do not `cp -a` the `inert/` directory into the function bundle until the Edge EVET imports the helper.
+File: `CDP3B/edge/admin-api/index.ts`. The ephemeral copy step in `.github/workflows/cdp3c-edge-integration.yml` now copies `inert/media_upload.ts` next to `index.ts` so a future bundle can resolve `./inert/media_upload.ts`. Tests and `admin_rate_check_media_upload.APPLY_NO.sql` stay out of that bundle. This workflow still only `functions serve`s on an ephemeral stack. It does not deploy production.
 
 | Site | Change |
 |---|---|
-| Imports | `import { ... } from "./inert/media_upload.ts"` — this line is the moment production behavior can change. It is absent now. |
+| Imports | `import { ... } from "./inert/media_upload.ts"` — present in the repo. Production behavior changes only when this file is deployed, which this PR does not do. |
 | `ROLE_SETS` | add `media_upload:["super_admin","venue_editor","ads"]` |
 | `WRITE_ACTIONS` | add `"media_upload"` |
 | `LIMITS` | add `media_upload:{min:10,day:100}` |
-| Content-Type check (the `application/json` line, today line 36) | replace with the §2.1 branch. Do not edit `const MAX_BODY = 8 * 1024`. |
+| Content-Type check (replaced the old `application/json` line) | §2.1 branch. `const MAX_BODY = 8 * 1024` is unchanged. |
 | JSON parse | if `action === "media_upload"`, return 415 before `getUser` |
 | After role union, before `createClient(URL, SRK, ...)` | prefix role re-check |
 | Dispatch | call `planMediaUpload` with the multipart bytes and `svc.storage.from("media").upload`, then `return json(...)` |
@@ -318,7 +320,7 @@ Edge EVET order:
 
 ## 7. Acceptance matrix
 
-HTTP rows are for the post-splice function. This PR checks the pure rows in `inert/media_upload.test.ts` and checks that `index.ts` still hashes to `880dd2c4…`.
+HTTP rows are for the post-splice function. This PR checks the pure rows in `inert/media_upload.test.ts`, the splice contract against `index.ts`, and (when the ephemeral Edge workflow runs) a storage upload that deletes its objects before exit. The pre-splice production hash remains `880dd2c4…`. The repo file no longer hashes to it.
 
 | Case | Result |
 |---|---|
@@ -355,7 +357,7 @@ Secret scan: no JWT-shaped strings and no key assignment. The role name `service
 
 ## 8. DEPLOY BLOCKERS
 
-These two checks must pass before `STORAGE_MEDIA_UPLOAD_EDGE` deploys. This PR does not run them. A failure is a stop, not a prompt to invent another upload protocol in the same change.
+These two checks must pass before any future deploy EVET. This PR does not run them and does not deploy. A failure is a stop, not a prompt to invent another upload protocol. **DEPLOY_BLOCKERS=open.**
 
 1. **DEPLOY BLOCKER — gateway body size.** Smoke one real JPEG of about 5MB as `multipart/form-data` (file field plus `action` and `prefix`) against the hosted Edge gateway. The Edge limits page does not publish a request-size cap. Memory is 256MB and standard Storage upload is the path under 6MB, but the gateway in front of the function may still reject the body. If it rejects, stop. Do not switch to TUS, signed upload URLs, or a second function in that same change.
 2. **DEPLOY BLOCKER — platform `verify_jwt` 401 and CORS.** Send a real request with a missing or invalid JWT so the platform answers 401 before the isolate runs. Record whether that response includes `Access-Control-Allow-Origin`. The function's own 401/403 paths are specified in §5. The platform response is not. Do not deploy until that probe is written down.
