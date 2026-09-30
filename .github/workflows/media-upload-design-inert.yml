@@ -1,0 +1,25 @@
+name: Media upload design inert
+
+# Unit tests for the unwired admin-api media_upload helper.
+# Does not deploy Edge, does not edit admin HTML, and does not change storage policies.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "CDP3B/edge/admin-api/MEDIA_UPLOAD_DESIGN.md"
+      - "CDP3B/edge/admin-api/inert/**"
+      - ".github/workflows/media-upload-design-inert.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests
+        run: node --experimental-strip-types --test CDP3B/edge/admin-api/inert/media_upload.test.ts
+      - name: Secret scan
+        run: bash CDP3C_package/gates/secret_scan.sh CDP3B/edge/admin-api/MEDIA_UPLOAD_DESIGN.md CDP3B/edge/admin-api/inert
