@@ -27,7 +27,20 @@ sudo -u postgres psql -h "$SOCK" -d postgres -v ON_ERROR_STOP=1 -c "drop databas
 sudo -u postgres createdb -h "$SOCK" "$DB"
 
 run() { "${PSQL[@]}" -d "$DB" "$@"; }
-runf() { run --single-transaction -f "$1" >/dev/null; }
+# Runner opens the SQL file. postgres never has to traverse the checkout.
+runf() {
+  local sql_file="$1"
+  if [[ ! -r "$sql_file" ]]; then
+    echo "GATE_FAILED:wse_sql_file_unreadable:$sql_file"
+    return 1
+  fi
+  sudo -u postgres psql \
+    -h "$SOCK" \
+    -v ON_ERROR_STOP=1 \
+    --single-transaction \
+    -d "$DB" \
+    -f - < "$sql_file" >/dev/null
+}
 
 runf "$REPO/CDP3D_package/gates/cdp3d_prereq_stub.sql"
 runf "$REPO/CDP3D_package/CDP3D_up.sql"
@@ -37,7 +50,7 @@ runf "$ROOT/WSE_up.sql"
 runf "$ROOT/WSE_up.sql"
 
 set +e
-unarmed="$(run --single-transaction -f "$ROOT/WSE_ACTIVATE.sql" 2>&1)"
+unarmed="$(runf "$ROOT/WSE_ACTIVATE.sql" 2>&1)"
 unarmed_rc=$?
 set -e
 if [[ "$unarmed_rc" -eq 0 ]] || [[ "$unarmed" != *activation_refused_without_explicit_arm* ]]; then
