@@ -1,0 +1,22 @@
+name: ASA storage inert
+
+# Unit tests for the unwired browser-storage helper. Does not deploy, does not
+# edit live HTML, and does not apply database or edge changes.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "lib/asa-storage/**"
+      - ".github/workflows/asa-storage-inert.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests
+        run: node --test lib/asa-storage/asa_storage.test.mjs
