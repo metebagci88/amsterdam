@@ -1,21 +1,25 @@
 // ASALOCAL · STORAGE_MEDIA_UPLOAD_DESIGN — INERT reference helper.
+// ChatGPT EVET B revision. NOT imported by ../index.ts. NOT deployed.
 //
-// NOT imported by ../index.ts. NOT deployed. Merging this file does not
-// change admin-api. The future STORAGE_MEDIA_UPLOAD_EDGE splice is specified
-// in ../MEDIA_UPLOAD_DESIGN.md and is a separate EVET.
-//
-// Mirrors email-api sniffMime (magic bytes). Media allowlist is JPEG, PNG,
-// and WebP only. GIF is recognized and then rejected. service_role never
-// appears in this module.
+// Default transport is multipart/form-data for media_upload only.
+// Other admin actions stay application/json with MAX_BODY = 8KB.
+// Base64 JSON is non-preferred and must not widen that global cap.
+// service_role never appears in this module.
 
 export const MEDIA_BUCKET = "media" as const;
 export const UPLOAD_UPSERT = false as const;
 export const MEDIA_CACHE_CONTROL = "3600" as const;
 export const MAX_ASSET_BYTES = 5_000_000;
 export const ADMIN_JSON_MAX_BODY = 8 * 1024;
-export const MEDIA_ENVELOPE_SLACK = 1024;
+export const TRANSPORT_DEFAULT = "multipart/form-data" as const;
+export const JSON_PATH_ACCEPTS_MEDIA_UPLOAD = false as const;
+/** Non-preferred. Not the v1 request contract. */
+export const BASE64_PATH = "non_preferred" as const;
+
+/** ~33% growth: 4 * ceil(n / 3). Early-reject cap if a base64 path is ever used. */
 export const MAX_BASE64 = 4 * Math.ceil(MAX_ASSET_BYTES / 3);
-export const MEDIA_MAX_RAW = MAX_BASE64 + MEDIA_ENVELOPE_SLACK;
+export const MULTIPART_ENVELOPE_SLACK = 65_536;
+export const MEDIA_MULTIPART_MAX = MAX_ASSET_BYTES + MULTIPART_ENVELOPE_SLACK;
 
 export const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp"] as const;
 export type MediaMime = (typeof ALLOWED_MIME)[number];
@@ -23,11 +27,33 @@ export type MediaMime = (typeof ALLOWED_MIME)[number];
 export const PREFIXES = ["venues", "ads"] as const;
 export type MediaPrefix = (typeof PREFIXES)[number];
 
+/**
+ * Live public.admin_role labels (SELECT 2026-09-30, enumsortorder).
+ * Contract labels only. Not a grant list and not a migration.
+ */
+export const ADMIN_ROLE_LABELS = [
+  "super_admin",
+  "content_editor",
+  "venue_editor",
+  "moderator",
+  "support",
+  "crm",
+  "ads",
+  "analyst",
+] as const;
+
+/**
+ * Live public.admin_roles on 2026-09-30: GROUP BY role returned only
+ * super_admin (n=1). Other labels had zero rows. Evidence, not a gate.
+ * Assigning venue_editor or ads is out of scope for this package.
+ */
+export const OBSERVED_GRANTED_ROLES = ["super_admin"] as const;
+
 /** Coarse ROLE_SETS entry. Prefix split is PREFIX_ROLES, not ANY_ADMIN. */
 export const ROLE_UNION = ["super_admin", "venue_editor", "ads"] as const;
 
 /**
- * Same pairs as live _can_edit_venues / _can_edit_ads (active admin + role).
+ * Same pairs as live _can_edit_venues / _can_edit_ads.
  * content_editor, moderator, support, crm, and analyst are not included.
  */
 export const PREFIX_ROLES: Record<MediaPrefix, readonly string[]> = {
@@ -37,24 +63,27 @@ export const PREFIX_ROLES: Record<MediaPrefix, readonly string[]> = {
 
 export const MEDIA_UPLOAD_LIMITS = { min: 10, day: 100 } as const;
 
-/** Locked handler order for the future splice. Not executed here. */
+/**
+ * Multipart media_upload order. The JSON path is a different branch:
+ * it keeps ADMIN_JSON_MAX_BODY and does not dispatch media_upload.
+ * content_type_branch runs before either body read.
+ */
 export const GATE_SEQUENCE = [
   "cors",
   "method",
   "env_kill",
   "bearer",
-  "content_type",
-  "body_limit",
-  "json_action",
+  "content_type_branch",
+  "multipart_length_cap",
   "get_user",
   "is_admin",
   "role_union",
-  "validate_params",
+  "parse_multipart",
   "prefix_role",
   "admin_api_status",
   "admin_writes_status",
   "admin_rate_check",
-  "decode_sniff",
+  "sniff",
   "storage_upload",
 ] as const;
 
@@ -76,10 +105,12 @@ const CLIENT_PATH_KEYS = [
   "cache_control",
 ] as const;
 
+const ALLOWED_PARTS = new Set(["action", "prefix", "file"]);
+const TEXT_PART_MAX = 128;
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const B64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
-const ACTION_HEAD_RE = /^\s*\{\s*"action"\s*:\s*"media_upload"\s*[,}]/;
 
 export type MediaErrorCode =
   | "bad_input"
@@ -91,7 +122,12 @@ export type MediaErrorCode =
   | "bad_mime_content"
   | "object_exists"
   | "upload_failed"
-  | "internal";
+  | "internal"
+  | "unsupported_media_type"
+  | "unknown_action"
+  | "payload_too_large";
+
+export type TransportBranch = "multipart_media" | "json_admin" | "unsupported";
 
 // Byte predicates copied from CDP3B/edge/email-api/index.ts sniffMime.
 // GIF is detected so the media allowlist can reject it. b[3] of RIFF is not
@@ -120,12 +156,39 @@ export function extForMime(mime: MediaMime): "jpg" | "png" | "webp" {
   return "webp";
 }
 
-export function classifyRawBody(rawLength: number, head: string): "small" | "media" | "too_large" {
+/** Branch on Content-Type before any body read. Does not raise the JSON cap. */
+export function contentTypeBranch(contentType: string | null): TransportBranch {
+  const c = (contentType ?? "").toLowerCase();
+  if (c.includes("multipart/form-data")) return "multipart_media";
+  if (c.includes("application/json")) return "json_admin";
+  return "unsupported";
+}
+
+export function classifyJsonBody(rawLength: number): "ok" | "too_large" {
   if (!Number.isSafeInteger(rawLength) || rawLength < 0) return "too_large";
-  if (rawLength <= ADMIN_JSON_MAX_BODY) return "small";
-  if (rawLength > MEDIA_MAX_RAW) return "too_large";
-  if (ACTION_HEAD_RE.test(head.slice(0, 128))) return "media";
-  return "too_large";
+  if (rawLength > ADMIN_JSON_MAX_BODY) return "too_large";
+  return "ok";
+}
+
+/** JSON path: media_upload is not served here, even under 8KB. */
+export function jsonMediaUploadRejected(): { status: 415; error: "unsupported_media_type" } {
+  return { status: 415, error: "unsupported_media_type" };
+}
+
+/**
+ * Early reject from the Content-Length header, before the body is read.
+ * null means the header is absent: the read must still stop at MEDIA_MULTIPART_MAX.
+ */
+export function classifyMultipartContentLength(contentLength: number | null): "ok" | "missing" | "too_large" {
+  if (contentLength === null) return "missing";
+  if (!Number.isSafeInteger(contentLength) || contentLength < 0) return "too_large";
+  if (contentLength > MEDIA_MULTIPART_MAX) return "too_large";
+  return "ok";
+}
+
+export function assertMultipartBufferedLength(len: number): "ok" | "too_large" {
+  if (!Number.isSafeInteger(len) || len < 0 || len > MEDIA_MULTIPART_MAX) return "too_large";
+  return "ok";
 }
 
 export function base64DecodedLength(b64: string): number | null {
@@ -134,36 +197,17 @@ export function base64DecodedLength(b64: string): number | null {
   return (b64.length / 4) * 3 - pad;
 }
 
-/** Cheap checks only. Does not allocate the decoded buffer. */
+/**
+ * NON-PREFERRED base64 gate. Rejects on encoded length before atob.
+ * Encoded cap is the ~33% expansion of MAX_ASSET_BYTES. Do not use this
+ * to widen ADMIN_JSON_MAX_BODY.
+ */
 export function classifyBase64(b64: string): "bad_base64" | "bad_size" | null {
   if (b64.length === 0 || b64.length % 4 !== 0 || !B64_RE.test(b64)) return "bad_base64";
   if (b64.length > MAX_BASE64) return "bad_size";
   const n = base64DecodedLength(b64);
   if (n === null || n <= 0 || n > MAX_ASSET_BYTES) return "bad_size";
   return null;
-}
-
-export function validateMediaParams(
-  params: unknown,
-):
-  | { ok: true; prefix: MediaPrefix; data_base64: string }
-  | { ok: false; error: "bad_input" | "bad_prefix" | "client_path_rejected" | "unknown_field" | "bad_base64" | "bad_size" } {
-  if (params === null || typeof params !== "object" || Array.isArray(params)) {
-    return { ok: false, error: "bad_input" };
-  }
-  const rec = params as Record<string, unknown>;
-  const keys = Object.keys(rec);
-  if (keys.some((k) => (CLIENT_PATH_KEYS as readonly string[]).includes(k))) {
-    return { ok: false, error: "client_path_rejected" };
-  }
-  if (keys.some((k) => k !== "prefix" && k !== "data_base64")) {
-    return { ok: false, error: "unknown_field" };
-  }
-  if (rec.prefix !== "venues" && rec.prefix !== "ads") return { ok: false, error: "bad_prefix" };
-  if (typeof rec.data_base64 !== "string") return { ok: false, error: "bad_base64" };
-  const sized = classifyBase64(rec.data_base64);
-  if (sized) return { ok: false, error: sized };
-  return { ok: true, prefix: rec.prefix, data_base64: rec.data_base64 };
 }
 
 export function prefixAllowedByRoles(prefix: MediaPrefix, held: ReadonlySet<string>): boolean {
@@ -185,6 +229,113 @@ export function decodeBase64Strict(
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return { ok: true, bytes: out };
+}
+
+function indexOfBytes(hay: Uint8Array, needle: Uint8Array, from = 0): number {
+  if (needle.length === 0 || from < 0) return -1;
+  const last = hay.length - needle.length;
+  for (let i = from; i <= last; i++) {
+    let match = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return i;
+  }
+  return -1;
+}
+
+function boundaryOf(contentType: string): string | null {
+  const m = /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType);
+  if (!m) return null;
+  const b = (m[1] ?? m[2] ?? "").trim();
+  if (b.length < 1 || b.length > 200 || /[\r\n]/.test(b)) return null;
+  return b;
+}
+
+function partName(headers: string): { name: string | null } {
+  const line = headers.split("\r\n").find((row) => /^content-disposition:/i.test(row)) ?? "";
+  const named = /(?:^|;)\s*name="([^"]*)"|name=([^;\s]+)/i.exec(line);
+  const name = named ? (named[1] ?? named[2] ?? "") : "";
+  return { name: name === "" ? null : name };
+}
+
+type RawPart = { name: string; content: Uint8Array };
+
+function splitMultipart(body: Uint8Array, boundary: string): RawPart[] | null {
+  const enc = new TextEncoder();
+  const delim = enc.encode(`\r\n--${boundary}`);
+  const first = enc.encode(`--${boundary}`);
+  let pos = 0;
+  if (indexOfBytes(body, first, 0) === 0) {
+    pos = 0;
+  } else {
+    const at = indexOfBytes(body, delim, 0);
+    if (at < 0) return null;
+    pos = at + 2;
+  }
+  const parts: RawPart[] = [];
+  const headerSep = enc.encode("\r\n\r\n");
+  while (pos <= body.length) {
+    if (indexOfBytes(body, first, pos) !== pos) return null;
+    pos += first.length;
+    if (body[pos] === 0x2d && body[pos + 1] === 0x2d) return parts;
+    if (body[pos] !== 0x0d || body[pos + 1] !== 0x0a) return null;
+    pos += 2;
+    const headerEnd = indexOfBytes(body, headerSep, pos);
+    if (headerEnd < 0) return null;
+    const headers = new TextDecoder("utf-8").decode(body.subarray(pos, headerEnd));
+    const contentStart = headerEnd + 4;
+    const next = indexOfBytes(body, delim, contentStart);
+    if (next < 0) return null;
+    const name = partName(headers).name;
+    if (!name) return null;
+    parts.push({ name, content: body.slice(contentStart, next) });
+    pos = next + 2;
+  }
+  return null;
+}
+
+export function parseMediaMultipart(
+  contentType: string,
+  body: Uint8Array,
+):
+  | { ok: true; action: "media_upload"; prefix: MediaPrefix; bytes: Uint8Array }
+  | { ok: false; status: 400 | 413 | 415; error: MediaErrorCode } {
+  if (contentTypeBranch(contentType) !== "multipart_media") {
+    return { ok: false, status: 415, error: "unsupported_media_type" };
+  }
+  if (assertMultipartBufferedLength(body.length) === "too_large") {
+    return { ok: false, status: 413, error: "payload_too_large" };
+  }
+  const boundary = boundaryOf(contentType);
+  if (!boundary) return { ok: false, status: 400, error: "bad_input" };
+  const parts = splitMultipart(body, boundary);
+  if (!parts || parts.length === 0) return { ok: false, status: 400, error: "bad_input" };
+  for (const part of parts) {
+    if ((CLIENT_PATH_KEYS as readonly string[]).includes(part.name)) {
+      return { ok: false, status: 400, error: "client_path_rejected" };
+    }
+    if (!ALLOWED_PARTS.has(part.name)) return { ok: false, status: 400, error: "unknown_field" };
+  }
+  const actions = parts.filter((p) => p.name === "action");
+  const prefixes = parts.filter((p) => p.name === "prefix");
+  const files = parts.filter((p) => p.name === "file");
+  if (actions.length !== 1 || prefixes.length !== 1 || files.length !== 1) {
+    return { ok: false, status: 400, error: "bad_input" };
+  }
+  if (actions[0].content.length > TEXT_PART_MAX || prefixes[0].content.length > TEXT_PART_MAX) {
+    return { ok: false, status: 400, error: "bad_input" };
+  }
+  const action = new TextDecoder("utf-8").decode(actions[0].content);
+  if (action !== "media_upload") return { ok: false, status: 415, error: "unsupported_media_type" };
+  const prefix = new TextDecoder("utf-8").decode(prefixes[0].content);
+  if (prefix !== "venues" && prefix !== "ads") return { ok: false, status: 400, error: "bad_prefix" };
+  const bytes = files[0].content;
+  if (bytes.length <= 0 || bytes.length > MAX_ASSET_BYTES) return { ok: false, status: 400, error: "bad_size" };
+  return { ok: true, action: "media_upload", prefix, bytes };
 }
 
 export function buildObjectPath(prefix: MediaPrefix, mime: MediaMime, uuid: string): string {
@@ -233,7 +384,7 @@ export type StorageUploader = (args: {
 
 export async function planMediaUpload(input: {
   prefix: MediaPrefix;
-  dataBase64: string;
+  bytes: Uint8Array;
   supabaseUrl: string;
   newUuid: () => string;
   upload: StorageUploader;
@@ -245,9 +396,10 @@ export async function planMediaUpload(input: {
     }
   | { ok: false; status: 400 | 409 | 500; error: MediaErrorCode }
 > {
-  const decoded = decodeBase64Strict(input.dataBase64);
-  if (!decoded.ok) return { ok: false, status: 400, error: decoded.error };
-  const mime = sniffMime(decoded.bytes);
+  if (input.bytes.length <= 0 || input.bytes.length > MAX_ASSET_BYTES) {
+    return { ok: false, status: 400, error: "bad_size" };
+  }
+  const mime = sniffMime(input.bytes);
   if (!mediaMimeAllowed(mime)) return { ok: false, status: 400, error: "bad_mime_content" };
   let objectPath: string;
   try {
@@ -265,7 +417,7 @@ export async function planMediaUpload(input: {
   const up = await input.upload({
     bucket: MEDIA_BUCKET,
     path: objectPath,
-    bytes: decoded.bytes,
+    bytes: input.bytes,
     contentType: mime,
     upsert: false,
     cacheControl: MEDIA_CACHE_CONTROL,
@@ -283,7 +435,26 @@ export async function planMediaUpload(input: {
       path: objectPath,
       public_url: publicUrl,
       mime,
-      bytes: decoded.bytes.length,
+      bytes: input.bytes.length,
     },
   };
+}
+
+/** NON-PREFERRED. Encoded cap rejects before atob. Not wired to the JSON 8KB path. */
+export async function planMediaUploadFromBase64(input: {
+  prefix: MediaPrefix;
+  dataBase64: string;
+  supabaseUrl: string;
+  newUuid: () => string;
+  upload: StorageUploader;
+}): Promise<Awaited<ReturnType<typeof planMediaUpload>>> {
+  const decoded = decodeBase64Strict(input.dataBase64);
+  if (!decoded.ok) return { ok: false, status: 400, error: decoded.error };
+  return planMediaUpload({
+    prefix: input.prefix,
+    bytes: decoded.bytes,
+    supabaseUrl: input.supabaseUrl,
+    newUuid: input.newUuid,
+    upload: input.upload,
+  });
 }

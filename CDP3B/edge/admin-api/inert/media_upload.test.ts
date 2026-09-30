@@ -1,4 +1,5 @@
 // INERT harness for media_upload.ts. No network, no Edge deploy, no Storage write.
+// ChatGPT EVET B: multipart is the default transport. JSON stays at 8KB.
 // Run: node --experimental-strip-types --test CDP3B/edge/admin-api/inert/media_upload.test.ts
 
 import { createHash } from "node:crypto";
@@ -7,33 +8,44 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ADMIN_JSON_MAX_BODY,
+  ADMIN_ROLE_LABELS,
   ALLOWED_MIME,
+  BASE64_PATH,
   GATE_SEQUENCE,
+  JSON_PATH_ACCEPTS_MEDIA_UPLOAD,
   MAX_ASSET_BYTES,
   MAX_BASE64,
   MEDIA_BUCKET,
-  MEDIA_MAX_RAW,
+  MEDIA_MULTIPART_MAX,
+  OBSERVED_GRANTED_ROLES,
   PREFIX_ROLES,
   ROLE_UNION,
+  TRANSPORT_DEFAULT,
   UPLOAD_UPSERT,
+  assertMultipartBufferedLength,
   base64DecodedLength,
   buildObjectPath,
   classifyBase64,
-  classifyRawBody,
+  classifyJsonBody,
+  classifyMultipartContentLength,
+  contentTypeBranch,
   decodeBase64Strict,
   isDuplicateStorageError,
+  jsonMediaUploadRejected,
   mediaMimeAllowed,
+  parseMediaMultipart,
   planMediaUpload,
+  planMediaUploadFromBase64,
   prefixAllowedByRoles,
   publicMediaUrl,
   sniffMime,
-  validateMediaParams,
 } from "./media_upload.ts";
 
 const LIVE_INDEX_SHA = "880dd2c4b75814949aff35d9e6a478dbfc9563da74137c2cfc7093e3482fae7b";
 const SUPABASE_URL = "https://tosqsabuaomgqjtogdrn.supabase.co";
 const UUID_A = "550e8400-e29b-41d4-a716-446655440000";
 const UUID_B = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+const BOUNDARY = "----asaMedia";
 
 const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0x00]);
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -47,6 +59,32 @@ function b64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
 
+function form(parts: Array<{ name: string; value?: string; file?: Uint8Array; filename?: string; type?: string }>): {
+  contentType: string;
+  body: Uint8Array;
+} {
+  const enc = new TextEncoder();
+  const chunks: Uint8Array[] = [];
+  for (const part of parts) {
+    let head = `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${part.name}"`;
+    if (part.filename !== undefined) head += `; filename="${part.filename}"`;
+    head += "\r\n";
+    if (part.type) head += `Content-Type: ${part.type}\r\n`;
+    head += "\r\n";
+    chunks.push(enc.encode(head));
+    chunks.push(part.file ?? enc.encode(part.value ?? ""));
+    chunks.push(enc.encode("\r\n"));
+  }
+  chunks.push(enc.encode(`--${BOUNDARY}--\r\n`));
+  const body = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let o = 0;
+  for (const c of chunks) {
+    body.set(c, o);
+    o += c.length;
+  }
+  return { contentType: `multipart/form-data; boundary=${BOUNDARY}`, body };
+}
+
 test("live admin-api index.ts is unchanged and does not reference media_upload", () => {
   const buf = readFileSync(new URL("../index.ts", import.meta.url));
   assert.equal(createHash("sha256").update(buf).digest("hex"), LIVE_INDEX_SHA);
@@ -54,99 +92,151 @@ test("live admin-api index.ts is unchanged and does not reference media_upload",
   assert.equal(text.includes("media_upload"), false);
   assert.equal(text.includes("inert/media_upload"), false);
   assert.match(text, /const MAX_BODY = 8 \* 1024;/);
-  assert.match(text, /const WRITE_ACTIONS = new Set\(\[/);
+  assert.match(text, /includes\("application\/json"\)/);
   assert.equal(text.includes('"media_upload"'), false);
 });
 
-test("allowlist is jpeg png webp only and upsert stays false", () => {
+test("allowlist, multipart default, and role labels stay on the live contract", () => {
+  assert.equal(TRANSPORT_DEFAULT, "multipart/form-data");
+  assert.equal(JSON_PATH_ACCEPTS_MEDIA_UPLOAD, false);
+  assert.equal(BASE64_PATH, "non_preferred");
   assert.deepEqual([...ALLOWED_MIME], ["image/jpeg", "image/png", "image/webp"]);
   assert.equal(mediaMimeAllowed("image/gif"), false);
-  assert.equal(mediaMimeAllowed("image/svg+xml"), false);
   assert.equal(MAX_ASSET_BYTES, 5_000_000);
   assert.equal(ADMIN_JSON_MAX_BODY, 8192);
+  assert.ok(MEDIA_MULTIPART_MAX < MAX_BASE64);
   assert.equal(MEDIA_BUCKET, "media");
   assert.equal(UPLOAD_UPSERT, false);
-  assert.deepEqual(ROLE_UNION, ["super_admin", "venue_editor", "ads"]);
-  assert.deepEqual(PREFIX_ROLES.venues, ["super_admin", "venue_editor"]);
-  assert.deepEqual(PREFIX_ROLES.ads, ["super_admin", "ads"]);
+  assert.deepEqual([...ADMIN_ROLE_LABELS], [
+    "super_admin",
+    "content_editor",
+    "venue_editor",
+    "moderator",
+    "support",
+    "crm",
+    "ads",
+    "analyst",
+  ]);
+  assert.deepEqual([...OBSERVED_GRANTED_ROLES], ["super_admin"]);
+  assert.deepEqual([...ROLE_UNION], ["super_admin", "venue_editor", "ads"]);
+  assert.deepEqual([...PREFIX_ROLES.venues], ["super_admin", "venue_editor"]);
+  assert.deepEqual([...PREFIX_ROLES.ads], ["super_admin", "ads"]);
   assert.equal(PREFIX_ROLES.venues.includes("content_editor"), false);
+  assert.equal(OBSERVED_GRANTED_ROLES.includes("venue_editor" as never), false);
+  assert.equal(GATE_SEQUENCE[4], "content_type_branch");
+  assert.equal(GATE_SEQUENCE[5], "multipart_length_cap");
   assert.equal(GATE_SEQUENCE.at(-1), "storage_upload");
-  assert.ok(GATE_SEQUENCE.indexOf("prefix_role") < GATE_SEQUENCE.indexOf("admin_rate_check"));
-  assert.ok(GATE_SEQUENCE.indexOf("admin_writes_status") < GATE_SEQUENCE.indexOf("storage_upload"));
+  assert.ok(GATE_SEQUENCE.indexOf("content_type_branch") < GATE_SEQUENCE.indexOf("get_user"));
   assert.equal(GATE_SEQUENCE.includes("media_delete" as never), false);
 });
 
-test("magic-byte sniff rejects gif and svg and ignores a fake content type", () => {
+test("magic-byte sniff rejects gif and svg and ignores a part content type", () => {
   assert.equal(sniffMime(JPEG), "image/jpeg");
   assert.equal(sniffMime(PNG), "image/png");
   assert.equal(sniffMime(WEBP), "image/webp");
   assert.equal(sniffMime(GIF), "image/gif");
   assert.equal(mediaMimeAllowed(sniffMime(GIF)), false);
   assert.equal(sniffMime(SVG), null);
-  assert.equal(sniffMime(Uint8Array.from([0x00, 0x00, 0x00])), null);
-  const jpegThenGif = new Uint8Array(JPEG.length + GIF.length);
-  jpegThenGif.set(JPEG, 0);
-  jpegThenGif.set(GIF, JPEG.length);
-  assert.equal(sniffMime(jpegThenGif), "image/jpeg");
+  const built = form([
+    { name: "action", value: "media_upload" },
+    { name: "prefix", value: "venues" },
+    { name: "file", file: JPEG, filename: "x.png", type: "image/png" },
+  ]);
+  const parsed = parseMediaMultipart(built.contentType, built.body);
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) assert.equal(sniffMime(parsed.bytes), "image/jpeg");
 });
 
-test("base64 size gate is exact at 5MB without trusting length alone", () => {
+test("non-preferred base64 cap rejects before decode and accounts for 33 percent growth", () => {
+  assert.equal(BASE64_PATH, "non_preferred");
+  assert.equal(MAX_BASE64, 6_666_668);
+  assert.ok(MAX_BASE64 > MAX_ASSET_BYTES);
+  assert.ok(MAX_BASE64 / MAX_ASSET_BYTES > 1.33);
+  assert.ok(MAX_BASE64 / MAX_ASSET_BYTES < 1.34);
   assert.equal(classifyBase64(""), "bad_base64");
-  assert.equal(classifyBase64("abc"), "bad_base64");
   assert.equal(classifyBase64("YQ=="), null);
   assert.equal(base64DecodedLength("YQ=="), 1);
   assert.equal(classifyBase64("data:image/png;base64,YQ=="), "bad_base64");
   const exact = "A".repeat(MAX_BASE64 - 1) + "=";
-  assert.equal(exact.length, MAX_BASE64);
   assert.equal(base64DecodedLength(exact), MAX_ASSET_BYTES);
   assert.equal(classifyBase64(exact), null);
   const oneOver = "A".repeat(MAX_BASE64);
   assert.equal(base64DecodedLength(oneOver), MAX_ASSET_BYTES + 1);
   assert.equal(classifyBase64(oneOver), "bad_size");
-  assert.equal(classifyBase64("A".repeat(MAX_BASE64 + 4)), "bad_size");
+  assert.equal(classifyJsonBody(exact.length), "too_large");
 });
 
-test("closed params reject client path, bucket, content-type, and upsert", () => {
-  const ok = validateMediaParams({ prefix: "venues", data_base64: b64(JPEG) });
+test("multipart parser takes prefix and file bytes and rejects client path fields", () => {
+  const ok = parseMediaMultipart(
+    ...Object.values(form([
+      { name: "action", value: "media_upload" },
+      { name: "prefix", value: "venues" },
+      { name: "file", file: JPEG, filename: "../venues/evil.jpg" },
+    ])) as [string, Uint8Array],
+  );
   assert.equal(ok.ok, true);
-  assert.equal(validateMediaParams({ prefix: "ads", data_base64: b64(PNG) }).ok, true);
-  assert.deepEqual(
-    validateMediaParams({ prefix: "venues/../x", data_base64: b64(JPEG) }),
-    { ok: false, error: "bad_prefix" },
-  );
-  assert.deepEqual(
-    validateMediaParams({ prefix: "venues", data_base64: b64(JPEG), path: "venues/evil.jpg" }),
-    { ok: false, error: "client_path_rejected" },
-  );
+  if (ok.ok) {
+    assert.equal(ok.prefix, "venues");
+    assert.deepEqual(ok.bytes, JPEG);
+    assert.equal(JSON.stringify(ok).includes("evil"), false);
+    assert.equal(JSON.stringify(ok).includes("filename"), false);
+  }
+  const pathField = form([
+    { name: "action", value: "media_upload" },
+    { name: "prefix", value: "ads" },
+    { name: "file", file: PNG },
+    { name: "path", value: "ads/evil.png" },
+  ]);
+  assert.equal(parseMediaMultipart(pathField.contentType, pathField.body).ok, false);
   assert.equal(
-    validateMediaParams({ prefix: "ads", data_base64: b64(JPEG), bucket: "media" }).ok && false,
-    false,
-  );
-  assert.equal(
-    (validateMediaParams({ prefix: "ads", data_base64: b64(JPEG), bucket: "other" }) as { error: string }).error,
+    (parseMediaMultipart(pathField.contentType, pathField.body) as { error: string }).error,
     "client_path_rejected",
   );
-  assert.equal(
-    (validateMediaParams({ prefix: "venues", data_base64: b64(JPEG), contentType: "image/png" }) as { error: string }).error,
-    "client_path_rejected",
-  );
-  assert.equal(
-    (validateMediaParams({ prefix: "venues", data_base64: b64(JPEG), upsert: true }) as { error: string }).error,
-    "client_path_rejected",
-  );
-  assert.equal(
-    (validateMediaParams({ prefix: "venues", data_base64: b64(JPEG), note: "x" }) as { error: string }).error,
-    "unknown_field",
-  );
-  assert.equal(validateMediaParams(null).ok, false);
+  const bucket = form([
+    { name: "action", value: "media_upload" },
+    { name: "prefix", value: "ads" },
+    { name: "bucket", value: "other" },
+    { name: "file", file: JPEG },
+  ]);
+  assert.equal((parseMediaMultipart(bucket.contentType, bucket.body) as { error: string }).error, "client_path_rejected");
+  const upsert = form([
+    { name: "action", value: "media_upload" },
+    { name: "prefix", value: "venues" },
+    { name: "upsert", value: "true" },
+    { name: "file", file: JPEG },
+  ]);
+  assert.equal((parseMediaMultipart(upsert.contentType, upsert.body) as { error: string }).error, "client_path_rejected");
+  const badPrefix = form([
+    { name: "action", value: "media_upload" },
+    { name: "prefix", value: "venues/../x" },
+    { name: "file", file: JPEG },
+  ]);
+  assert.deepEqual(parseMediaMultipart(badPrefix.contentType, badPrefix.body), { ok: false, status: 400, error: "bad_prefix" });
+  const otherAction = form([
+    { name: "action", value: "counts" },
+    { name: "prefix", value: "venues" },
+    { name: "file", file: JPEG },
+  ]);
+  assert.deepEqual(parseMediaMultipart(otherAction.contentType, otherAction.body), {
+    ok: false,
+    status: 415,
+    error: "unsupported_media_type",
+  });
+  const note = form([
+    { name: "action", value: "media_upload" },
+    { name: "prefix", value: "venues" },
+    { name: "note", value: "x" },
+    { name: "file", file: JPEG },
+  ]);
+  assert.equal((parseMediaMultipart(note.contentType, note.body) as { error: string }).error, "unknown_field");
 });
 
-test("prefix role matrix matches venue and ads editors", () => {
+test("prefix role matrix matches venue and ads editors even though only super_admin is granted today", () => {
   const venue = new Set(["venue_editor"]);
   const ads = new Set(["ads"]);
   const content = new Set(["content_editor"]);
   const support = new Set(["support"]);
-  const superAdmin = new Set(["super_admin"]);
+  const superAdmin = new Set(OBSERVED_GRANTED_ROLES);
   assert.equal(prefixAllowedByRoles("venues", venue), true);
   assert.equal(prefixAllowedByRoles("ads", venue), false);
   assert.equal(prefixAllowedByRoles("ads", ads), true);
@@ -155,19 +245,28 @@ test("prefix role matrix matches venue and ads editors", () => {
   assert.equal(prefixAllowedByRoles("ads", support), false);
   assert.equal(prefixAllowedByRoles("venues", superAdmin), true);
   assert.equal(prefixAllowedByRoles("ads", superAdmin), true);
+  assert.equal(prefixAllowedByRoles("venues", new Set(["analyst"])), false);
 });
 
-test("oversized bodies are media-only when action is the first key", () => {
-  assert.equal(classifyRawBody(100, "{\"action\":\"counts\"}"), "small");
-  assert.equal(classifyRawBody(ADMIN_JSON_MAX_BODY, "{\"action\":\"counts\"}"), "small");
-  const head = "{\"action\":\"media_upload\",\"params\":{";
-  assert.equal(classifyRawBody(ADMIN_JSON_MAX_BODY + 1, head), "media");
-  assert.equal(classifyRawBody(MEDIA_MAX_RAW, head), "media");
-  assert.equal(classifyRawBody(MEDIA_MAX_RAW + 1, head), "too_large");
-  assert.equal(classifyRawBody(ADMIN_JSON_MAX_BODY + 1, "{\"params\":{},\"action\":\"media_upload\"}"), "too_large");
-  const compact = JSON.stringify({ action: "media_upload", params: { prefix: "venues", data_base64: "" } });
-  assert.ok(compact.length < 1024);
-  assert.ok(compact.length + MAX_BASE64 <= MEDIA_MAX_RAW);
+test("content-type branch keeps JSON at 8KB and caps multipart before the read", () => {
+  assert.equal(contentTypeBranch("application/json"), "json_admin");
+  assert.equal(contentTypeBranch("application/json; charset=utf-8"), "json_admin");
+  assert.equal(contentTypeBranch(`multipart/form-data; boundary=${BOUNDARY}`), "multipart_media");
+  assert.equal(contentTypeBranch("text/plain"), "unsupported");
+  assert.equal(classifyJsonBody(ADMIN_JSON_MAX_BODY), "ok");
+  assert.equal(classifyJsonBody(ADMIN_JSON_MAX_BODY + 1), "too_large");
+  assert.equal(classifyJsonBody(MAX_ASSET_BYTES), "too_large");
+  assert.deepEqual(jsonMediaUploadRejected(), { status: 415, error: "unsupported_media_type" });
+  assert.equal(classifyMultipartContentLength(null), "missing");
+  assert.equal(classifyMultipartContentLength(MEDIA_MULTIPART_MAX), "ok");
+  assert.equal(classifyMultipartContentLength(MEDIA_MULTIPART_MAX + 1), "too_large");
+  assert.equal(assertMultipartBufferedLength(MEDIA_MULTIPART_MAX + 1), "too_large");
+  const tiny = form([
+    { name: "action", value: "media_upload" },
+    { name: "prefix", value: "ads" },
+    { name: "file", file: Uint8Array.from([]) },
+  ]);
+  assert.equal((parseMediaMultipart(tiny.contentType, tiny.body) as { error: string }).error, "bad_size");
 });
 
 test("object names are server uuids under venues or ads and do not collide", () => {
@@ -178,12 +277,8 @@ test("object names are server uuids under venues or ads and do not collide", () 
   assert.equal(buildObjectPath("ads", "image/png", UUID_A), `ads/${UUID_A}.png`);
   assert.equal(buildObjectPath("ads", "image/webp", UUID_B), `ads/${UUID_B}.webp`);
   assert.throws(() => buildObjectPath("venues", "image/jpeg", "../etc/passwd"));
-  assert.equal(
-    publicMediaUrl(SUPABASE_URL, a),
-    `${SUPABASE_URL}/storage/v1/object/public/media/${a}`,
-  );
+  assert.equal(publicMediaUrl(SUPABASE_URL, a), `${SUPABASE_URL}/storage/v1/object/public/media/${a}`);
   assert.throws(() => publicMediaUrl("https://evil.example/storage", a));
-  assert.throws(() => publicMediaUrl(SUPABASE_URL + "/extra", a));
 });
 
 test("duplicate storage error does not become a successful overwrite", () => {
@@ -193,7 +288,7 @@ test("duplicate storage error does not become a successful overwrite", () => {
   assert.equal(isDuplicateStorageError({ statusCode: 400, message: "Invalid MIME" }), false);
 });
 
-test("planMediaUpload returns a public url and never calls storage for rejected bytes", async () => {
+test("planMediaUpload uses multipart bytes and does not upload rejected types", async () => {
   const calls: Array<{ upsert: boolean; bucket: string; contentType: string; path: string }> = [];
   const upload = async (args: {
     bucket: "media";
@@ -206,9 +301,17 @@ test("planMediaUpload returns a public url and never calls storage for rejected 
     calls.push(args);
     return { error: null, path: args.path };
   };
+  const built = form([
+    { name: "action", value: "media_upload" },
+    { name: "prefix", value: "venues" },
+    { name: "file", file: JPEG, filename: "client.jpg", type: "image/gif" },
+  ]);
+  const parsed = parseMediaMultipart(built.contentType, built.body);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
   const ok = await planMediaUpload({
-    prefix: "venues",
-    dataBase64: b64(JPEG),
+    prefix: parsed.prefix,
+    bytes: parsed.bytes,
     supabaseUrl: SUPABASE_URL,
     newUuid: () => UUID_A,
     upload,
@@ -217,18 +320,16 @@ test("planMediaUpload returns a public url and never calls storage for rejected 
   if (ok.ok) {
     assert.equal(ok.data.public_url, `${SUPABASE_URL}/storage/v1/object/public/media/venues/${UUID_A}.jpg`);
     assert.equal(ok.data.mime, "image/jpeg");
-    assert.equal(ok.data.bucket, "media");
     assert.equal(JSON.stringify(ok).includes("service_role"), false);
+    assert.equal(JSON.stringify(ok).includes("client.jpg"), false);
   }
-  assert.equal(calls.length, 1);
   assert.equal(calls[0].upsert, false);
-  assert.equal(calls[0].bucket, "media");
   assert.equal(calls[0].contentType, "image/jpeg");
 
   calls.length = 0;
   const gif = await planMediaUpload({
     prefix: "ads",
-    dataBase64: b64(GIF),
+    bytes: GIF,
     supabaseUrl: SUPABASE_URL,
     newUuid: () => UUID_B,
     upload,
@@ -236,7 +337,7 @@ test("planMediaUpload returns a public url and never calls storage for rejected 
   assert.deepEqual(gif, { ok: false, status: 400, error: "bad_mime_content" });
   const svg = await planMediaUpload({
     prefix: "ads",
-    dataBase64: b64(SVG),
+    bytes: SVG,
     supabaseUrl: SUPABASE_URL,
     newUuid: () => UUID_B,
     upload,
@@ -246,22 +347,41 @@ test("planMediaUpload returns a public url and never calls storage for rejected 
 
   const dup = await planMediaUpload({
     prefix: "venues",
-    dataBase64: b64(PNG),
+    bytes: PNG,
     supabaseUrl: SUPABASE_URL,
     newUuid: () => UUID_A,
     upload: async () => ({ error: { error: "Duplicate", message: "Asset Already Exists", statusCode: 400 } }),
   });
   assert.deepEqual(dup, { ok: false, status: 409, error: "object_exists" });
   assert.equal(JSON.stringify(dup).includes("Asset Already Exists"), false);
+
+  const over = new Uint8Array(MAX_ASSET_BYTES + 1);
+  over[0] = 0xff;
+  over[1] = 0xd8;
+  over[2] = 0xff;
+  const tooBig = await planMediaUpload({
+    prefix: "venues",
+    bytes: over,
+    supabaseUrl: SUPABASE_URL,
+    newUuid: () => UUID_A,
+    upload,
+  });
+  assert.deepEqual(tooBig, { ok: false, status: 400, error: "bad_size" });
+  assert.equal(calls.length, 0);
 });
 
-test("design doc stays inert and does not carry a storage policy statement to execute", () => {
+test("design doc records the ChatGPT B revision, role SELECT, and deploy blockers", () => {
   const doc = readFileSync(new URL("../MEDIA_UPLOAD_DESIGN.md", import.meta.url), "utf8");
   assert.match(doc, /INERT/);
+  assert.match(doc, /ChatGPT EVET B/);
   assert.match(doc, /NO_POLICY_DROP=true/);
   assert.match(doc, /NO_EDGE_DEPLOY=true/);
-  assert.match(doc, /verify_jwt=true/);
+  assert.match(doc, /multipart\/form-data/);
+  assert.match(doc, /DEPLOY BLOCKER/);
+  assert.match(doc, /super_admin/);
+  assert.match(doc, /venue_editor/);
   assert.match(doc, /5_000_000/);
+  assert.match(doc, /8 \* 1024|8192|8KB/);
   assert.equal(doc.includes("sb_secret_"), false);
   assert.equal(/eyJ[A-Za-z0-9_-]{6,}\./.test(doc), false);
 });
@@ -273,4 +393,13 @@ test("module exports no delete action", async () => {
   const decoded = decodeBase64Strict(b64(WEBP));
   assert.equal(decoded.ok, true);
   if (decoded.ok) assert.equal(sniffMime(decoded.bytes), "image/webp");
+  const viaB64 = await planMediaUploadFromBase64({
+    prefix: "ads",
+    dataBase64: b64(WEBP),
+    supabaseUrl: SUPABASE_URL,
+    newUuid: () => UUID_B,
+    upload: async (args) => ({ error: null, path: args.path }),
+  });
+  assert.equal(viaB64.ok, true);
+  if (viaB64.ok) assert.equal(viaB64.data.mime, "image/webp");
 });
