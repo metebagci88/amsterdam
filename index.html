@@ -259,7 +259,7 @@
         </div>
         <div class="pt-6 lg:pt-0 lg:col-span-4 flex flex-col items-end gap-2 mt-4">
           <button id="goBtn" data-ck="home.cta" type="button" disabled class="bg-secondary text-on-secondary font-label-lg text-label-lg py-3 px-12 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors duration-300 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">Keşfet</button>
-          <span id="goNote" class="font-label-md text-label-md text-on-surface-variant"></span>
+          <span id="goNote" class="font-label-md text-label-md text-on-surface-variant" aria-live="polite"></span>
           <span id="dInfo" class="font-label-md text-label-md text-on-surface-variant"></span>
         </div>
       </div>
@@ -274,14 +274,9 @@
   </section>
 </main>
 <footer class="bg-surface-container-low w-full border-t border-primary/10 flex flex-col items-center gap-8 py-16 px-margin-mobile md:px-margin-desktop mt-auto">
-  <a class="font-headline-xl text-headline-lg-mobile text-primary tracking-tight" href="#">asalocal</a>
-  <nav class="flex flex-wrap justify-center gap-6 md:gap-12">
-    <a class="font-label-lg text-label-md text-on-surface-variant hover:text-secondary transition-all uppercase tracking-widest" href="#">Editoryal Politika</a>
-    <a class="font-label-lg text-label-md text-on-surface-variant hover:text-secondary transition-all uppercase tracking-widest" href="#">Üyelik Şartları</a>
-    <a class="font-label-lg text-label-md text-on-surface-variant hover:text-secondary transition-all uppercase tracking-widest" href="#">Gizlilik</a>
-    <a class="font-label-lg text-label-md text-on-surface-variant hover:text-secondary transition-all uppercase tracking-widest" href="#">İletişim</a>
-  </nav>
-  <p class="font-label-lg text-label-md text-on-surface-variant/60 uppercase tracking-widest">© 2024 ASALOCAL · YEREL GİBİ</p>
+  <p class="font-headline-xl text-headline-lg-mobile text-primary tracking-tight">asalocal</p>
+  <p class="font-label-lg text-label-md text-on-surface-variant/60 tracking-widest">© 2026 ASALOCAL · yerel gibi</p>
+  <p class="font-label-md text-label-md text-on-surface-variant/80 text-center">Hesabın ve seyahatlerin sana aittir. Habersiz pazarlama yok.</p>
 </footer>
 
 <div id="authModal" class="hidden fixed inset-0 bg-primary/40 backdrop-blur-sm items-center justify-center z-[100] p-4" style="display:none">
@@ -323,7 +318,7 @@ function asaCityTz(city){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Euro
 function asaCityPath(city){ return city==='Kopenhag' ? '/kopenhag/' : '/amsterdam/'; }
 </script>
 <script>
-const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0",pw:"asalocal2026"};
+const CFG={url:"https://tosqsabuaomgqjtogdrn.supabase.co",key:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"};
 const TIERS=[{name:"Kaşif",min:0,emoji:"🧭"},{name:"Şehirli",min:5,emoji:"🏙️"},{name:"Küratör",min:15,emoji:"🎨"},{name:"Insider",min:30,emoji:"💎"}];
 function tierFor(p){let t=TIERS[0];for(const x of TIERS){if(p>=x.min)t=x;}return t;}
 const COUNTRIES=[
@@ -395,8 +390,10 @@ function updateDInfo(){
   else if(sel.duration){ sel.durationDays=DURMAP[sel.duration]||null; info.textContent=""; }
   else { info.textContent=""; }
 }
+let interestFlight=false;
 function updateGo(){
   const go=$("goBtn"), note=$("goNote");
+  if(interestFlight){ go.disabled=true; return; }
   if(!sel.city){ go.disabled=true; go.textContent="Keşfet"; note.textContent=""; return; }
   if(sel.active){ go.disabled=false; go.textContent=sel.city+"'ı keşfet →"; note.textContent=""; }
   else { go.disabled=false; go.textContent=sel.city+" · ilgimi bırak"; note.textContent=sel.city+" yakında açılıyor."; }
@@ -450,7 +447,27 @@ function wire(){
   de.onchange=()=>{ sel.endDate=de.value||null; updateDInfo(); };
   un.onchange=()=>{ if(un.checked){ ds.value="";de.value="";ds.disabled=true;de.disabled=true;sel.startDate=null;sel.endDate=null;sel.approx="Belli değil"; } else { ds.disabled=false;de.disabled=false;sel.approx=null; } updateDInfo(); };
   dur.onchange=()=>{ sel.duration=dur.value||null; updateDInfo(); };
-  $("goBtn").onclick=async()=>{ if(!sel.city)return; const b=$("goBtn"); b.disabled=true; if(sel.active){ b.textContent="Hazırlanıyor…"; await saveTrip(true);} else { await saveTrip(false); $("goNote").textContent="✓ İlgin kaydedildi — "+sel.city+" açılınca haber vereceğiz."; b.disabled=false; updateGo(); } };
+  $("goBtn").onclick=async()=>{
+    if(!sel.city||interestFlight) return;
+    interestFlight=true;
+    const b=$("goBtn");
+    b.disabled=true;
+    b.setAttribute("aria-busy","true");
+    try{
+      if(sel.active){
+        b.textContent="Hazırlanıyor…";
+        await saveTrip(true);
+      } else {
+        await saveTrip(false);
+        $("goNote").textContent="✓ İlgin kaydedildi — "+sel.city+" açılınca haber vereceğiz.";
+        await new Promise(function(r){ setTimeout(r,4000); });
+      }
+    } finally {
+      interestFlight=false;
+      b.removeAttribute("aria-busy");
+      updateGo();
+    }
+  };
 }
 function renderAcct(){ const b=$("acctBtn"); if(session){ b.textContent="👤 "+((session.display_name)||session.email.split("@")[0]); b.classList.add("bg-secondary","text-on-secondary","border-secondary"); } else { b.textContent="Giriş"; b.classList.remove("bg-secondary","text-on-secondary","border-secondary"); } }
 /* ===== A7/A8: Aktif Seyahat kartı + Seyahatlerim (build ASA_BUILD_20260814_A7A8) ===== */
