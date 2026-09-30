@@ -28,7 +28,22 @@ sudo -u postgres psql -h "$SOCK" -d postgres -v ON_ERROR_STOP=1 -c "drop databas
 sudo -u postgres createdb -h "$SOCK" "$DB"
 
 run() { "${PSQL[@]}" -d "$DB" "$@"; }
-runf() { run --single-transaction -f "$1"; }
+# Runner opens the SQL file. postgres never has to traverse the checkout.
+runf() {
+  local sql_file="$1"
+
+  if [[ ! -r "$sql_file" ]]; then
+    echo "GATE_FAILED:wse_sql_file_unreadable:$sql_file"
+    return 1
+  fi
+
+  sudo -u postgres psql \
+    -h "$SOCK" \
+    -v ON_ERROR_STOP=1 \
+    --single-transaction \
+    -d "$DB" \
+    -f - < "$sql_file"
+}
 
 runf "$REPO/CDP3D_package/gates/cdp3d_prereq_stub.sql" >/dev/null
 runf "$REPO/CDP3D_package/CDP3D_up.sql" >/dev/null
@@ -61,7 +76,7 @@ fi
 echo "PASS WSE_INERT_PASS"
 
 set +e
-unarmed="$(run --single-transaction -f "$ROOT/WSE_ACTIVATE.sql" 2>&1)"
+unarmed="$(runf "$ROOT/WSE_ACTIVATE.sql" 2>&1)"
 unarmed_rc=$?
 set -e
 if [[ "$unarmed_rc" -eq 0 ]] || [[ "$unarmed" != *activation_refused_without_explicit_arm* ]]; then
@@ -104,7 +119,13 @@ fi
 echo "PASS activation_not_persisted"
 
 runf "$ROOT/WSE_down_soft.sql" >/dev/null
-post="$(run -f "$ROOT/gates/wse_post_down_assert.sql")"
+# This file has its own BEGIN/ROLLBACK probe, so it stays outside --single-transaction.
+# stdin still keeps postgres from opening the checkout path.
+if [[ ! -r "$ROOT/gates/wse_post_down_assert.sql" ]]; then
+  echo "GATE_FAILED:wse_sql_file_unreadable:$ROOT/gates/wse_post_down_assert.sql"
+  exit 1
+fi
+post="$(run -f - < "$ROOT/gates/wse_post_down_assert.sql")"
 if [[ "$post" != *WSE_DOWN_PASS* ]]; then
   echo "EPHEMERAL_FAIL:post-down"
   printf '%s\n' "$post"
