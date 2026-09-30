@@ -67,6 +67,7 @@ tr:hover td{background:#faf8f3}
 .login p{font-size:13px;color:var(--ink2);margin:6px 0 16px}
 .login input{width:100%;border:1px solid var(--line);background:#fbfaf7;border-radius:11px;padding:12px;font-size:15px;margin-bottom:10px}
 .hint{font-size:11.5px;color:var(--ink2);margin-top:12px;line-height:1.5}
+.login label{display:block;text-align:left;font-size:13px;font-weight:700;color:var(--ink);margin:2px 0 4px}
 .acc{display:flex;flex-direction:column;gap:8px}
 .accitem{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
 .acchead{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;user-select:none}
@@ -142,19 +143,30 @@ function resetCaps(){ CAPS={admin:false,venues:false,cities:false,content:false,
 
 // FAZ 0D: giriş = Supabase e-posta/şifre (ortak şifre yok). Sonra aktif admin + rol doğrulanır.
 function renderLogin(msg){
-  $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Yönetici hesabınla giriş yap</p>'
-   +'<input id="le" type="email" placeholder="E-posta" autocomplete="username">'
-   +'<input id="lp" type="password" placeholder="Şifre" autocomplete="current-password">'
-   +'<div class="err" id="aerr">'+esc(msg||"")+'</div>'
-   +'<button class="btn primary" id="abtn" style="width:100%">Giriş</button>'
-   +'<div class="hint">Yalnız Supabase hesabı olan ve admin rolü verilmiş kişiler erişebilir.</div></div>';
+  $("app").innerHTML='<div class="login"><h1>Yönetim girişi</h1>'
+   +'<label for="le">E-posta</label><input id="le" type="email" autocomplete="username">'
+   +'<label for="lp">Şifre</label><input id="lp" type="password" autocomplete="current-password">'
+   +'<div class="err" id="aerr" role="alert">'+esc(msg||"")+'</div>'
+   +'<button class="btn primary" id="abtn" type="button" style="width:100%">Giriş yap</button></div>';
   const submit=async()=>{
     const email=($("le").value||"").trim(), pw=$("lp").value||"";
-    if(!email||!pw){ $("aerr").textContent="E-posta ve şifre gerekli."; return; }
-    $("abtn").disabled=true; $("abtn").textContent="Giriş yapılıyor…";
-    const {error}=await authClient.auth.signInWithPassword({email, password:pw});
-    if(error){ $("aerr").textContent="Giriş başarısız. Bilgileri kontrol et."; $("abtn").disabled=false; $("abtn").textContent="Giriş"; return; }
-    bootGate();
+    const errEl=$("aerr");
+    if(!email||!pw){ errEl.textContent="Giriş olmadı. Bilgilerini kontrol et."; return; }
+    if(!authClient){ errEl.textContent="Bağlantı yok. Sayfayı yenile veya sonra dene."; return; }
+    $("abtn").disabled=true; $("abtn").textContent="Bir saniye…";
+    try{
+      const {error}=await authClient.auth.signInWithPassword({email, password:pw});
+      if(error){
+        const m=String((error&&error.message)||"").toLowerCase();
+        errEl.textContent=(/fetch|network|failed/.test(m))?"Bağlantı yok. Sayfayı yenile veya sonra dene.":"Giriş olmadı. Bilgilerini kontrol et.";
+        $("abtn").disabled=false; $("abtn").textContent="Giriş yap"; return;
+      }
+      errEl.textContent="Giriş tamam.";
+      bootGate();
+    }catch(e){
+      errEl.textContent="Bağlantı yok. Sayfayı yenile veya sonra dene.";
+      $("abtn").disabled=false; $("abtn").textContent="Giriş yap";
+    }
   };
   $("abtn").onclick=submit;
   $("lp").onkeydown=e=>{ if(e.key==="Enter")submit(); };
@@ -178,8 +190,8 @@ async function bootGate(){
   $("app").innerHTML='<div class="login"><p class="muted" style="padding:24px">Yetki kontrol ediliyor…</p></div>';
   await loadCaps();
   if(!CAPS.admin){
-    $("app").innerHTML='<div class="login"><h1><b>asa</b>local · Yönetim</h1><p>Bu panele erişim yetkiniz yok.</p>'
-     +'<div class="hint">Hesabınız aktif admin rolüne sahip değil. Yetki için sistem yöneticisiyle görüşün.</div>'
+    $("app").innerHTML='<div class="login"><h1>Yönetim girişi</h1>'
+     +'<div class="err" role="alert">Bu hesap için yönetim erişimi yok.</div>'
      +'<button class="btn" id="lo2" style="width:100%;margin-top:14px">Çıkış</button></div>';
     $("lo2").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} resetCaps(); renderLogin(); };
     return;
@@ -210,11 +222,11 @@ function apiErrText(status){
   return "Beklenmeyen hata ("+status+").";
 }
 function privLoginHTML(hint){
-  return '<div class="panel" style="max-width:440px"><h3 style="margin-bottom:6px">Yönetici girişi (Supabase)</h3>'
+  return '<div class="panel" style="max-width:440px"><h3 style="margin-bottom:6px">Yönetim girişi</h3>'
    +'<p class="muted" style="margin-bottom:12px">Üye ve seyahat verileri güvenli admin veri katmanından gelir; super_admin/support girişi gerekir.</p>'
-   +'<div class="fld" style="margin-bottom:8px"><label>E-posta</label><input id="pa_email" type="email" autocomplete="username"></div>'
-   +'<div class="fld" style="margin-bottom:8px"><label>Şifre</label><input id="pa_pw" type="password" autocomplete="current-password"></div>'
-   +'<div class="err" id="pa_err">'+esc(hint||"")+'</div>'
+   +'<div class="fld" style="margin-bottom:8px"><label for="pa_email">E-posta</label><input id="pa_email" type="email" autocomplete="username"></div>'
+   +'<div class="fld" style="margin-bottom:8px"><label for="pa_pw">Şifre</label><input id="pa_pw" type="password" autocomplete="current-password"></div>'
+   +'<div class="err" id="pa_err" role="alert">'+esc(hint||"")+'</div>'
    +'<button class="btn primary" id="pa_btn" style="width:100%">Giriş yap</button></div>';
 }
 function wirePrivLogin(after){

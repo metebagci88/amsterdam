@@ -402,6 +402,8 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 /* Gate */
 .gate{border:1px solid var(--line2);border-radius:var(--r);background:var(--bg2)}
 .gate-b{background:var(--accent2)}
+.gate-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:4px}
+.gate-sec{background:transparent;color:var(--ink);border:1px solid var(--line2);border-radius:11px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer}
 .planctl{margin:6px 0 18px}
 .planbtns{display:flex;gap:10px;flex-wrap:wrap}
 .planhint{font-size:13px;color:var(--ink2);margin-top:10px;background:var(--scl);border-radius:8px;padding:10px 12px;line-height:1.5}
@@ -475,6 +477,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     </div>
     <div id="mapWrap">
       <div id="lmap" style="height:62vh;min-height:380px;border-radius:16px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(40,35,25,.06)"></div>
+      <p id="mapTeaserAria" class="sr-only"></p>
     </div>
     <p class="section-sub" style="margin-top:10px">Gerçek sokak haritası (OpenStreetMap). Bir pine dokun → mekan kartı + Google Maps linki açılır. Renk = kaynak, kalp = favori, altın nokta = konumun. Filtreler pinleri anında günceller.</p>
   </section>
@@ -946,8 +949,18 @@ function winopen(u){if(!u)return;try{const w=window.open(u,"_blank","noopener");
 
 /* ===== FAVORITES ===== */
 let favSet=new Set();
-try{const s=JSON.parse(localStorage.getItem("ams_fav")||"null");if(s)favSet=new Set(s);}catch(e){}
-V.forEach(v=>{if(v.fav)favSet.add(v.id);});
+(function initFav(){
+  let raw=null;
+  try{ raw=localStorage.getItem("ams_fav"); }catch(e){ raw=""; }
+  if(raw!==null){
+    let parsed=null;
+    try{ parsed=JSON.parse(raw); }catch(e){ parsed=null; }
+    if(Array.isArray(parsed)) parsed.forEach(function(id){ if(typeof id==="string"&&id) favSet.add(id); });
+    return;
+  }
+  V.forEach(function(v){ if(v&&v.fav&&typeof v.id==="string"&&v.id) favSet.add(v.id); });
+  try{ localStorage.setItem("ams_fav", JSON.stringify(Array.from(favSet))); }catch(e){}
+})();
 function isFav(id){return favSet.has(id);}
 function toggleFav(id){if(favSet.has(id))favSet.delete(id);else favSet.add(id);
  try{localStorage.setItem("ams_fav",JSON.stringify([...favSet]));}catch(e){}
@@ -981,7 +994,34 @@ function goBack(){
 }
 function isMember(){return !!(window.ASA&&window.ASA.session);}
 function gateCard(msg){return '<div class="gate"><div class="gate-i">🔒</div><div class="gate-t">'+(msg||"Devamı üyelere özel")+'</div><div class="gate-d">Ücretsiz üyelikle tüm sonuçları gör, favorilerini buluta kaydet, seviyeni yükselt.</div><button class="gate-b" onclick="go(\'member\')">Üye ol / Giriş yap</button></div>';}
-function refreshGated(){try{renderCards();}catch(e){}try{renderScenarios();}catch(e){}try{renderTrips();}catch(e){}try{var _d=document.getElementById("deOut");if(_d&&_d.innerHTML.trim()!=="")runDE();}catch(e){}}
+const TEASER_MAX=10;
+function favView(){ return typeof activeChips!=="undefined" && activeChips.has("fav"); }
+function cityCatalogIds(){
+  const ids=[], seen=new Set();
+  V.forEach(function(v){
+    if(!v||v.city!==CITY||typeof v.id!=="string"||!v.id||seen.has(v.id)) return;
+    seen.add(v.id); ids.push(v.id);
+  });
+  ids.sort();
+  return ids;
+}
+function teaserIdList(){ return cityCatalogIds().slice(0,TEASER_MAX); }
+function teaserIdSet(){ return new Set(teaserIdList()); }
+function paywallGateHtml(hidden){
+  const extra=hidden>0?('<div class="gate-d">+'+hidden+' mekân daha üyeler için</div>'):"";
+  return '<div class="gate"><div class="gate-t">Devamı üyeler için</div>'
+    +extra
+    +'<div class="gate-d">Tam listeye üye olunca ulaşırsın. Favorilerin bu cihazda kalır; istersen girişten sonra taşırsın.</div>'
+    +'<div class="gate-actions"><button type="button" class="gate-b" onclick="go(\'member\')">Üye ol veya giriş yap</button>'
+    +'<button type="button" class="gate-sec" onclick="setOnlyChip(\'fav\')">Favorilerime git</button></div></div>';
+}
+function syncMapTeaserAria(){
+  const el=document.getElementById("mapTeaserAria"); if(!el) return;
+  const total=cityCatalogIds().length;
+  if(!isMember()&&!favView()&&total>TEASER_MAX) el.textContent="Harita ile liste aynı 10 mekânı gösterir.";
+  else el.textContent="";
+}
+function refreshGated(){try{renderCards();}catch(e){}try{if(typeof drawMarkers==="function"&&typeof MAP!=="undefined"&&MAP&&MAP.map)drawMarkers();}catch(e){}try{renderScenarios();}catch(e){}try{renderTrips();}catch(e){}try{var _d=document.getElementById("deOut");if(_d&&_d.innerHTML.trim()!=="")runDE();}catch(e){}}
 
 /* ===== DASHBOARD CTA ===== */
 const CTAS=[
@@ -1146,7 +1186,7 @@ function cardHtml(v){
  const distTxt=(km<100)?('≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk'):'';
  const noteTxt=v.tip||v.note||'';
  const abtn='rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors';
- return '<div class="flex flex-col group">'+
+ return '<div class="flex flex-col group" data-venue-id="'+v.id+'">'+
    '<div class="relative aspect-[16/10] rounded-lg overflow-hidden bg-surface-container mb-4 shadow-sm cursor-pointer" onclick="openVenue(\''+v.id+'\')">'+
      '<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" src="'+venueImg(v)+'" loading="lazy">'+
      '<button class="absolute top-3 right-3 w-10 h-10 rounded-full bg-surface/95 backdrop-blur flex items-center justify-center shadow-md active:scale-90 transition" onclick="event.stopPropagation();toggleFav(\''+v.id+'\')"><span class="msym text-[22px] text-secondary">'+(isFav(v.id)?"favorite":"favorite_border")+'</span></button>'+
@@ -1170,15 +1210,32 @@ function cardHtml(v){
  '</div>';
 }
 function renderCards(){
- const list=currentList();
- let _h;
- if(!list.length){_h='<div class="note" style="grid-column:1/-1">Bu filtrelerle sonuç yok. Bir filtreyi kaldır.</div>';}
- else if(!isMember()){_h=cardHtml(list[0])+'<div style="grid-column:1/-1">'+gateCard((list.length-1)+' mekan daha üyelere özel')+'</div>';}
- else{_h=list.map(cardHtml).join("");}
+ const full=currentList();
+ const member=isMember();
+ const fav=favView();
+ const allow=(!member&&!fav)?teaserIdSet():null;
+ const list=allow?full.filter(v=>allow.has(v.id)):full;
+ const hidden=allow?Math.max(0,full.length-list.length):0;
+ let _h="";
+ if(!list.length){
+   if(fav && !V.some(v=>v&&v.city===CITY&&isFav(v.id))) _h='<div class="note" style="grid-column:1/-1">Henüz favorin yok. Mekânlar’dan kalp ile ekle.</div>';
+   else _h='<div class="note" style="grid-column:1/-1">Bu filtrelerle sonuç yok. Bir filtreyi kaldır.</div>';
+ } else {
+   if(!member&&fav) _h='<div class="note" style="grid-column:1/-1">Favorilerin bu cihazda. Üye olursan hesabına taşıyabilirsin.</div>';
+   _h+=list.map(cardHtml).join("");
+   if(hidden>0){
+     _h+='<p class="note" style="grid-column:1/-1">İlk 10 mekân gösteriliyor.</p>';
+     _h+='<div style="grid-column:1/-1">'+paywallGateHtml(hidden)+'</div>';
+   }
+ }
  document.getElementById("cards").innerHTML=_h;
- document.getElementById("count").textContent=list.length+" mekan"+
-   (document.getElementById("fSort").value==="dist"?(" · "+(userLoc?"konumuna":"merkeze")+" göre sıralı"):"");
+ let cnt=list.length+" mekan";
+ if(document.getElementById("fSort").value==="dist") cnt+=" · "+(userLoc?"konumuna":"merkeze")+" göre sıralı";
+ const unfiltered=!document.getElementById("q").value.trim()&&!document.getElementById("fArea").value&&!document.getElementById("fSrc").value&&activeChips.size===0;
+ if(member&&unfiltered) cnt+=" · Tüm mekânlar açık.";
+ document.getElementById("count").textContent=cnt;
  syncChips();
+ syncMapTeaserAria();
 }
 function applyFilters(){renderCards();}
 
@@ -1223,11 +1280,17 @@ function drawMarkers(){
  const cat=document.getElementById("mapCat").value;
  const src=document.getElementById("mapSrc").value;
  if(MAP.city===CITY){
+   const member=isMember();
+   const favOnly=favView();
+   const allow=(!member&&!favOnly)?teaserIdSet():null;
    V.filter(v=>v.city===CITY).forEach(v=>{
-     if(cat&&!v.cats.includes(cat))return;
+     if(allow&&!allow.has(v.id))return;
+     if(!member&&favOnly&&!isFav(v.id))return;
+     if(cat&&!(v.cats||[]).includes(cat))return;
      if(src&&v.src!==src)return;
      const c=coordsOf(v);const fav=isFav(v.id);
      const m=L.circleMarker([c.lat,c.lng],{radius:fav?9:6.5,color:"#fff",weight:2,fillColor:hexColor(v),fillOpacity:.95});
+     m.asaVenueId=v.id;
      m.bindPopup(popupHtml(v));m.addTo(MAP.layer);
    });
  }else{
@@ -1240,6 +1303,7 @@ function drawMarkers(){
  }
  placeUser();
  try{ if(window.ADS)ADS.drawMapPins(MAP); }catch(e){}
+ syncMapTeaserAria();
 }
 function placeUser(){
  if(!MAP.map)return;
@@ -1389,7 +1453,7 @@ function renderPlanCtl(){
  const el=document.getElementById("planCtl"); if(!el)return;
  const any=CAL.days.some(D=>(dayVenues[D.key]||[]).length);
  const its=tripInterests();
- el.innerHTML='<div class="flex flex-wrap gap-2 mb-3"><button class="inline-flex items-center gap-1 rounded-full bg-secondary text-on-secondary font-button text-button px-5 py-2.5 hover:opacity-90 transition-opacity" onclick="autoGeneratePlan(true)"><span class="msym text-[16px]">auto_awesome</span> İlgi alanlarıma göre plan oluştur</button>'+
+ el.innerHTML='<div class="flex flex-wrap gap-2 mb-3"><button type="button" data-cta="secondary" class="inline-flex items-center gap-1 rounded-full border border-outline-variant text-on-surface font-button text-button px-5 py-2.5 hover:bg-surface-container transition-colors" onclick="autoGeneratePlan(true)"><span class="msym text-[16px]">auto_awesome</span> İlgi alanlarıma göre plan oluştur</button>'+
    (any?'<button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-5 py-2.5 hover:bg-surface-container transition-colors" onclick="clearPlan()">Planı temizle</button>':'')+'</div>'+
    '<div class="text-on-surface-variant text-[13px] mb-5">'+(its.length?("✦ İlgi alanların: "+its.join(", ")):"Henüz ilgi alanı seçmemişsin — genel öneriler kullanılıyor. Ana sayfada tür seçersen plan sana göre şekillenir.")+'</div>';
 }
@@ -1414,7 +1478,7 @@ var PSET=(function(){
  function iStatus(){ const t=sum(),allL=s.cats.every(c=>c.locked),ok=(t===100); let m,cl; if(warn){m=warn;cl="warn";} else if(allL){ if(t===100){m="Tüm oranlar sabit. Oto dengeleme için bir kilidi aç.";cl="ok";} else {m="Hepsi kilitli, toplam %"+t+". Bir kilidi aç.";cl="warn";} } else if(s.auto){ if(t===100){m="Dağılım %100 ✓";cl="ok";} else if(t<100){m="Kilitler nedeniyle %"+(100-t)+" eksik.";cl="warn";} else {m="Kilitler %"+(t-100)+" fazla.";cl="warn";} } else { if(t===100){m="Dağılım %100 ✓";cl="ok";} else if(t<100){m="%"+(100-t)+" daha dağıtmalısın";cl="warn";} else {m="%"+(t-100)+" azaltmalısın";cl="warn";} } return {t,ok,m,cl}; }
  function accOk(){ return (typeof userLoc!=="undefined") && userLoc!=null; }
  function timeOk(x){ return /^\d{2}:\d{2}$/.test(x||""); }
- function cta(){ const st=iStatus(); if(!st.ok) return {ok:false,m:"İlgi dağılımını %100 yapmalısın."}; if(!accOk()) return {ok:false,m:"Planı oluşturmak için konaklama noktanı seçmelisin (mahalle ya da haritadan pin)."}; if(!(s.startDate&&s.endDate&&s.startDate<=s.endDate)) return {ok:false,m:"Başlangıç tarihi bitiş tarihinden sonra olamaz."}; if(!timeOk(s.arrival)) return {ok:false,m:"Şehre varış saatini gir."}; if(!timeOk(s.departure)) return {ok:false,m:"Şehirden ayrılış saatini gir."}; if(!(timeOk(s.dayStart)&&timeOk(s.dayEnd)&&s.dayStart<s.dayEnd)) return {ok:false,m:"Günlük başlangıç saati bitişten önce olmalı."}; if(!(s.transport.walk||s.transport.bike||s.transport.transit)) return {ok:false,m:"En az bir ulaşım biçimi seçmelisin."}; return {ok:true,m:"Tüm alanlar tamam ✓"}; }
+ function cta(){ const st=iStatus(); if(!st.ok) return {ok:false,m:"İlgi dağılımını %100 yapmalısın."}; if(!(s.startDate&&s.endDate&&s.startDate<=s.endDate)) return {ok:false,m:"Başlangıç tarihi bitiş tarihinden sonra olamaz."}; if(!timeOk(s.arrival)) return {ok:false,m:"Şehre varış saatini gir."}; if(!timeOk(s.departure)) return {ok:false,m:"Şehirden ayrılış saatini gir."}; if(!(timeOk(s.dayStart)&&timeOk(s.dayEnd)&&s.dayStart<s.dayEnd)) return {ok:false,m:"Günlük başlangıç saati bitişten önce olmalı."}; if(!(s.transport.walk||s.transport.bike||s.transport.transit)) return {ok:false,m:"En az bir ulaşım biçimi seçmelisin."}; return {ok:true,m:"Tüm alanlar tamam ✓"}; }
  // ---- handlers ----
  const API={};
  API.slide=(i,v)=>{ s.cats[i].v=v; let ok=true; if(s.auto)ok=distribute(i); render(); if(!ok){warn="Diğer kategoriler kilitli — dengeleme yapılamıyor.";render();setTimeout(()=>{warn="";render();},2200);} };
@@ -1456,7 +1520,7 @@ var PSET=(function(){
    return '<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-4">'+
      '<div class="flex items-center justify-between mb-2"><div class="font-headline-md text-[17px] text-primary">Plan kurulumu</div><button type="button" class="text-secondary text-[12px]" onclick="PSET.close()">Küçült ▲</button></div>'+
      '<div class="'+SEC+'">Kurulum (zorunlu)</div>'+
-     '<div class="mb-3"><label class="'+LBL+'">Konaklama (ana merkez)</label><div class="flex flex-wrap gap-2 items-center"><button type="button" class="rounded-full border '+(acc?"border-primary bg-primary text-on-primary":"border-outline-variant bg-surface text-on-surface")+' px-3 py-2 text-[12.5px] min-h-[38px]" onclick="PSET.pin()">📍 Haritadan pin</button><select class="'+INP+'" style="max-width:220px" aria-label="Mahalle seç" onchange="PSET.nb(this.value)"><option value="">Mahalle seç…</option>'+Object.keys(AC()).map(n=>'<option'+((s.baseArea===n)?' selected':'')+'>'+esc(n)+'</option>').join("")+'</select></div><div class="text-[11px] '+(acc?"text-on-surface-variant":"text-secondary")+' mt-1">'+(acc?"✓ Konaklama noktan seçildi.":"Haritadan pin bırak ya da mahalle seç — koordinat belirlenmeden geçerli sayılmaz.")+'</div></div>'+
+     '<div class="mb-3"><label class="'+LBL+'">Konaklama <span class="font-normal">(Önerilir)</span></label><div class="flex flex-wrap gap-2 items-center"><button type="button" class="rounded-full border '+(acc?"border-primary bg-primary text-on-primary":"border-outline-variant bg-surface text-on-surface")+' px-3 py-2 text-[12.5px] min-h-[38px]" onclick="PSET.pin()">📍 Haritadan pin</button><select class="'+INP+'" style="max-width:220px" aria-label="Mahalle seç" onchange="PSET.nb(this.value)"><option value="">Mahalle seç…</option>'+Object.keys(AC()).map(n=>'<option'+((s.baseArea===n)?' selected':'')+'>'+esc(n)+'</option>').join("")+'</select></div><div class="text-[11px] text-on-surface-variant mt-1">'+(acc?"✓ Konaklama noktan seçildi.":"Önerilir. Mahalle ya da haritadan pin seçebilirsin.")+'</div></div>'+
      '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Başlangıç tarihi</label><input type="date" class="'+INP+'" value="'+esc(s.startDate)+'" onchange="PSET.setDate(\'startDate\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Bitiş tarihi</label><input type="date" class="'+INP+'" value="'+esc(s.endDate)+'" onchange="PSET.setDate(\'endDate\',this.value)"></div></div>'+
      '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Şehre varış saati</label><input type="time" class="'+INP+'" value="'+esc(s.arrival)+'" onchange="PSET.setTime(\'arrival\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Ayrılış saati</label><input type="time" class="'+INP+'" value="'+esc(s.departure)+'" onchange="PSET.setTime(\'departure\',this.value)"></div></div>'+
      '<div class="grid grid-cols-2 gap-3"><div class="mb-2"><label class="'+LBL+'">Gün başlangıç</label><input type="time" class="'+INP+'" value="'+esc(s.dayStart)+'" onchange="PSET.setTime(\'dayStart\',this.value)"></div><div class="mb-2"><label class="'+LBL+'">Gün bitiş</label><input type="time" class="'+INP+'" value="'+esc(s.dayEnd)+'" onchange="PSET.setTime(\'dayEnd\',this.value)"></div></div>'+
@@ -1478,7 +1542,7 @@ var PSET=(function(){
        '<div class="mb-1"><label class="'+LBL+'">Diğer not (serbest)</label><textarea id="ps-note" class="'+INP+'" style="min-height:60px" placeholder="Motorun karar veremeyeceği özel bir durum…" oninput="PSET.setNote(this.value)"></textarea><div class="text-[10.5px] text-on-surface-variant mt-1">⚠️ Bu metin plan motorunun kararına <b>katılmaz</b>; yalnızca not olarak saklanır.</div></div>'+
      '</details>'+
      '<div class="text-[12px] font-medium mt-4 mb-1" style="color:'+(c.ok?"#4f6b3f":"#a6601f")+'">'+esc(c.m)+'</div>'+
-     '<button type="button" class="w-full rounded-full font-button text-button py-3.5 '+(c.ok?"bg-primary text-on-primary hover:opacity-90":"bg-outline-variant text-on-surface-variant cursor-not-allowed")+'" '+(c.ok?"":"disabled")+' onclick="PSET.submit()">Planımı oluştur</button>'+
+     '<button type="button" id="planPrimaryCta" data-cta="primary" class="w-full rounded-full font-button text-button py-3.5 '+(c.ok?"bg-primary text-on-primary hover:opacity-90":"bg-outline-variant text-on-surface-variant cursor-not-allowed")+'" '+(c.ok?"":"disabled")+' onclick="PSET.submit()">Planımı oluştur</button>'+
    '</div>';
  }
  function summaryHTML(){ const p=prefs(); const top=Object.entries(p.interests||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>{const c=CATS.find(k=>k.key===x[0]);return (c?c.label:x[0])+" %"+x[1];}).join(" · "); return '<div class="bg-surface-container-low rounded-xl border border-outline-variant/40 p-4 flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-headline-md text-[15px] text-primary">Plan tercihlerin kayıtlı</div><div class="text-[12px] text-on-surface-variant truncate">'+esc(top||"—")+'</div></div><button type="button" class="shrink-0 rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container" onclick="PSET.edit()">Düzenle</button></div>'; }
@@ -1583,7 +1647,7 @@ function renderDayFlow(d){
  let h='<div class="flex items-center justify-between gap-3 mb-4"><h3 class="font-headline-lg text-[22px] text-primary">'+esc(D.label)+(D.dow?' · '+D.dow:'')+'</h3>'
    +'<button onclick="openDay(\''+d+'\')" class="shrink-0 inline-flex items-center gap-1 rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors"><span class="msym text-[16px]">edit</span> Aç / düzenle</button></div>';
  if(!sel.length){
-   h+='<div class="bg-surface-container-low rounded-xl p-6 text-center"><p class="text-on-surface-variant mb-3">Bu güne henüz plan yok.</p><button onclick="autoGeneratePlan(true)" class="inline-flex items-center gap-1 rounded-full bg-secondary text-on-secondary font-button text-button px-5 py-2.5 hover:opacity-90 transition-opacity"><span class="msym text-[16px]">auto_awesome</span> Otomatik plan oluştur</button></div>';
+   h+='<div class="bg-surface-container-low rounded-xl p-6 text-center"><p class="text-on-surface-variant mb-3">Bu güne henüz plan yok.</p><button type="button" data-cta="secondary" onclick="autoGeneratePlan(true)" class="inline-flex items-center gap-1 rounded-full border border-outline-variant text-on-surface font-button text-button px-5 py-2.5 hover:bg-surface-container transition-colors"><span class="msym text-[16px]">auto_awesome</span> Otomatik plan oluştur</button></div>';
    box.innerHTML=h; return;
  }
  h+='<div class="relative pl-6 flex flex-col gap-4">';
@@ -2024,8 +2088,7 @@ setTimeout(applyContent,2100);
 const ASA = (function(){
   const CFG = {
     url: "https://tosqsabuaomgqjtogdrn.supabase.co",
-    key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0",
-    pw:  "asalocal2026"
+    key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"
   };
   const TIERS = [
     {name:"Kaşif",   min:0,  emoji:"🧭"},
