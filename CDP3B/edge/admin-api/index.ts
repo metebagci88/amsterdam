@@ -5,7 +5,12 @@
 //   Her ikisi de READ; WRITE_ACTIONS'a EKLENMEDİ -> admin opt-in VEREMEZ (consent yazımı yok).
 //   Yanıtlar RPC allowlist'iyle sınırlı: ham HMAC/fingerprint/idempotency/request_id/evidence DÖNMEZ.
 //   Mevcut CDP-2B/2C admin action'ları, rol kapıları, rate-limit, kill-switch DEĞİŞMEDEN korunur.
+// ── STORAGE_MEDIA_UPLOAD_EDGE additive (repo splice, NOT deployed) ──
+//   media_upload is multipart/form-data only. JSON stays on MAX_BODY = 8KB.
+//   JSON action=media_upload is 415. verify_jwt stays a platform setting (true).
+//   admin_rate_check allowlist SQL is repo-only APPLY=NO. No storage policy change.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { MEDIA_BUCKET, MEDIA_CACHE_CONTROL, MEDIA_MULTIPART_MAX, PREFIX_ROLES, assertMultipartBufferedLength, classifyMultipartContentLength, contentTypeBranch, jsonMediaUploadRejected, parseMediaMultipart, planMediaUpload, readCapped } from "./inert/media_upload.ts";
 const URL  = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SRK  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -13,9 +18,9 @@ const ENV_KILL = (Deno.env.get("ADMIN_API_KILL") ?? "") === "1";
 const MAX_BODY = 8 * 1024;
 const ALLOWED_ORIGINS = ["https://www.asalocal.club", ...(Deno.env.get("ADMIN_ALLOWED_ORIGIN") ? [Deno.env.get("ADMIN_ALLOWED_ORIGIN")!] : [])];
 function cors(origin){ const allow = !!origin && ALLOWED_ORIGINS.includes(origin); const h={"Vary":"Origin","Access-Control-Allow-Methods":"POST, OPTIONS","Access-Control-Allow-Headers":"authorization, apikey, x-client-info, content-type"}; if(allow)h["Access-Control-Allow-Origin"]=origin; return {h,allow,present:!!origin}; }
-const ROLE_SETS = { counts:"ANY_ADMIN", member_search:["super_admin","support"], member_360:["super_admin","support"], comment_search:["super_admin","moderator"], comment_set_hidden:["super_admin","moderator"], member_set_blocked:["super_admin","support"], adjust_points:["super_admin"], content_rollback:["super_admin","content_editor"], audit_search:["super_admin"], audit_detail:["super_admin"], content_versions:["super_admin","content_editor"], cities_overview:["super_admin","content_editor"], city_health:["super_admin","content_editor"], member_set_note:["super_admin","support"], member_set_segment:["super_admin","support"], segment_preview:["super_admin","crm","analyst"], segment_list:["super_admin","crm","analyst"], segment_upsert:["super_admin","crm"], segment_run:["super_admin","crm"], segment_duplicate:["super_admin","crm"], segment_set_active:["super_admin","crm"], events_list:["super_admin","crm","analyst"], segment_taxonomy:["super_admin","crm","analyst"], segment_member_search:["super_admin","crm","analyst"], member_360_by_ref:["super_admin","support"], q_member_consent:["super_admin","support","crm"], marketing_readiness_check:["super_admin","support","crm"] };
-const WRITE_ACTIONS = new Set(["comment_set_hidden","member_set_blocked","adjust_points","content_rollback","member_set_note","member_set_segment","segment_upsert","segment_run","segment_duplicate","segment_set_active"]);
-const LIMITS = { counts:{min:30,day:2000}, member_search:{min:20,day:500}, member_360:{min:10,day:200}, comment_search:{min:60,day:1000}, comment_set_hidden:{min:20,day:200}, member_set_blocked:{min:5,day:30}, adjust_points:{min:10,day:100}, content_rollback:{min:10,day:100}, audit_search:{min:60,day:2000}, audit_detail:{min:120,day:5000}, content_versions:{min:60,day:2000}, cities_overview:{min:60,day:2000}, city_health:{min:120,day:4000}, member_set_note:{min:20,day:300}, member_set_segment:{min:20,day:300}, segment_preview:{min:60,day:3000}, segment_list:{min:60,day:3000}, segment_upsert:{min:30,day:500}, segment_run:{min:60,day:2000}, segment_duplicate:{min:20,day:300}, segment_set_active:{min:30,day:500}, events_list:{min:120,day:5000}, segment_taxonomy:{min:120,day:5000}, segment_member_search:{min:60,day:2000}, member_360_by_ref:{min:10,day:200}, q_member_consent:{min:60,day:2000}, marketing_readiness_check:{min:60,day:2000} };
+const ROLE_SETS = { counts:"ANY_ADMIN", member_search:["super_admin","support"], member_360:["super_admin","support"], comment_search:["super_admin","moderator"], comment_set_hidden:["super_admin","moderator"], member_set_blocked:["super_admin","support"], adjust_points:["super_admin"], content_rollback:["super_admin","content_editor"], audit_search:["super_admin"], audit_detail:["super_admin"], content_versions:["super_admin","content_editor"], cities_overview:["super_admin","content_editor"], city_health:["super_admin","content_editor"], member_set_note:["super_admin","support"], member_set_segment:["super_admin","support"], segment_preview:["super_admin","crm","analyst"], segment_list:["super_admin","crm","analyst"], segment_upsert:["super_admin","crm"], segment_run:["super_admin","crm"], segment_duplicate:["super_admin","crm"], segment_set_active:["super_admin","crm"], events_list:["super_admin","crm","analyst"], segment_taxonomy:["super_admin","crm","analyst"], segment_member_search:["super_admin","crm","analyst"], member_360_by_ref:["super_admin","support"], q_member_consent:["super_admin","support","crm"], marketing_readiness_check:["super_admin","support","crm"], media_upload:["super_admin","venue_editor","ads"] };
+const WRITE_ACTIONS = new Set(["comment_set_hidden","member_set_blocked","adjust_points","content_rollback","member_set_note","member_set_segment","segment_upsert","segment_run","segment_duplicate","segment_set_active","media_upload"]);
+const LIMITS = { counts:{min:30,day:2000}, member_search:{min:20,day:500}, member_360:{min:10,day:200}, comment_search:{min:60,day:1000}, comment_set_hidden:{min:20,day:200}, member_set_blocked:{min:5,day:30}, adjust_points:{min:10,day:100}, content_rollback:{min:10,day:100}, audit_search:{min:60,day:2000}, audit_detail:{min:120,day:5000}, content_versions:{min:60,day:2000}, cities_overview:{min:60,day:2000}, city_health:{min:120,day:4000}, member_set_note:{min:20,day:300}, member_set_segment:{min:20,day:300}, segment_preview:{min:60,day:3000}, segment_list:{min:60,day:3000}, segment_upsert:{min:30,day:500}, segment_run:{min:60,day:2000}, segment_duplicate:{min:20,day:300}, segment_set_active:{min:30,day:500}, events_list:{min:120,day:5000}, segment_taxonomy:{min:120,day:5000}, segment_member_search:{min:60,day:2000}, member_360_by_ref:{min:10,day:200}, q_member_consent:{min:60,day:2000}, marketing_readiness_check:{min:60,day:2000}, media_upload:{min:10,day:100} };
 const REASONS=["spam","inappropriate","harassment","misleading","user_request","security","other"];
 const ENTITIES=["venues","cities","site_content","ads"];
 const AUDIT_ACTIONS=["insert","update","delete"];
@@ -33,20 +38,54 @@ Deno.serve(async (req)=>{ const request_id=rid(); const origin=req.headers.get("
  if(req.method!=="POST")return json(405,{error:"method_not_allowed"},request_id,ch);
  if(ENV_KILL)return json(503,{error:"admin_temporarily_disabled"},request_id,ch);
  const authz=req.headers.get("Authorization")??""; const mtok=authz.match(/^Bearer\s+(.+)$/); if(!mtok)return json(401,{error:"missing_bearer"},request_id,ch); const token=mtok[1];
- if(!(req.headers.get("Content-Type")??"").includes("application/json"))return json(415,{error:"unsupported_media_type"},request_id,ch);
- const raw=await req.text(); if(raw.length>MAX_BODY)return json(413,{error:"payload_too_large"},request_id,ch);
- let payload; try{payload=JSON.parse(raw||"{}");}catch{return json(400,{error:"bad_json"},request_id,ch);} const action=payload?.action; const params=payload?.params??{};
+ const ctype=req.headers.get("Content-Type")??""; const branch=contentTypeBranch(ctype);
+ let action; let params; let multipartBody=null;
+ if(branch==="multipart_media"){
+  const rawLen=req.headers.get("Content-Length"); const n=(rawLen===null||rawLen==="")?null:Number(rawLen);
+  const headerClass=classifyMultipartContentLength((n===null||!Number.isFinite(n))?null:Math.trunc(n));
+  if(headerClass==="too_large")return json(413,{error:"payload_too_large"},request_id,ch);
+  const buf=await readCapped(req,MEDIA_MULTIPART_MAX);
+  if(assertMultipartBufferedLength(buf.length)==="too_large")return json(413,{error:"payload_too_large"},request_id,ch);
+  multipartBody=buf; action="media_upload"; params={};
+ }else if(branch==="json_admin"){
+  const raw=await req.text(); if(raw.length>MAX_BODY)return json(413,{error:"payload_too_large"},request_id,ch);
+  let payload; try{payload=JSON.parse(raw||"{}");}catch{return json(400,{error:"bad_json"},request_id,ch);}
+  action=payload?.action; params=payload?.params??{};
+  if(action==="media_upload"){ const rej=jsonMediaUploadRejected(); return json(rej.status,{error:rej.error},request_id,ch); }
+ }else return json(415,{error:"unsupported_media_type"},request_id,ch);
  if(!action||!(action in ROLE_SETS))return json(400,{error:"unknown_action"},request_id,ch);
  const userClient=createClient(URL,ANON,{global:{headers:{Authorization:`Bearer ${token}`}}}); const {data:{user},error:uerr}=await userClient.auth.getUser(); if(uerr||!user)return json(401,{error:"invalid_token"},request_id,ch);
  const adm=await rpcBool(userClient,"is_current_user_admin",{}); if(adm.kind==="tech_error")return json(503,{error:"admin_temporarily_disabled"},request_id,ch); if(adm.value!==true)return json(403,{error:"not_admin"},request_id,ch);
  const need=ROLE_SETS[action]; if(need!=="ANY_ADMIN"){ let anyTrue=false,anyTechError=false; for(const role of need){ const r=await rpcBool(userClient,"current_user_has_admin_role",{role_name:role}); if(r.kind==="tech_error"){anyTechError=true;continue;} if(r.value===true){anyTrue=true;break;} } if(anyTrue){} else if(anyTechError)return json(503,{error:"admin_temporarily_disabled"},request_id,ch); else return json(403,{error:"forbidden"},request_id,ch); }
- const v=validate(action,params); if(!v.ok)return json(400,{error:v.error},request_id,ch);
+ let mediaFile=null;
+ if(multipartBody){
+  const parsed=parseMediaMultipart(ctype,multipartBody);
+  if(!parsed.ok)return json(parsed.status,{error:parsed.error},request_id,ch);
+  const needPrefix=PREFIX_ROLES[parsed.prefix];
+  let pTrue=false,pTech=false;
+  for(const role of needPrefix){ const r=await rpcBool(userClient,"current_user_has_admin_role",{role_name:role}); if(r.kind==="tech_error"){pTech=true;continue;} if(r.value===true){pTrue=true;break;} }
+  if(pTrue){} else if(pTech)return json(503,{error:"admin_temporarily_disabled"},request_id,ch); else return json(403,{error:"forbidden"},request_id,ch);
+  mediaFile=parsed;
+ }
+ const v=mediaFile?{ok:true}:validate(action,params); if(!v.ok)return json(400,{error:v.error},request_id,ch);
  const svc=createClient(URL,SRK,{auth:{persistSession:false}});
  { const {data:enabled,error:sErr}=await svc.rpc("admin_api_status"); if(sErr||enabled!==true)return json(503,{error:"admin_temporarily_disabled"},request_id,ch); }
  if(WRITE_ACTIONS.has(action)){ const {data:wEnabled,error:wErr}=await svc.rpc("admin_writes_status"); if(wErr||wEnabled!==true)return json(503,{error:"writes_temporarily_disabled"},request_id,ch); }
  const lim=LIMITS[action]; const {data:allowed,error:rlErr}=await svc.rpc("admin_rate_check",{p_actor:user.id,p_action:action,p_max_min:lim.min,p_max_day:lim.day}); if(rlErr)return json(500,{error:"internal"},request_id,ch); if(allowed!==true)return json(429,{error:"rate_limited"},request_id,ch);
  try{ let data,err;
-  if(action==="counts"){({data,error:err}=await svc.rpc("admin_q_counts",{p_actor:user.id}));}
+  if(action==="media_upload"){
+   if(!mediaFile)return json(415,{error:"unsupported_media_type"},request_id,ch);
+   const planned=await planMediaUpload({prefix:mediaFile.prefix,bytes:mediaFile.bytes,supabaseUrl:URL,newUuid:()=>crypto.randomUUID(),upload:async(args)=>{
+    if(args.bucket!==MEDIA_BUCKET||args.upsert!==false)return {error:{message:"rejected"}};
+    const up=await svc.storage.from(MEDIA_BUCKET).upload(args.path,args.bytes,{contentType:args.contentType,upsert:false,cacheControl:args.cacheControl??MEDIA_CACHE_CONTROL});
+    if(up.error)return {error:up.error};
+    const returned=up.data&&typeof up.data.path==="string"?up.data.path:undefined;
+    return {error:null,path:returned};
+   }});
+   if(!planned.ok){ if(planned.error==="upload_failed")console.error("media_upload upload_failed",request_id); return json(planned.status,{error:planned.error},request_id,ch); }
+   return json(200,{request_id,data:planned.data},request_id,ch);
+  }
+  else if(action==="counts"){({data,error:err}=await svc.rpc("admin_q_counts",{p_actor:user.id}));}
   else if(action==="member_search"){({data,error:err}=await svc.rpc("admin_q_member_search",{p_actor:user.id,p_query:v.q,p_search_type:v.search_type,p_blocked:v.blocked,p_limit:v.limit,p_offset:v.offset,p_request_id:request_id}));}
   else if(action==="member_360"){({data,error:err}=await svc.rpc("admin_q_member_360",{p_actor:user.id,p_target:v.target,p_request_id:request_id}));}
   else if(action==="comment_search"){({data,error:err}=await svc.rpc("admin_q_comment_search",{p_actor:user.id,p_city:v.city,p_venue:v.venue,p_visibility:v.visibility,p_user:v.user,p_from:v.from,p_to:v.to,p_limit:v.limit,p_offset:v.offset,p_request_id:request_id}));}

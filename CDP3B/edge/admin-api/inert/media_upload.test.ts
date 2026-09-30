@@ -38,10 +38,12 @@ import {
   planMediaUploadFromBase64,
   prefixAllowedByRoles,
   publicMediaUrl,
+  readCapped,
   sniffMime,
 } from "./media_upload.ts";
 
-const LIVE_INDEX_SHA = "880dd2c4b75814949aff35d9e6a478dbfc9563da74137c2cfc7093e3482fae7b";
+const PRE_SPLICE_INDEX_SHA = "880dd2c4b75814949aff35d9e6a478dbfc9563da74137c2cfc7093e3482fae7b";
+const ADMIN_HTML_SHA = "c4e8dafc6df801df67f838e9beeb3442289bf6ebff311a8a0c4a7ed013823073";
 const SUPABASE_URL = "https://tosqsabuaomgqjtogdrn.supabase.co";
 const UUID_A = "550e8400-e29b-41d4-a716-446655440000";
 const UUID_B = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
@@ -85,15 +87,45 @@ function form(parts: Array<{ name: string; value?: string; file?: Uint8Array; fi
   return { contentType: `multipart/form-data; boundary=${BOUNDARY}`, body };
 }
 
-test("live admin-api index.ts is unchanged and does not reference media_upload", () => {
+test("admin-api splice keeps the 8KB JSON cap and adds multipart media_upload", () => {
   const buf = readFileSync(new URL("../index.ts", import.meta.url));
-  assert.equal(createHash("sha256").update(buf).digest("hex"), LIVE_INDEX_SHA);
+  const sha = createHash("sha256").update(buf).digest("hex");
+  assert.notEqual(sha, PRE_SPLICE_INDEX_SHA);
   const text = buf.toString("utf8");
-  assert.equal(text.includes("media_upload"), false);
-  assert.equal(text.includes("inert/media_upload"), false);
   assert.match(text, /const MAX_BODY = 8 \* 1024;/);
-  assert.match(text, /includes\("application\/json"\)/);
-  assert.equal(text.includes('"media_upload"'), false);
+  assert.match(text, /from "\.\/inert\/media_upload\.ts"/);
+  assert.match(text, /media_upload:\["super_admin","venue_editor","ads"\]/);
+  assert.match(text, /new Set\(\[[^\]]*"media_upload"\]\)/);
+  assert.match(text, /media_upload:\{min:10,day:100\}/);
+  assert.match(text, /contentTypeBranch\(/);
+  assert.match(text, /jsonMediaUploadRejected\(/);
+  assert.match(text, /readCapped\(req,MEDIA_MULTIPART_MAX\)/);
+  assert.match(text, /parseMediaMultipart\(/);
+  assert.match(text, /planMediaUpload\(/);
+  assert.match(text, /PREFIX_ROLES\[/);
+  assert.match(text, /\.from\(MEDIA_BUCKET\)/);
+  assert.match(text, /upsert:false/);
+  assert.equal(text.includes("upsert:true"), false);
+  assert.equal(text.includes("upsert: true"), false);
+  assert.equal(text.includes("media_delete"), false);
+  assert.equal(text.includes("createSignedUrl"), false);
+  assert.equal(text.includes(".remove("), false);
+  assert.equal(text.includes("arrayBuffer("), false);
+  const branchAt = text.indexOf("contentTypeBranch(");
+  const textAt = text.indexOf("req.text()");
+  const readAt = text.indexOf("readCapped(");
+  const userAt = text.indexOf("getUser(");
+  const parseAt = text.indexOf("parseMediaMultipart(");
+  const roleAt = text.indexOf("current_user_has_admin_role");
+  const svcAt = text.indexOf("createClient(URL,SRK");
+  const planAt = text.indexOf("planMediaUpload(");
+  assert.ok(branchAt > 0 && branchAt < textAt);
+  assert.ok(readAt > 0 && readAt < textAt);
+  assert.ok(textAt < userAt);
+  assert.ok(userAt < roleAt && roleAt < parseAt && parseAt < svcAt && svcAt < planAt);
+  assert.equal((text.match(/req\.text\(\)/g) ?? []).length, 1);
+  const html = readFileSync(new URL("../../../admin.html", import.meta.url));
+  assert.equal(createHash("sha256").update(html).digest("hex"), ADMIN_HTML_SHA);
 });
 
 test("allowlist, multipart default, and role labels stay on the live contract", () => {
@@ -370,20 +402,63 @@ test("planMediaUpload uses multipart bytes and does not upload rejected types", 
   assert.equal(calls.length, 0);
 });
 
-test("design doc records the ChatGPT B revision, role SELECT, and deploy blockers", () => {
+test("design doc records EDGE_IMPLEMENT, APPLY=NO, and open deploy blockers", () => {
   const doc = readFileSync(new URL("../MEDIA_UPLOAD_DESIGN.md", import.meta.url), "utf8");
-  assert.match(doc, /INERT/);
+  assert.match(doc, /EDGE_IMPLEMENT/);
+  assert.match(doc, /NOT deployed/);
   assert.match(doc, /ChatGPT EVET B/);
   assert.match(doc, /NO_POLICY_DROP=true/);
   assert.match(doc, /NO_EDGE_DEPLOY=true/);
+  assert.match(doc, /NO_ADMIN_HTML/);
+  assert.match(doc, /APPLY=NO/);
+  assert.match(doc, /DEPLOY_BLOCKERS=open/);
   assert.match(doc, /multipart\/form-data/);
   assert.match(doc, /DEPLOY BLOCKER/);
   assert.match(doc, /super_admin/);
   assert.match(doc, /venue_editor/);
   assert.match(doc, /5_000_000/);
   assert.match(doc, /8 \* 1024|8192|8KB/);
+  assert.match(doc, new RegExp(PRE_SPLICE_INDEX_SHA));
   assert.equal(doc.includes("sb_secret_"), false);
   assert.equal(/eyJ[A-Za-z0-9_-]{6,}\./.test(doc), false);
+});
+
+test("readCapped stops one byte past the caller max", async () => {
+  const exact = new Request("https://example.test/up", { method: "POST", body: Uint8Array.from([1, 2, 3, 4]) });
+  const got = await readCapped(exact, 4);
+  assert.deepEqual([...got], [1, 2, 3, 4]);
+  const over = new Request("https://example.test/up", { method: "POST", body: Uint8Array.from([1, 2, 3, 4, 5]) });
+  const capped = await readCapped(over, 3);
+  assert.deepEqual([...capped], [1, 2, 3, 4]);
+  assert.equal((await readCapped({ body: null }, 8)).length, 0);
+  assert.equal((await readCapped({ body: null }, -1)).length, MEDIA_MULTIPART_MAX + 1);
+  assert.equal(assertMultipartBufferedLength(MEDIA_MULTIPART_MAX + 1), "too_large");
+  assert.equal(assertMultipartBufferedLength(MEDIA_MULTIPART_MAX), "ok");
+});
+
+test("rate-check SQL artifact adds only media_upload and is marked APPLY=NO", () => {
+  const sql = readFileSync(new URL("./admin_rate_check_media_upload.APPLY_NO.sql", import.meta.url), "utf8");
+  assert.match(sql, /APPLY=NO/);
+  assert.equal(/drop\s+(function|policy|table)/i.test(sql), false);
+  assert.equal(/create\s+policy/i.test(sql), false);
+  assert.equal(/storage\.objects/i.test(sql), false);
+  const list = sql.match(/p_action not in \(([\s\S]*?)\)/);
+  assert.ok(list);
+  const allow = list[1];
+  assert.match(allow, /'media_upload'/);
+  assert.equal(allow.includes("q_member_consent"), false);
+  assert.equal(allow.includes("marketing_readiness_check"), false);
+  const live = [
+    "counts", "member_search", "member_360", "comment_search", "comment_set_hidden", "member_set_blocked",
+    "adjust_points", "content_rollback", "audit_search", "audit_detail", "content_versions",
+    "cities_overview", "city_health", "member_set_note", "member_set_segment",
+    "segment_preview", "segment_list", "segment_upsert", "segment_run", "segment_duplicate", "segment_set_active", "events_list",
+    "segment_taxonomy", "segment_member_search", "member_360_by_ref",
+  ];
+  for (const name of live) assert.match(sql, new RegExp(`'${name}'`));
+  const yml = readFileSync(new URL("../../../../.github/workflows/cdp3c-edge-integration.yml", import.meta.url), "utf8");
+  assert.match(yml, /cp CDP3B\/edge\/admin-api\/inert\/media_upload\.ts supabase\/functions\/admin-api\/inert\/media_upload\.ts/);
+  assert.equal(yml.includes("functions deploy"), false);
 });
 
 test("module exports no delete action", async () => {

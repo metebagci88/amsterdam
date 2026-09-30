@@ -133,6 +133,80 @@ echo "$(body)" | grep -q '"ready":false' || die "readiness_false" "ready:false d
 # --- 16) admin üzerinden consent/opt-in YAZMA action'ı yok (bilinmeyen action reddi) ---
 s=$(req POST "$FN_ADMIN" "$ORIGIN_OK" "$ADMIN_JWT" '{"action":"consent_set","params":{}}'); [ "$s" = "400" ] || die "admin_no_optin" "admin consent_set kabul edilmemeli, gelen $s"; okk; note "admin opt-in/consent yazma action'ı yok -> 400"
 
+# --- 17) media_upload: JSON kalır 8KB; action JSON'da 415; multipart ephemeral storage + teardown ---
+# Ephemeral stack only. Does not apply admin_rate_check.APPLY_NO.sql (CI double returns true).
+# Bucket insert is local to this database. No production policy change.
+BIG=$(python3 -c 'print("{" + (" " * 8200) + "}")')
+s=$(req POST "$FN_ADMIN" "$ORIGIN_OK" "$ADMIN_JWT" "$BIG"); [ "$s" = "413" ] || die "admin_json_413" "JSON >8KB beklenen 413, gelen $s"; okk; note "JSON body >8192 -> 413 (MAX_BODY unchanged)"
+s=$(req POST "$FN_ADMIN" "$ORIGIN_OK" "$ADMIN_JWT" '{"action":"media_upload"}'); [ "$s" = "415" ] || die "admin_json_media_415" "JSON media_upload beklenen 415, gelen $s ($(body))"; okk; note "JSON media_upload -> 415"
+s=$(curl -s -o /tmp/ci_body -D /tmp/ci_hdr -w '%{http_code}' -X POST "$FN_ADMIN" -H "Origin: $ORIGIN_OK" -H "Authorization: Bearer $ADMIN_JWT" -H "Content-Type: text/plain" --data 'hello')
+[ "$s" = "415" ] || die "admin_ctype_415" "text/plain beklenen 415, gelen $s"; okk; note "Content-Type text/plain -> 415"
+psql "$DBURL" -v ON_ERROR_STOP=1 -c "insert into storage.buckets(id,name,public) values ('media','media',true) on conflict (id) do nothing;" >/tmp/media_bucket.out 2>&1 || die "media_bucket" "ephemeral media bucket insert failed"
+count_media(){ psql "$DBURL" -tAc "select count(*) from storage.objects where bucket_id='media';" | tr -d '[:space:]'; }
+BEFORE=$(count_media)
+python3 - <<'PY'
+from pathlib import Path
+boundary = "----asaMedia"
+def form(parts):
+    chunks = []
+    for part in parts:
+        head = f'--{boundary}\r\nContent-Disposition: form-data; name="{part["name"]}"'
+        if "filename" in part:
+            head += f'; filename="{part["filename"]}"'
+        head += "\r\n"
+        if part.get("type"):
+            head += f'Content-Type: {part["type"]}\r\n'
+        head += "\r\n"
+        chunks.append(head.encode())
+        chunks.append(part.get("file") if part.get("file") is not None else part.get("value", "").encode())
+        chunks.append(b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode())
+    return b"".join(chunks)
+jpeg = bytes([0xFF, 0xD8, 0xFF, 0x00])
+gif = bytes([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])
+base = [{"name": "action", "value": "media_upload"}, {"name": "prefix", "value": "venues"}]
+Path("/tmp/mu_jpeg.bin").write_bytes(form([*base, {"name": "file", "file": jpeg, "filename": "client-secret.jpg", "type": "image/gif"}]))
+Path("/tmp/mu_gif.bin").write_bytes(form([*base, {"name": "file", "file": gif, "filename": "x.png", "type": "image/png"}]))
+Path("/tmp/mu_counts.bin").write_bytes(form([{"name": "action", "value": "counts"}, {"name": "prefix", "value": "venues"}, {"name": "file", "file": jpeg}]))
+Path("/tmp/mu_path.bin").write_bytes(form([*base, {"name": "path", "value": "venues/evil.jpg"}, {"name": "file", "file": jpeg}]))
+PY
+mpost(){ # $1 file $2 jwt -> status
+  curl -s -o /tmp/ci_body -D /tmp/ci_hdr -w '%{http_code}' -X POST "$FN_ADMIN" \
+    -H "Origin: $ORIGIN_OK" -H "Authorization: Bearer $2" \
+    -H "Content-Type: multipart/form-data; boundary=----asaMedia" \
+    --data-binary @"$1"
+}
+s=$(mpost /tmp/mu_counts.bin "$ADMIN_JWT"); [ "$s" = "415" ] || die "media_counts_415" "multipart counts beklenen 415, gelen $s ($(body))"; okk; note "multipart action=counts -> 415"
+s=$(mpost /tmp/mu_path.bin "$ADMIN_JWT"); [ "$s" = "400" ] || die "media_client_path" "client path beklenen 400, gelen $s ($(body))"
+echo "$(body)" | grep -q '"client_path_rejected"' || die "media_client_path_code" "client_path_rejected yok: $(body)"; okk; note "multipart path field -> 400 client_path_rejected"
+s=$(mpost /tmp/mu_jpeg.bin "$MEMBER_JWT"); [ "$s" = "403" ] || die "media_member_403" "üye upload beklenen 403, gelen $s ($(body))"
+MID=$(count_media); [ "$MID" = "$BEFORE" ] || die "media_member_delta" "üye upload nesne üretti $BEFORE->$MID"; okk; note "üye multipart -> 403, object delta 0"
+s=$(mpost /tmp/mu_gif.bin "$ADMIN_JWT"); [ "$s" = "400" ] || die "media_gif_400" "GIF beklenen 400, gelen $s ($(body))"
+echo "$(body)" | grep -q '"bad_mime_content"' || die "media_gif_code" "bad_mime_content yok: $(body)"
+MID=$(count_media); [ "$MID" = "$BEFORE" ] || die "media_gif_delta" "GIF upload nesne üretti $BEFORE->$MID"; okk; note "GIF magic -> 400, uploader yazmadı"
+s=$(mpost /tmp/mu_jpeg.bin "$ADMIN_JWT"); [ "$s" = "200" ] || die "media_jpeg_200" "JPEG beklenen 200, gelen $s ($(body))"
+B=$(body)
+echo "$B" | grep -q 'service_role' && die "media_secret" "yanıtta service_role"
+echo "$B" | grep -Eq 'eyJ[A-Za-z0-9_-]{6,}\.' && die "media_jwt" "yanıtta jwt"
+PATH1=$(echo "$B" | jq -r '.data.path')
+URL1=$(echo "$B" | jq -r '.data.public_url')
+MIME1=$(echo "$B" | jq -r '.data.mime')
+BYTES1=$(echo "$B" | jq -r '.data.bytes')
+BUCKET1=$(echo "$B" | jq -r '.data.bucket')
+echo "$PATH1" | grep -Eq '^venues/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$' || die "media_path" "path sözleşmesi değil: $PATH1"
+echo "$URL1" | grep -F -q "/storage/v1/object/public/media/$PATH1" || die "media_public_url" "public url değil: $URL1"
+echo "$URL1" | grep -q 'token=' && die "media_signed" "signed url"
+echo "$PATH1" | grep -q 'client-secret' && die "media_filename" "client filename path'e girdi"
+[ "$MIME1" = "image/jpeg" ] && [ "$BYTES1" = "4" ] && [ "$BUCKET1" = "media" ] || die "media_meta" "mime/bytes/bucket: $MIME1 $BYTES1 $BUCKET1"
+okk; note "super_admin JPEG multipart -> 200 public url"
+s=$(mpost /tmp/mu_jpeg.bin "$ADMIN_JWT"); [ "$s" = "200" ] || die "media_jpeg_2" "ikinci JPEG beklenen 200, gelen $s ($(body))"
+PATH2=$(echo "$(body)" | jq -r '.data.path')
+[ "$PATH2" != "$PATH1" ] || die "media_uuid" "iki yükleme aynı path"
+echo "$PATH2" | grep -Eq '^venues/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$' || die "media_path_2" "ikinci path sözleşmesi değil"
+okk; note "iki başarı farklı uuid"
+psql "$DBURL" -v ON_ERROR_STOP=1 -c "delete from storage.objects where bucket_id='media' and name in ('$PATH1','$PATH2');" >/tmp/media_rm.out 2>&1 || die "media_teardown" "ephemeral object delete failed"
+AFTER=$(count_media); [ "$AFTER" = "$BEFORE" ] || die "media_delta" "object delta $BEFORE->$AFTER"; okk; note "harness teardown object delta 0"
+
 echo "==============================="
 echo "CDP3C_EDGE_HTTP_SUITE pass=$pass fail=$fail"
 # Bu YALNIZ HTTP-suite sonucudur. Nihai başarı sentinel'i (LOCAL_CDP3C_EDGE_INTEGRATION_PASS)

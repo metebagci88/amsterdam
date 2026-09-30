@@ -64,13 +64,17 @@ jobs:
       - name: Fonksiyonları hazırla (gerçek birleşik dosyalar)
         run: |
           set -euo pipefail
-          mkdir -p supabase/functions/email-api supabase/functions/admin-api
+          mkdir -p supabase/functions/email-api supabase/functions/admin-api/inert
           cp CDP3B/edge/email-api/index.ts          supabase/functions/email-api/index.ts
           cp CDP3B/edge/email-api/email_sanitizer.js supabase/functions/email-api/email_sanitizer.js
           cp CDP3B/edge/admin-api/index.ts           supabase/functions/admin-api/index.ts
+          # media_upload helper only. Tests and the unapplied rate-check SQL stay out of the bundle.
+          # This copies files for ephemeral `functions serve`. It is not a production deploy.
+          cp CDP3B/edge/admin-api/inert/media_upload.ts supabase/functions/admin-api/inert/media_upload.ts
           # Sunulan dosyaların repo ile byte-exact olduğunu kanıtla
           diff <(sha256sum CDP3B/edge/email-api/index.ts | cut -d' ' -f1) <(sha256sum supabase/functions/email-api/index.ts | cut -d' ' -f1)
           diff <(sha256sum CDP3B/edge/admin-api/index.ts | cut -d' ' -f1) <(sha256sum supabase/functions/admin-api/index.ts | cut -d' ' -f1)
+          diff <(sha256sum CDP3B/edge/admin-api/inert/media_upload.ts | cut -d' ' -f1) <(sha256sum supabase/functions/admin-api/inert/media_upload.ts | cut -d' ' -f1)
 
       - name: Functions serve (arka plan)
         run: |
