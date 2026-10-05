@@ -849,13 +849,38 @@ function adPreview(){
   }
 }
 async function adUpload(ev){ const file=ev.target.files&&ev.target.files[0]; if(!file)return; const msg=$("a_upmsg"); if(msg)msg.textContent="Yükleniyor…"; try{ const url=await uploadToMedia(file,"ads"); $("a_image_url").value=url; adPreview(); if(msg)msg.textContent="✓ yüklendi"; }catch(e){ if(msg)msg.textContent="Hata: "+(e.message||e); } }
+function uploadErrMsg(status,code){
+  if(status===401) return "Oturumunuz sona ermiş olabilir. Lütfen yeniden giriş yapın.";
+  if(status===403) return "Bu görseli yüklemek için yetkiniz bulunmuyor.";
+  if(status===413) return "Dosya en fazla 5 MB olabilir.";
+  if(status===400&&code==="bad_size") return "Dosya en fazla 5 MB olabilir.";
+  if(status===400&&code==="bad_mime_content") return "Yalnız JPEG, PNG veya WebP görsel yükleyebilirsiniz.";
+  if(status===415||status===422) return "Yalnız JPEG, PNG veya WebP görsel yükleyebilirsiniz.";
+  if(status===429) return "Çok fazla yükleme denemesi yapıldı. Lütfen daha sonra tekrar deneyin.";
+  return "Görsel yüklenemedi. Lütfen daha sonra tekrar deneyin.";
+}
 async function uploadToMedia(file, prefix){
-  const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"")||"jpg";
-  const path=(prefix||"img")+"/"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext;
-  const {error}=await db.storage.from("media").upload(path,file,{cacheControl:"3600",upsert:false,contentType:file.type||"image/jpeg"});
-  if(error)throw error;
-  const {data}=db.storage.from("media").getPublicUrl(path);
-  return data.publicUrl;
+  // SEC-MEDIA: admin arayüzündeki doğrudan Storage upload yolu kaldırıldı.
+  // Yükleme mevcut admin oturumuyla admin-api media_upload action'ı üzerinden yapılır.
+  // Storage policy sıkılaştırması ayrı kontrollü fazdır; client fallback içermez.
+  if(prefix!=="venues"&&prefix!=="ads"){ const e=new Error(uploadErrMsg(-1)); e.code=-1; throw e; }
+  let session=null; try{ const r=await authClient.auth.getSession(); session=r.data.session; }catch(_s){}
+  if(!session||!session.access_token){ const e=new Error(uploadErrMsg(401)); e.code=401; throw e; }
+  const fd=new FormData();
+  fd.append("action","media_upload");
+  fd.append("prefix",prefix);
+  fd.append("file",file);
+  // ONEMLI: Content-Type elle SET EDILMEZ; multipart boundary'yi tarayici uretir.
+  let res;
+  try{
+    res=await fetch(FN_URL,{method:"POST",headers:{"apikey":CFG.key,"Authorization":"Bearer "+session.access_token},body:fd});
+  }catch(_net){ const e=new Error(uploadErrMsg(0)); e.code=0; throw e; }
+  let body=null; try{ body=await res.json(); }catch(_j){}
+  if(!res.ok){ const code=body&&typeof body.error==="string"?body.error:null; const e=new Error(uploadErrMsg(res.status,code)); e.code=res.status; throw e; }
+  const d=body&&body.data?body.data:null;
+  if(!d||typeof d.public_url!=="string"){ const e=new Error(uploadErrMsg(-1)); e.code=-1; throw e; }
+  // Yalniz allowlist alan kullanilir; UI public_url kullanmaya devam eder.
+  return d.public_url;
 }
 async function saveAd(isNew,id){
   const g=k=>{const e=$("a_"+k);return e?e.value.trim():"";};
