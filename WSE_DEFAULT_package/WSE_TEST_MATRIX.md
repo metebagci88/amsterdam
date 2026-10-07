@@ -4,7 +4,7 @@ Ephemeral only. The inert migration is applied to a throwaway database. Activati
 
 | ID | Case | Expected | Where |
 |---|---|---|---|
-| T1 | Existing user, no welcome row | RPC `not_configured` (UI label Kapalı). Send decision `service_pref_missing` even if the welcome flag is true. | `wse_inert_assert.sql`, `wse_behavior.sql` |
+| T1 | Existing user, no welcome row | RPC `not_configured` (UI label "Varsayılan belirlenmedi" since WP4; before WP4 it was Kapalı). Send decision `service_pref_missing` even if the welcome flag is true. | `wse_inert_assert.sql`, `wse_behavior.sql`, `wse_static_check.mjs` (UI label) |
 | T2 | Auth user created before `effective_from`, `members` insert after activation | No current row, no event | `wse_behavior.sql`, concurrency old-auth race |
 | T3 | Auth user created at `effective_from`, even if `members.created_at` is older | One current row, `enabled=true`. UI boolean true. | `wse_behavior.sql` |
 | T4 | That seed | Exactly one current row and one event, `source=signup`, `request_id=signup-seed` | `wse_behavior.sql` |
@@ -26,7 +26,7 @@ Also asserted:
 - `consent_get_my_state` no longer contains `default_enabled`.
 - Admin audit and pref events contain no `@`.
 - Non-welcome key cannot take `default_enabled` true together with `effective_from`.
-- Member UI source still maps only `true` to Açık, so `not_configured` renders Kapalı.
+- Member UI source maps only `true` to Açık and `false` to Kapalı; `not_configured` (and the older `config_pending`) renders "Varsayılan belirlenmedi" (WP4 change, pinned by `wse_static_check.mjs`).
 
 ## How to run
 

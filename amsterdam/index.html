@@ -425,7 +425,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     </div>
     <div class="flex items-center gap-1 shrink-0">
       <button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors" id="locBtn" title="Konumumu kullan"><span class="msym text-[22px]">my_location</span></button>
-      <button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors" onclick="go('member')" title="Üye"><span class="msym text-[22px]">account_circle</span></button>
+      <button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors" onclick="go('member')" title="Üye" aria-label="Üyelik ve hesabım"><span class="msym text-[22px]" aria-hidden="true">account_circle</span></button>
     </div>
   </div>
   <div id="tripBanner" class="tripbanner hide"></div>
@@ -2375,7 +2375,7 @@ const ASA = (function(){
      - Bugünkü ürün durumu: pazarlama/SMS/push/reklam/profilleme İZİN kutuları bu ekranda YOK (aktif hukuk metni yok).
        Pazarlama yüzeyi bu turda AÇILMAZ ve "otomatik açılır" iddiası YOKTUR; ayrı bir fazın işidir.
      - Yalnız consent_get_my_state (okuma) + service_pref_set (yazma), authenticated RPC (auth.uid()). source yok.
-     - config_pending dürüstçe "Varsayılan belirlenmedi" gösterilir. "Tümünü reddet" kontrolü YOK (bugün gösterilmiyor).
+     - not_configured (canlı RPC değeri; eski adı config_pending) dürüstçe "Varsayılan belirlenmedi" gösterilir, "Kapalı" DEĞİL (WP4). "Tümünü reddet" kontrolü YOK (bugün gösterilmiyor).
      - İki mevcut kullanıcıya popup/backfill/zorunlu re-consent YOK: sekme yalnız kullanıcı açınca yüklenir. */
   const CDP3C_PREF_LABELS={ trip_created_confirmation:"Seyahat oluşturuldu bilgisi", trip_updated_confirmation:"Seyahat güncellendi bilgisi",
     trip_start_minus_7_days:"Seyahate 7 gün kala hatırlatma", trip_start_minus_1_day:"Seyahate 1 gün kala hatırlatma",
@@ -2403,7 +2403,7 @@ const ASA = (function(){
     else{
       rows=keys.map(function(k){
         const v=prefs[k]; const label=CDP3C_PREF_LABELS[k]||k;
-        const pending=(v==="config_pending"); const on=(v===true);
+        const pending=(v==="not_configured"||v==="config_pending"); const on=(v===true);
         const stateTxt=pending?'<span class="text-on-surface-variant">Varsayılan belirlenmedi</span>':(on?'<span class="text-primary">Açık</span>':'<span class="text-on-surface-variant">Kapalı</span>');
         // pending veya kapalı -> "Aç" (enabled=true); açık -> "Kapat" (enabled=false)
         const nextEnabled=!on; const btnLabel=on?'Kapat':'Aç';

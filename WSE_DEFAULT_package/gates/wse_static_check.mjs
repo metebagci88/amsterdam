@@ -39,14 +39,19 @@ if (/delete\s+from\s+public\.member_service_pref/i.test(down)) fail("down delete
 if (/drop\s+table/i.test(down)) fail("down drops a table");
 if (!/drop\s+trigger\s+if\s+exists\s+trg_members_seed_welcome_service_pref/i.test(down)) fail("down does not drop trigger");
 
+// WP4 (İŞ PAKETİ 4) changed the member UI on purpose: the live RPC value not_configured (older name config_pending)
+// renders "Varsayılan belirlenmedi", never Kapalı. Only boolean true is Açık; false is Kapalı.
 const ui = read(join(repo, "amsterdam/index.html"));
-if (!ui.includes('const pending=(v==="config_pending"); const on=(v===true);')) {
+if (!ui.includes('const pending=(v==="not_configured"||v==="config_pending"); const on=(v===true);')) {
   fail("member UI predicate changed; not_configured display mapping must be re-checked");
 }
+if (!ui.includes(`const stateTxt=pending?'<span class="text-on-surface-variant">Varsayılan belirlenmedi</span>':(on?'<span class="text-primary">Açık</span>':'<span class="text-on-surface-variant">Kapalı</span>');`)) {
+  fail("member UI label line changed; not_configured display mapping must be re-checked");
+}
 const isOn = (v) => v === true;
-const pending = (v) => v === "config_pending";
+const pending = (v) => v === "not_configured" || v === "config_pending";
 const label = (v) => (pending(v) ? "Varsayılan belirlenmedi" : isOn(v) ? "Açık" : "Kapalı");
-if (label("not_configured") !== "Kapalı" || label(true) !== "Açık" || label(false) !== "Kapalı") {
+if (label("not_configured") !== "Varsayılan belirlenmedi" || label("config_pending") !== "Varsayılan belirlenmedi" || label(true) !== "Açık" || label(false) !== "Kapalı") {
   fail("UI label mapping");
 }
 

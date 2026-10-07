@@ -46,7 +46,9 @@ ok("footer copyright", home.includes("© 2026 ASALOCAL · yerel gibi"));
 ok("footer has no placeholder links", !/<footer[\s\S]*?href\s*=\s*"#"/.test(home));
 ok("ilgimi birak live region and 4s", /id="goNote"[^>]*aria-live="polite"/.test(home) && home.includes("setTimeout(r,4000)") && home.includes("interestFlight"));
 ok("cph stub unchanged marker", /data-asa-city-state\s*=\s*"stub"/.test(cph) && cph.includes("Kopenhag içerikleri hazırlanıyor") && !/<script\b/i.test(cph));
-ok("wse ui predicate intact", city.includes('const pending=(v==="config_pending"); const on=(v===true);'));
+// WP4: the live consent_get_my_state returns 'not_configured' for a missing row; 'config_pending' stays accepted (older name).
+ok("wse ui predicate intact", city.includes('const pending=(v==="not_configured"||v==="config_pending"); const on=(v===true);'));
+ok("home prefs: not_configured is never shown as Kapalı", /function prefState\(v\)\{ if\(v===true\)return "on"; if\(v===false\)return "off"; if\(v==="not_configured"\|\|v==="config_pending"\)return "unset"; return "unknown"; \}/.test(home) && home.includes('unset:"Varsayılan belirlenmedi"'));
 ok("teaser contract", city.includes("const TEASER_MAX=10") && city.includes(".slice(0,TEASER_MAX)") && city.includes("ids.sort()"));
 ok("paywall copy", ["Devamı üyeler için", "İlk 10 mekân gösteriliyor.", "Üye ol veya giriş yap", "Favorilerime git", "Harita ile liste aynı 10 mekânı gösterir.", "Tam listeye üye olunca ulaşırsın."].every((s) => city.includes(s)));
 ok("fav copy", city.includes("Henüz favorin yok. Mekânlar’dan kalp ile ekle.") && city.includes("Favorilerin bu cihazda. Üye olursan hesabına taşıyabilirsin."));
