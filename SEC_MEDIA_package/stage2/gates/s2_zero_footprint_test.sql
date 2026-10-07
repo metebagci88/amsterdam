@@ -1,6 +1,10 @@
 -- =====================================================================
--- SEC-MEDIA · STAGE 2 · gates/s2_zero_footprint_test.sql
+-- SEC-MEDIA · STAGE 2 · gates/s2_zero_footprint_test.sql   (v2 ile uyumlu)
 -- PRODUCTION-SAFE hosted davranış testi — S2_up.sql uygulandıktan SONRA (Supabase execute_sql).
+-- v2: üç yazma policy'si silinmez, TO service_role'e daraltılır. Bu test policy ADINA değil
+-- DAVRANIŞA bakar: anon/authenticated için geçerli yazma policy'si yoksa INSERT 42501,
+-- UPDATE/DELETE 0 satır olur; service_role BYPASSRLS ile yazar. INFO satırı yazma
+-- policy'lerinin canlı rollerini rapora ekler (kanıt; PASS/FAIL'i etkilemez).
 --
 -- ZERO FOOTPRINT: Tek bir DO bloğudur ve HER ZAMAN `ERROR: REPORT:...` (P0001) ile biter.
 -- Bu hata BEKLENENDİR: rapor hata metnidir ve RAISE tüm transaction'ı geri alır
@@ -53,6 +57,9 @@ begin
                     where tgrelid = 'storage.objects'::regclass and tgname = 'protect_objects_delete' and not tgisinternal);
   select count(*) into v_pre from storage.objects where bucket_id = 'media';
   rep := rep || format('INFO runner=%s protect_objects_delete=%s media_objects_pre=%s; ', current_user, v_trg, v_pre);
+  rep := rep || format('INFO storage.objects policies=%s; ',
+    coalesce((select string_agg(policyname || ':' || cmd || ':' || roles::text, ',' order by policyname)
+                from pg_policies where schemaname = 'storage' and tablename = 'objects'), '<none>'));
 
   -- 1) seed: service_role (BYPASSRLS) — admin-api Edge yolunun DB karşılığı
   perform set_config('request.jwt.claims', '{"role":"service_role"}', true);

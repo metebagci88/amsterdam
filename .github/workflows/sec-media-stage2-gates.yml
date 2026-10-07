@@ -1,10 +1,11 @@
 name: SEC-MEDIA Stage 2 gates (PGlite + psql + ephemeral Supabase — production'a DOKUNMAZ)
-# İŞ PAKETİ 2 (media anonim yazma kapatma) HAZIRLIK paketi kapıları.
+# İŞ PAKETİ 2 (media anonim yazma kapatma) HAZIRLIK paketi kapıları — v2 (ALTER POLICY ... TO service_role).
 # Hiçbir job production'a bağlanmaz, migration uygulamaz, Edge deploy etmez, ücretli kaynak açmaz.
-#   local-gates : SHA256SUMS + secret scan + client direct-write scan + PGlite (PG17) gate + psql (PG16) gate
+#   local-gates : SHA256SUMS + secret scan + MCP token scan (MCP'ye giden dosyalarda /drop/i YOK)
+#                 + client direct-write scan + PGlite (PG17 + PG18) gate + psql (PG16) gate
 #   storage-api : GEÇİCİ `supabase start` üzerinde gerçek storage şeması + Storage API HTTP testi.
-#                 !!! s2_storage_api_gate.sh paket hazırlanırken yerelde ÇALIŞTIRILAMADI (Docker yok);
-#                 ilk CI koşusu bu job'ın ilk doğrulamasıdır. Teardown her durumda, kalıntı!=0 -> KIRMIZI.
+#                 s2_storage_api_gate.sh yerelde ÇALIŞTIRILAMAZ (Docker yok); v1 CI 37620936407'de yeşildi,
+#                 v2'nin ilk doğrulaması bu job'dır. Teardown her durumda, kalıntı!=0 -> KIRMIZI.
 #                 CLI PIN: 2.118.0 -> supabase/storage-api:v1.77.0 -> storage.migrations 73 satır, son
 #                 'drop-bucketid-objname-index', count:md5 == production (2026-10-07 read-only). Sürüm,
 #                 storage imajı ve storage.migrations paritesi job içinde doğrulanır; farklıysa KIRMIZI.
@@ -36,6 +37,12 @@ jobs:
       - name: Secret scan (stage2 paketi + bu workflow)
         run: bash CDP3C_package/gates/secret_scan.sh SEC_MEDIA_package/stage2 .github/workflows/sec-media-stage2-gates.yml
 
+      - name: MCP token scan (S2_up / S2_down_INSECURE / hosted assert'lerde /drop/i yok)
+        run: |
+          set -euo pipefail
+          bash SEC_MEDIA_package/stage2/gates/s2_mcp_token_scan.sh | tee "$RUNNER_TEMP/s2_mcp_scan.log"
+          grep -q '^S2_MCP_TOKEN_SCAN_CLEAN$' "$RUNNER_TEMP/s2_mcp_scan.log" || { echo "GATE_FAILED:mcp_token_scan"; exit 1; }
+
       - name: Client direct Storage write scan (tüm repo, servis edilen HTML/JS)
         run: |
           set -euo pipefail
@@ -50,11 +57,27 @@ jobs:
           npm i --no-audit --no-fund @electric-sql/pglite@0.3.16 >/dev/null 2>&1
           echo "pglite kuruldu"
 
-      - name: PGlite gate (S2 up/down/idempotency/drift/zero-footprint)
+      - name: PGlite gate (PG17) (S2 up/down/idempotency/drift/zero-footprint)
         run: |
           set -euo pipefail
           PGLITE_DIR="$RUNNER_TEMP/pglite" node SEC_MEDIA_package/stage2/gates/s2_pglite_gate.mjs | tee "$RUNNER_TEMP/s2_pglite.log"
           grep -q '^S2_LOCAL_PGLITE_GATE_PASS$' "$RUNNER_TEMP/s2_pglite.log" || { echo "GATE_FAILED:pglite"; exit 1; }
+          grep -q '^-- engine: PostgreSQL 17' "$RUNNER_TEMP/s2_pglite.log" || { echo "GATE_FAILED:pglite_engine_not_pg17"; exit 1; }
+
+      - name: PGlite kur (sabit 0.5.8 = PostgreSQL 18; checkout dışına)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pglite18" && cd "$RUNNER_TEMP/pglite18"
+          npm init -y >/dev/null 2>&1
+          npm i --no-audit --no-fund @electric-sql/pglite@0.5.8 >/dev/null 2>&1
+          echo "pglite 0.5.8 kuruldu"
+
+      - name: PGlite gate (PG18)
+        run: |
+          set -euo pipefail
+          PGLITE_DIR="$RUNNER_TEMP/pglite18" node SEC_MEDIA_package/stage2/gates/s2_pglite_gate.mjs | tee "$RUNNER_TEMP/s2_pglite18.log"
+          grep -q '^S2_LOCAL_PGLITE_GATE_PASS$' "$RUNNER_TEMP/s2_pglite18.log" || { echo "GATE_FAILED:pglite18"; exit 1; }
+          grep -q '^-- engine: PostgreSQL 18' "$RUNNER_TEMP/s2_pglite18.log" || { echo "GATE_FAILED:pglite_engine_not_pg18"; exit 1; }
 
       - name: Yerel Postgres 16 (geçici)
         run: |
@@ -63,7 +86,7 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql postgresql-contrib
           sudo pg_ctlcluster 16 main start
 
-      - name: psql gate (psql -1 + arming kalıbı, gerçek sunucu)
+      - name: psql gate (psql -1 + arming kalıbı + lock_timeout, gerçek sunucu)
         run: |
           set -euo pipefail
           bash SEC_MEDIA_package/stage2/gates/s2_psql_gate.sh | tee "$RUNNER_TEMP/s2_psql.log"
@@ -89,7 +112,7 @@ jobs:
           echo "supabase_cli_version=$cli_version"
           case "$cli_version" in *2.118.0*) ;; *) echo "GATE_FAILED:cli_version_not_pinned"; exit 1;; esac
           supabase init --force >/dev/null 2>&1 || true
-          supabase start 2>&1 | sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g; s#sb_(secret|publishable)_[A-Za-z0-9_-]+#[REDACTED_KEY]#g; s#://[^:/@[:space:]]+:[^@/[:space:]]+@#://[REDACTED]@#g'
+          supabase start 2>&1 | sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g; s#sb_(secret|publishable)_[A-Za-z0-9_-]+#[REDACTED_KEY]#g; s#://[^:/@[:space:]]+:[^@/[:space:]]+@#://[REDACTED]@#g; s#(Access Key|Secret Key)([^0-9a-fA-F]*)[0-9a-fA-F]{16,}#\1\2[REDACTED_S3]#g'
           storage_image="$(docker ps --filter 'name=supabase_storage' --format '{{.Image}}' | head -1)"
           echo "storage_image=$storage_image"
           case "$storage_image" in *storage*:v1.77.0) ;; *) echo "GATE_FAILED:storage_image_not_v1.77.0"; exit 1;; esac

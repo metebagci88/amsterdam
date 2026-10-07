@@ -1,8 +1,13 @@
 -- =====================================================================
--- SEC-MEDIA · STAGE 2 · gates/s2_prod_assert.sql   (SALT-OKUNUR / READ-ONLY)
+-- SEC-MEDIA · STAGE 2 · gates/s2_prod_assert.sql   (SALT-OKUNUR / READ-ONLY)   (v2 — NEUTRALIZE)
 -- S2_up.sql production'a uygulandıktan SONRA çalıştırılır (Supabase execute_sql).
 -- Beklenen POST policy matrisi + korunan bucket'lar + ledger kaydı + residue.
--- Yalnız SELECT; hiçbir şey yazmaz. Beklenen: OVERALL = S2_PROD_ASSERT_PASS.
+-- Yalnız SELECT; hiçbir şey yazmaz. Beklenen: OVERALL = S2_PROD_ASSERT_PASS (0 FAIL / 19 counted).
+-- v2 POST matrisi: 4 policy kalır; "media anon read" baseline (SELECT, {public}); üç yazma policy'si
+-- roles {service_role} (BYPASSRLS -> etkisiz), cmd/qual/with_check orijinal; public/anon/authenticated
+-- için yazma policy'si 0. Satır 7 md5'i s2_pre_assert.sql satır 6 ile AYNI formülle hesaplanır:
+--   md5(string_agg(ad|cmd|roller|permissive|qual|with_check, E'\n' order by ad)) = 74b56eca9c133d987aa2ac056b412473
+-- Satır 18: üç yazma policy'sinde S2 etkisizleştirme açıklaması (COMMENT ON POLICY) mevcut.
 -- Satır 13 (media object count) beklentisi = s2_pre_assert.sql'de kaydedilen PRE değeri
 -- (2026-10-07 baseline: 0). PRE farklı kaydedildiyse karşılaştırma o değere göre yapılır.
 -- Satır 20/21 = PRD "Diğer bucket/policy'lerde değişiklik yok" POST kanıtı. Beklenen literal,
@@ -22,20 +27,23 @@ def as (
     from pol
 ),
 chk(ord, check_name, expected, actual, counted) as (
-  select 1, 'storage.objects policy count', '1', (select count(*)::text from pol), true
+  select 1, 'storage.objects policy count', '4', (select count(*)::text from pol), true
   union all
   select 2, 'policy "media anon read" preserved',
          'SELECT|{public}|PERMISSIVE|(bucket_id = ''media''::text)|<null>',
          coalesce((select d from def where policyname = 'media anon read'), '<absent>'), true
   union all
-  select 3, 'policy "media anon insert" removed', '<absent>',
-         coalesce((select 'present:' || d from def where policyname = 'media anon insert'), '<absent>'), true
+  select 3, 'policy "media anon insert" neutralized (TO service_role, definition unchanged)',
+         'INSERT|{service_role}|PERMISSIVE|<null>|(bucket_id = ''media''::text)',
+         coalesce((select d from def where policyname = 'media anon insert'), '<absent>'), true
   union all
-  select 4, 'policy "media anon update" removed', '<absent>',
-         coalesce((select 'present:' || d from def where policyname = 'media anon update'), '<absent>'), true
+  select 4, 'policy "media anon update" neutralized (TO service_role, definition unchanged)',
+         'UPDATE|{service_role}|PERMISSIVE|(bucket_id = ''media''::text)|(bucket_id = ''media''::text)',
+         coalesce((select d from def where policyname = 'media anon update'), '<absent>'), true
   union all
-  select 5, 'policy "media anon delete" removed', '<absent>',
-         coalesce((select 'present:' || d from def where policyname = 'media anon delete'), '<absent>'), true
+  select 5, 'policy "media anon delete" neutralized (TO service_role, definition unchanged)',
+         'DELETE|{service_role}|PERMISSIVE|(bucket_id = ''media''::text)|<null>',
+         coalesce((select d from def where policyname = 'media anon delete'), '<absent>'), true
   union all
   select 6, 'write-capable policies for public/anon/authenticated', '0',
          (select count(*)::text from pg_policies
@@ -43,8 +51,8 @@ chk(ord, check_name, expected, actual, counted) as (
              and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')
              and roles && array['public', 'anon', 'authenticated']::name[]), true
   union all
-  select 7, 'policy matrix md5 (expected POST)',
-         md5('media anon read|SELECT|{public}|PERMISSIVE|(bucket_id = ''media''::text)|<null>'),
+  select 7, 'policy matrix md5 (expected POST v2; same formula as s2_pre_assert row 6)',
+         '74b56eca9c133d987aa2ac056b412473',
          (select coalesce(md5(string_agg(policyname || '|' || d, E'\n' order by policyname)), '<none>') from def), true
   union all
   select 8, 'storage.objects RLS enabled', 'true',
@@ -80,6 +88,12 @@ chk(ord, check_name, expected, actual, counted) as (
          'protect_objects_delete,update_objects_updated_at',
          (select coalesce(string_agg(tgname::text, ',' order by tgname), '<none>') from pg_trigger
            where tgrelid = 'storage.objects'::regclass and not tgisinternal), false
+  union all
+  select 18, 'S2 neutralization comment on the 3 write policies', '3',
+         (select count(*)::text from pg_policy pol
+           where pol.polrelid = 'storage.objects'::regclass
+             and pol.polname in ('media anon insert', 'media anon update', 'media anon delete')
+             and obj_description(pol.oid, 'pg_policy') like 'SEC-MEDIA S2: NEUTRALIZED%'), true
   union all
   select 20, 'other policies (pg_policies except storage.objects) count:md5 unchanged (== PRE, P1)',
          '25:45f0c3ac7e466783e9e3fa3702183b28',

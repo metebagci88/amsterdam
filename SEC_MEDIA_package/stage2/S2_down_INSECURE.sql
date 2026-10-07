@@ -1,5 +1,5 @@
 -- =====================================================================
--- ASALOCAL · SEC-MEDIA · STAGE 2 · S2_down_INSECURE.sql
+-- ASALOCAL · SEC-MEDIA · STAGE 2 · S2_down_INSECURE.sql   (v2)
 --
 --   !!! INSECURE ROLLBACK — GÜVENLİĞİ GEVŞETİR / SECURITY-LOOSENING !!!
 --   Bu dosya media bucket'ında ANONİM YAZMAYI YENİDEN AÇAR: herkes (anon key ile)
@@ -20,14 +20,20 @@
 --                -c "set local sec_media.s2_insecure_rollback = 'REOPEN_ANON_WRITE'" \
 --                -f S2_down_INSECURE.sql
 --
--- NE YAPAR: yalnız S2_up.sql'in kaldırdığı üç policy'yi canlı baseline'daki BİREBİR
---   tanımlarıyla geri oluşturur (drop-if-exists + create => idempotent, tanım kesin):
+-- NE YAPAR: yalnız S2_up.sql'in service_role'e daralttığı üç policy'nin rolünü baseline'daki
+--   {public}'e geri çevirir (ALTER POLICY ... TO public) ve S2 açıklamasını siler
+--   (COMMENT ON POLICY ... IS NULL). cmd/USING/WITH CHECK zaten orijinaldir (PRE guard
+--   doğrular). Sonuç canlı baseline ile BİREBİR aynıdır:
 --     "media anon insert"  INSERT TO public WITH CHECK (bucket_id = 'media'::text)
 --     "media anon update"  UPDATE TO public USING (bucket_id = 'media'::text)
 --                                          WITH CHECK (bucket_id = 'media'::text)
 --     "media anon delete"  DELETE TO public USING (bucket_id = 'media'::text)
+--   İdempotent: zaten baseline'daysa aynı sonucu üretir.
+--   Bu dosya da Supabase MCP metin kapısına takılan yıkıcı DDL anahtar kelimesini HİÇBİR
+--   yerde içermez (gates/s2_mcp_token_scan.sh).
 -- DOKUNMAZ: "media anon read", storage.buckets, email-assets-*, diğer her şey.
--- POST guard: sonuç birebir 4-policy baseline matrisi değilse tüm transaction geri alınır.
+-- POST guard: sonuç birebir 4-policy baseline matrisi (md5 677c0f6b0f4fd37bb8b4fb7959a495fb,
+--   s2_pre_assert.sql satır 6 formülü) + açıklamalar NULL değilse tüm transaction geri alınır.
 -- =====================================================================
 
 do $s2_arm$
@@ -41,10 +47,12 @@ $s2_arm$;
 
 set local lock_timeout = '5s';
 
--- PRE guard: yalnız bilinen policy adları + read policy birebir + media public
+-- PRE guard: yalnız bilinen 4 policy; read birebir; üç yazma policy'si mevcut, tanımı orijinal,
+-- rolü {service_role} (S2 v2) veya {public} (zaten baseline); media public
 do $s2_down_pre$
 declare
   v_unexpected text;
+  v_bad        text;
 begin
   select string_agg(format('%L', policyname), ', ' order by policyname) into v_unexpected
     from pg_policies
@@ -59,33 +67,43 @@ begin
                     and qual = '(bucket_id = ''media''::text)' and with_check is null) then
     raise exception 'S2_DOWN_PRE_DRIFT: "media anon read" yok veya tanımı baseline değil';
   end if;
+  select string_agg(format('%L', w.n), ', ' order by w.n) into v_bad
+    from (values ('media anon insert'), ('media anon update'), ('media anon delete')) as w(n)
+   where not exists (
+           select 1 from pg_policies p
+            where p.schemaname = 'storage' and p.tablename = 'objects' and p.policyname = w.n
+              and p.permissive = 'PERMISSIVE'
+              and (p.roles = array['service_role']::name[] or p.roles = array['public']::name[])
+              and (   (w.n = 'media anon insert' and p.cmd = 'INSERT'
+                       and p.qual is null and p.with_check = '(bucket_id = ''media''::text)')
+                   or (w.n = 'media anon update' and p.cmd = 'UPDATE'
+                       and p.qual = '(bucket_id = ''media''::text)' and p.with_check = '(bucket_id = ''media''::text)')
+                   or (w.n = 'media anon delete' and p.cmd = 'DELETE'
+                       and p.qual = '(bucket_id = ''media''::text)' and p.with_check is null)));
+  if v_bad is not null then
+    raise exception 'S2_DOWN_PRE_DRIFT: yazma policy''si yok veya tanımı orijinal değil: % (bu dosya yalnız rol çevirir; yeniden oluşturma için S2_APPLY_ROLLBACK.md §5)', v_bad;
+  end if;
   if not exists (select 1 from storage.buckets where id = 'media' and public is true) then
     raise exception 'S2_DOWN_PRE_FAIL: bucket media yok veya public<>true';
   end if;
 end
 $s2_down_pre$;
 
-drop policy if exists "media anon insert" on storage.objects;
-create policy "media anon insert" on storage.objects
-  as permissive for insert to public
-  with check (bucket_id = 'media'::text);
+alter policy "media anon insert" on storage.objects to public;
+alter policy "media anon update" on storage.objects to public;
+alter policy "media anon delete" on storage.objects to public;
 
-drop policy if exists "media anon update" on storage.objects;
-create policy "media anon update" on storage.objects
-  as permissive for update to public
-  using (bucket_id = 'media'::text)
-  with check (bucket_id = 'media'::text);
+comment on policy "media anon insert" on storage.objects is null;
+comment on policy "media anon update" on storage.objects is null;
+comment on policy "media anon delete" on storage.objects is null;
 
-drop policy if exists "media anon delete" on storage.objects;
-create policy "media anon delete" on storage.objects
-  as permissive for delete to public
-  using (bucket_id = 'media'::text);
-
--- POST guard: birebir 4-policy baseline matrisi
+-- POST guard: birebir 4-policy baseline matrisi + S2 açıklamaları yok
 do $s2_down_post$
 declare
   v_mismatch bigint;
   v_total    bigint;
+  v_md5      text;
+  v_comments bigint;
 begin
   with expected(policyname, cmd, qual, with_check) as (values
     ('media anon delete', 'DELETE', '(bucket_id = ''media''::text)', null::text),
@@ -104,12 +122,23 @@ begin
       or p.qual is distinct from e.qual
       or p.with_check is distinct from e.with_check;
   select count(*) into v_total from pg_policies where schemaname = 'storage' and tablename = 'objects';
-  if v_mismatch <> 0 or v_total <> 4 then
-    raise exception 'S2_DOWN_POST_FAIL: baseline matrisi geri gelmedi (mismatch=%, total=%)', v_mismatch, v_total;
+  -- s2_pre_assert.sql satır 6 ile aynı formül
+  select coalesce(md5(string_agg(policyname || '|' || cmd || '|' || roles::text || '|' || permissive || '|'
+                                 || coalesce(qual, '<null>') || '|' || coalesce(with_check, '<null>'),
+                                 E'\n' order by policyname)), '<none>') into v_md5
+    from pg_policies where schemaname = 'storage' and tablename = 'objects';
+  select count(*) into v_comments
+    from pg_policy pol
+   where pol.polrelid = 'storage.objects'::regclass
+     and pol.polname in ('media anon insert', 'media anon update', 'media anon delete')
+     and obj_description(pol.oid, 'pg_policy') is not null;
+  if v_mismatch <> 0 or v_total <> 4 or v_md5 <> '677c0f6b0f4fd37bb8b4fb7959a495fb' or v_comments <> 0 then
+    raise exception 'S2_DOWN_POST_FAIL: baseline matrisi geri gelmedi (mismatch=%, total=%, md5=%, comments=%)',
+      v_mismatch, v_total, v_md5, v_comments;
   end if;
   if not exists (select 1 from storage.buckets where id = 'media' and public is true) then
     raise exception 'S2_DOWN_POST_FAIL: bucket media public<>true';
   end if;
-  raise warning 'S2_DOWN_INSECURE_APPLIED: baseline 4 policy geri geldi — media ANONİM YAZMAYA AÇIK (INSECURE)';
+  raise warning 'S2_DOWN_INSECURE_APPLIED: baseline 4 policy (roles {public}) geri geldi — media ANONİM YAZMAYA AÇIK (INSECURE)';
 end
 $s2_down_post$;

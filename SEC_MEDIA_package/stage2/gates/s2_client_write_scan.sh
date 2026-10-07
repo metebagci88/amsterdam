@@ -8,7 +8,10 @@
 #   FAIL: createSignedUploadUrl / uploadToSignedUrl
 #   İZİNLİ: /storage/v1/object/public/<bucket>/...   salt-okuma URL'i
 # Kapsam dışı (server/test): */edge/*, */gates/*, */tests/*, ./*_package/*, */vendor/*,
-#   node_modules, .git, *.test.* — Edge fonksiyonları service_role (BYPASSRLS) kullanır.
+#   ./LIVE_CHECKS/* (GitHub Actions'ta Node ile koşan canlı kabul harness'ı; qa_runner.mjs `s2-http`
+#   reddedilmesi BEKLENEN doğrudan yazmaları bilerek dener), node_modules, .git, *.test.* —
+#   Edge fonksiyonları service_role (BYPASSRLS) kullanır.
+#   Koruma: taranan HTML'lerden biri LIVE_CHECKS'e referans verirse (sayfaya yüklenirse) FAIL.
 # .zip arşivleri taranmaz (çalıştırılabilir sayfa değil); INFO olarak listelenir.
 # Kullanım: bash s2_client_write_scan.sh [repo_root]     Sentinel: S2_CLIENT_WRITE_SCAN_CLEAN
 # =====================================================================
@@ -17,7 +20,7 @@ REPO="${1:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 cd "$REPO" || { echo "GATE_FAILED:client_scan_no_repo"; exit 2; }
 
 mapfile -t FILES < <(find . \( -path ./.git -o -path '*/node_modules' -o -path '*/edge' -o -path '*/gates' \
-    -o -path '*/tests' -o -path '*/vendor' -o -path './*_package' \) -prune \
+    -o -path '*/tests' -o -path '*/vendor' -o -path './*_package' -o -path ./LIVE_CHECKS \) -prune \
     -o -type f \( -name '*.html' -o -name '*.htm' -o -name '*.js' -o -name '*.mjs' \) ! -name '*.test.*' -print | sort)
 echo "scanned_client_files=${#FILES[@]}"
 [ "${#FILES[@]}" -gt 0 ] || { echo "GATE_FAILED:client_scan_no_files"; exit 2; }
@@ -33,6 +36,8 @@ report() { # $1=label, stdin=grep -n çıktısı
 report "storage.from"    < <(grep -nEH -e 'storage[[:space:]]*\.[[:space:]]*from[[:space:]]*\(' "${FILES[@]}" 2>/dev/null)
 report "signed_upload"   < <(grep -nEH -e 'createSignedUploadUrl|uploadToSignedUrl' "${FILES[@]}" 2>/dev/null)
 report "rest_non_public" < <(grep -nEoH -e '/storage/v1/object/[A-Za-z0-9_-]+' "${FILES[@]}" 2>/dev/null | grep -v '/storage/v1/object/public$')
+# kapsam dışı test harness'ı bir sayfaya bağlanmışsa artık client kodudur -> FAIL
+report "html_loads_excluded_harness" < <(grep -nEH -e 'LIVE_CHECKS' "${FILES[@]}" 2>/dev/null | grep -E '\.html?:')
 
 pub="$(grep -nEoH -e '/storage/v1/object/public/[A-Za-z0-9_-]+' "${FILES[@]}" 2>/dev/null || true)"
 [ -n "$pub" ] && printf '%s\n' "$pub" | sed 's/^/INFO_PUBLIC_READ_URL /'

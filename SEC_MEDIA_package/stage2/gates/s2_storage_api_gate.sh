@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # =====================================================================
-# SEC-MEDIA · STAGE 2 · gates/s2_storage_api_gate.sh
+# SEC-MEDIA · STAGE 2 · gates/s2_storage_api_gate.sh   (v2 — NEUTRALIZE: ALTER POLICY ... TO service_role)
 #
-#   !!! YEREL OLARAK ÇALIŞTIRILMADI / UNTESTED LOCALLY !!!
-#   Bu paket hazırlanırken Docker daemon yoktu; bu script yalnız CI'daki ephemeral
-#   `supabase start` job'ında (sec-media-stage2-gates.yml -> storage-api) koşar.
-#   İlk CI koşusu bu script'in kendisinin de ilk doğrulamasıdır.
+#   !!! YEREL OLARAK ÇALIŞTIRILAMAZ (Docker yok) / NOT RUNNABLE LOCALLY !!!
+#   Bu script yalnız CI'daki ephemeral `supabase start` job'ında
+#   (sec-media-stage2-gates.yml -> storage-api) koşar. v1 (policy kaldırma) sürümü
+#   CI 37620936407'de yeşildi (39/39); v2'nin ilk CI koşusu bu sürümün ilk doğrulamasıdır.
+#   Yerelde yalnız SQL yolu simüle edilebilir (PG16 + model fixture; HTTP kontrolleri 000).
+#   v2'ye özgü kanıt: production'daki gibi SÜPER KULLANICI OLMAYAN `postgres` rolüyle
+#   (supautils) ALTER POLICY ... TO service_role / TO public ve COMMENT ON POLICY çalışır.
 #
 # Amaç: PGlite modelinin göremediği iki şeyi GERÇEK Supabase stack'inde kanıtlamak:
 #   (1) S2 SQL'leri gerçek storage şemasında (gerçek trigger'lar, postgres rolü + supautils)
@@ -41,6 +44,11 @@ PROD_OTHER_POLICIES="25:45f0c3ac7e466783e9e3fa3702183b28"     # satır 20 beklen
 PROD_BUCKET_ATTRS="3:e112c7b7523616c45bd38bf2c8c45064"        # satır 21 beklenen (production PRE, 2026-10-07)
 PROD_STORAGE_MIGRATIONS="73:824c7cc22b2d773ff697a047f1ce5c70" # production storage.migrations count:md5(id:name), 2026-10-07
 ST="$API_URL/storage/v1"
+POST_MD5="74b56eca9c133d987aa2ac056b412473"                   # v2 POST matris md5 (= s2_prod_assert satır 7)
+V2_ROLES="media anon delete:{service_role},media anon insert:{service_role},media anon read:{public},media anon update:{service_role}"
+ROLES_SQL="select string_agg(policyname||':'||roles::text, ',' order by policyname) from pg_policies where schemaname='storage' and tablename='objects'"
+# S2 açıklaması taşıyan yazma policy'si sayısı / herhangi bir açıklaması olan policy sayısı
+CMT_SQL="select count(*) filter (where obj_description(oid,'pg_policy') like 'SEC-MEDIA S2: NEUTRALIZED%' and polname <> 'media anon read')||'/'||count(*) filter (where obj_description(oid,'pg_policy') is not null) from pg_policy where polrelid='storage.objects'::regclass"
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); echo "PASS $1"; }
@@ -72,7 +80,8 @@ cp "$TMPD/a.png" "$TMPD/b.png"; printf 'S2' >> "$TMPD/b.png"
 
 echo "-- storage_migration_last=$(val "select name from storage.migrations order by id desc limit 1" 2>/dev/null || echo '?')"
 echo "-- storage.objects triggers=$(val "select coalesce(string_agg(tgname::text, ',' order by tgname),'<none>') from pg_trigger where tgrelid='storage.objects'::regclass and not tgisinternal")"
-echo "-- runner role=$(val 'select current_user') superuser=$(val "select rolsuper from pg_roles where rolname=current_user")"
+RUNNER_SU="$(val "select rolsuper from pg_roles where rolname=current_user")"
+echo "-- runner role=$(val 'select current_user') superuser=$RUNNER_SU"
 
 # ---- CI pin paritesi: bu job'ın kanıtı ancak storage şeması production ile aynıysa geçerlidir
 SM="$(val "select count(*)::text || ':' || md5(string_agg(id::text || ':' || name, E'\n' order by id)) from storage.migrations" 2>/dev/null || echo '?')"
@@ -88,6 +97,7 @@ runf "$ROOT/gates/s2_fixture_baseline.sql" -c "$ARM_FIX" >/dev/null
 # OLUŞTURMAZ; pre_assert satır 13 onu okur -> ilk assert'ten ÖNCE (CLI'nin CreateMigrationTable şekli)
 val "create schema if not exists supabase_migrations; create table if not exists supabase_migrations.schema_migrations(version text primary key, statements text[], name text);" >/dev/null
 [ "$(val "$MD5_SQL")" = "$PROD_BASELINE_MD5" ] && ok "baseline md5 == production" || bad "baseline md5"
+[ "$(val "$CMT_SQL")" = "0/0" ] && ok "baseline: policy açıklaması yok (production ile aynı)" || bad "baseline açıklama ($(val "$CMT_SQL"))"
 [ "$(val "select count(*) from storage.objects where bucket_id='media'")" = "0" ] || bad "media başlangıçta boş değil"
 PRE20="$(rowcol "$ROOT/gates/s2_pre_assert.sql" 20 4)"
 echo "-- pre_assert satır 20 (yerel PRE)=$PRE20"
@@ -103,9 +113,11 @@ s=$(http DELETE "$ST/object/media/s2-ci/anon-baseline.png" service "$TMPD/r")
 [ "$(cnt s2-ci/anon-baseline.png)" = "0" ] && ok "baseline temizlendi (service delete $s)" || bad "baseline cleanup $s"
 
 # ---- S2_up
-runf "$ROOT/S2_up.sql" >"$TMPD/up.out" 2>&1 && ok "S2_up (psql -1, gerçek şema) uygulandı" || { bad "S2_up"; cat "$TMPD/up.out"; }
-[ "$(val "select string_agg(policyname, ',' order by policyname) from pg_policies where schemaname='storage' and tablename='objects'")" = "media anon read" ] \
-  && ok "policy kümesi = media anon read" || bad "policy kümesi"
+runf "$ROOT/S2_up.sql" >"$TMPD/up.out" 2>&1 && ok "S2_up (psql -1, gerçek şema, runner superuser=$RUNNER_SU) uygulandı" || { bad "S2_up"; cat "$TMPD/up.out"; }
+grep -q "S2_PRE_OK: state=baseline" "$TMPD/up.out" && grep -q S2_UP_OK "$TMPD/up.out" && ok "S2_up NOTICE S2_PRE_OK state=baseline + S2_UP_OK" || bad "S2_up notice"
+[ "$(val "$ROLES_SQL")" = "$V2_ROLES" ] && ok "4 policy: yazma {service_role}, read {public}" || bad "policy rolleri ($(val "$ROLES_SQL"))"
+[ "$(val "$MD5_SQL")" = "$POST_MD5" ] && ok "POST matris md5 == v2 ($POST_MD5)" || bad "POST matris md5 ($(val "$MD5_SQL"))"
+[ "$(val "$CMT_SQL")" = "3/3" ] && ok "3 yazma policy'sinde S2 açıklaması (COMMENT ON POLICY, runner superuser=$RUNNER_SU)" || bad "açıklama ($(val "$CMT_SQL"))"
 
 anon_denied_checks() { # $1 label
   local L="$1" s before
@@ -154,12 +166,14 @@ pass_mod_env "$ROOT/gates/s2_prod_assert.sql" && ok "prod_assert (gerçek şema)
   || { bad "prod_assert (FAIL=$(failset "$ROOT/gates/s2_prod_assert.sql"))"; runf "$ROOT/gates/s2_prod_assert.sql" -tA | grep -E 'FAIL|INFO' || true; }
 
 # idempotent
-runf "$ROOT/S2_up.sql" >/dev/null 2>&1 && pass_mod_env "$ROOT/gates/s2_prod_assert.sql" && ok "S2_up x2 idempotent" || bad "S2_up x2"
+runf "$ROOT/S2_up.sql" >"$TMPD/up2.out" 2>&1 && grep -q "S2_PRE_OK: state=already_applied_v2" "$TMPD/up2.out" \
+  && pass_mod_env "$ROOT/gates/s2_prod_assert.sql" && [ "$(val "$CMT_SQL")" = "3/3" ] && ok "S2_up x2 idempotent (state=already_applied_v2)" || bad "S2_up x2"
 
 # INSECURE rollback: silahsız red, armed baseline + anon upload gerçekten geri açılır
 if runf "$ROOT/S2_down_INSECURE.sql" >"$TMPD/dn.out" 2>&1; then bad "down silahsız çalıştı"; else
   grep -q S2_DOWN_INSECURE_NOT_ARMED "$TMPD/dn.out" && ok "down silahsız reddedildi" || bad "down yanlış hata"; fi
-runf "$ROOT/S2_down_INSECURE.sql" -c "$ARM_DOWN" >/dev/null 2>&1 && [ "$(val "$MD5_SQL")" = "$PROD_BASELINE_MD5" ] && ok "down(armed) == production baseline md5" || bad "down armed"
+runf "$ROOT/S2_down_INSECURE.sql" -c "$ARM_DOWN" >"$TMPD/dn2.out" 2>&1 && [ "$(val "$MD5_SQL")" = "$PROD_BASELINE_MD5" ] && [ "$(val "$CMT_SQL")" = "0/0" ] \
+  && ok "down(armed) == production baseline md5, açıklamalar silindi" || { bad "down armed"; cat "$TMPD/dn2.out"; }
 [ "$(failset "$ROOT/gates/s2_pre_assert.sql")" = "13,20" ] && [ "$(rowcol "$ROOT/gates/s2_pre_assert.sql" 20 4)" = "$PRE20" ] \
   && ok "down(armed): pre_assert yalnız 13 (ledger=1, beklenen) + env 20 (== PRE) farklı" || bad "down(armed) pre_assert (FAIL=$(failset "$ROOT/gates/s2_pre_assert.sql"))"
 s=$(http POST "$ST/object/media/s2-ci/anon-after-down.png" anon "$TMPD/r" -H 'Content-Type: image/png' --data-binary @"$TMPD/a.png")
@@ -168,7 +182,7 @@ http DELETE "$ST/object/media/s2-ci/anon-after-down.png" service "$TMPD/r" >/dev
 [ "$(cnt s2-ci/anon-after-down.png)" = "0" ] && ok "after_down temizlendi" || bad "after_down cleanup"
 
 # yeniden up
-runf "$ROOT/S2_up.sql" >/dev/null 2>&1 && ok "re-up uygulandı" || bad "re-up"
+runf "$ROOT/S2_up.sql" >/dev/null 2>&1 && [ "$(val "$ROLES_SQL")" = "$V2_ROLES" ] && [ "$(val "$CMT_SQL")" = "3/3" ] && ok "re-up uygulandı (v2 roller + açıklama)" || bad "re-up"
 anon_denied_checks "after_reup"
 
 # son residue + diğer policy/bucket'lar tüm döngü sonunda PRE ile aynı

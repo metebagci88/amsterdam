@@ -1,20 +1,26 @@
 // =====================================================================
-// SEC-MEDIA · STAGE 2 · gates/s2_pglite_gate.mjs
-// Gerçek Postgres (PGlite/WASM, PG17) üzerinde S2 paketinin yerel kapısı.
+// SEC-MEDIA · STAGE 2 · gates/s2_pglite_gate.mjs   (v2 — NEUTRALIZE: ALTER POLICY ... TO service_role)
+// Gerçek Postgres (PGlite/WASM; 0.3.16 = PG17, 0.5.x = PG18) üzerinde S2 paketinin yerel kapısı.
 // Production'a / ağa DOKUNMAZ; ücretli kaynak yok; secret okumaz.
 //
 //   PGLITE_DIR=<@electric-sql/pglite kurulu dizin> node gates/s2_pglite_gate.mjs
 //   (PGLITE_DIR yoksa normal paket çözümlemesi denenir.)
 //
-// Kapsam: statik içerik kontrolleri; storage modeli + prod baseline (policy md5 prod ile
-// birebir); baseline'da açığın modellendiği; S2_up sonrası anon/authenticated
-// INSERT/UPSERT=42501(RLS), UPDATE/DELETE=0 satır, SELECT izinli, service_role yazar;
-// zero-footprint testinin hem açığı yakaladığı (FAIL) hem kapanışı kanıtladığı (PASS) ve
-// iz bırakmadığı; S2_up iki kez (idempotent); S2_down_INSECURE silahsızken reddi, armed
-// iken baseline'ın birebir geri gelmesi; yeniden up; drift/atomiklik negatifleri;
-// satır 20/21 ("diğer bucket/policy'lerde değişiklik yok"): S2 döngüsü boyunca PRE == POST,
-// bucket öznitelikleri == production literali, başka tabloda policy / bucket özniteliği
-// değişikliği assert'lerde FAIL olarak yakalanır.
+// Kapsam: statik içerik kontrolleri (MCP metin kapısı: MCP'ye giden 5 dosyada /drop/i YOK;
+// S2_up = tam 3 ALTER POLICY .. TO service_role + 3 COMMENT ON POLICY; DOWN = tam 3 ALTER POLICY
+// .. TO public + 3 COMMENT .. IS NULL); storage modeli + prod baseline (policy md5 prod ile birebir);
+// baseline'da açığın modellendiği; S2_up sonrası 4 policy kalır, üç yazma policy'si {service_role}
+// (cmd/qual/with_check değişmez), POST md5 = s2_prod_assert satır 7 literali; anon/authenticated
+// INSERT/UPSERT=42501(RLS), UPDATE/DELETE=0 satır, SELECT izinli, service_role yazar (policy'ler
+// service_role için değerlendirilmez = etkisiz); zero-footprint testinin hem açığı yakaladığı (FAIL)
+// hem kapanışı kanıtladığı (PASS) ve iz bırakmadığı; S2_up iki kez (idempotent; v2 durumunu kabul
+// eder); S2_down_INSECURE silahsızken reddi, armed iken baseline'ın (açıklamalar dahil) birebir geri
+// gelmesi; yeniden up; drift/atomiklik negatifleri (karışık roller, v1 durumu (yazma policy'leri
+// yok), tanım drift'i, rol yeniden-grant, BYPASSRLS bayrağı, açıklama eksik); satır 20/21 ("diğer
+// bucket/policy'lerde değişiklik yok"): S2 döngüsü boyunca PRE == POST, bucket öznitelikleri ==
+// production literali, başka tabloda policy / bucket özniteliği değişikliği assert'lerde FAIL
+// olarak yakalanır.
+// Not: bu harness (MCP'ye gitmez) test durumlarını kurmak için kendi içinde policy silebilir.
 // Sentinel: S2_LOCAL_PGLITE_GATE_PASS
 // =====================================================================
 import { readFileSync } from "node:fs";
@@ -55,6 +61,15 @@ const PROD_BASELINE_MD5 = "677c0f6b0f4fd37bb8b4fb7959a495fb";
 const PROD_OTHER_POLICIES = "25:45f0c3ac7e466783e9e3fa3702183b28";
 const PROD_BUCKET_ATTRS = "3:e112c7b7523616c45bd38bf2c8c45064";
 const ENV_ROW = 20;
+// v2 beklenen POST matrisi (pre_assert satır 6 formülünün satırları) ve md5'i (= prod_assert satır 7 literali)
+const V2_LINES = [
+  "media anon delete|DELETE|{service_role}|PERMISSIVE|(bucket_id = 'media'::text)|<null>",
+  "media anon insert|INSERT|{service_role}|PERMISSIVE|<null>|(bucket_id = 'media'::text)",
+  "media anon read|SELECT|{public}|PERMISSIVE|(bucket_id = 'media'::text)|<null>",
+  "media anon update|UPDATE|{service_role}|PERMISSIVE|(bucket_id = 'media'::text)|(bucket_id = 'media'::text)",
+];
+const POST_MD5_V2 = "74b56eca9c133d987aa2ac056b412473";
+const COMMENT_PREFIX = "SEC-MEDIA S2: NEUTRALIZED";
 
 let pass = 0, fail = 0;
 const log = [];
@@ -70,35 +85,57 @@ function stripLiterals(sql) {
     .replace(/'(?:[^']|'')*'/g, "''")
     .replace(/"(?:[^"]|"")*"/g, '""');
 }
+const WRITES = ["media anon insert", "media anon update", "media anon delete"];
+const sameSet = (arr) => arr.length === 3 && WRITES.every((n) => arr.includes(n));
 {
+  // MCP metin kapısı: production'a MCP ile giden HER dosyada /drop/i (kod/yorum/string, her harf biçimi) yok
+  for (const [n, s] of [["S2_up.sql", UP], ["S2_down_INSECURE.sql", DOWN], ["s2_pre_assert.sql", PRE_ASSERT],
+                        ["s2_prod_assert.sql", PROD_ASSERT], ["s2_zero_footprint_test.sql", ZF],
+                        ["armed rollback payload", ARM_DOWN + DOWN]]) {
+    const hits = s.split("\n").map((l, i) => [i + 1, l]).filter(([, l]) => /drop/i.test(l)).map(([i]) => i);
+    ok(`static(MCP): ${n} /drop/i içermiyor`, hits.length === 0, "satır " + hits.join(","));
+  }
+
   const up = stripComments(UP);
+  const upNoLit = stripLiterals(UP);
   ok("static: S2_up dış begin/commit/rollback yok", !/^\s*(begin|commit|rollback|start\s+transaction|end)\s*;/im.test(up));
-  const drops = [...up.matchAll(/drop\s+policy\s+if\s+exists\s+"([^"]+)"\s+on\s+storage\.objects\s*;/gi)].map((m) => m[1]);
-  ok("static: S2_up tam 3 DROP POLICY IF EXISTS (insert/update/delete)",
-     drops.length === 3 && ["media anon insert", "media anon update", "media anon delete"].every((n) => drops.includes(n)), drops.join(","));
-  ok("static: S2_up başka drop policy yok", (up.match(/drop\s+policy/gi) || []).length === 3);
-  ok("static: S2_up read policy'ye DROP yok", !/drop\s+policy[^;]*media anon read/i.test(up));
-  ok("static: S2_up create/alter policy yok", !/\b(create|alter)\s+policy\b/i.test(up));
-  ok("static: S2_up bucket/email-assets yazımı yok", !/(insert\s+into|update|delete\s+from)\s+storage\.buckets/i.test(up));
+  const alters = [...up.matchAll(/alter\s+policy\s+"([^"]+)"\s+on\s+storage\.objects\s+to\s+service_role\s*;/gi)].map((m) => m[1]);
+  ok("static: S2_up tam 3 ALTER POLICY .. TO service_role (insert/update/delete)", sameSet(alters), alters.join(","));
+  ok("static: S2_up başka ALTER POLICY yok (USING/WITH CHECK/RENAME değişmez)", (up.match(/alter\s+policy/gi) || []).length === 3);
+  ok("static: S2_up rename yok", !/\brename\b/i.test(upNoLit));
+  ok("static: S2_up create policy yok", !/\bcreate\s+policy\b/i.test(upNoLit));
+  ok("static: S2_up read policy'ye dokunmaz", !/(alter|comment\s+on)\s+policy\s+"media anon read"/i.test(up));
+  const cmts = [...up.matchAll(/comment\s+on\s+policy\s+"([^"]+)"\s+on\s+storage\.objects\s+is\s+'((?:[^']|'')*)'\s*;/gi)];
+  ok("static: S2_up tam 3 COMMENT ON POLICY (yazma policy'leri)", sameSet(cmts.map((m) => m[1])) && (up.match(/comment\s+on/gi) || []).length === 3,
+     cmts.map((m) => m[1]).join(","));
+  ok("static: S2_up açıklamaları 'SEC-MEDIA S2: NEUTRALIZED' + BYPASSRLS + re-grant uyarısı (EN/TR)",
+     cmts.length === 3 && cmts.every((m) => m[2].startsWith(COMMENT_PREFIX) && m[2].includes("BYPASSRLS") &&
+       m[2].includes("Do NOT re-grant") && m[2].includes("VERMEYİN")));
+  ok("static: S2_up bucket/email-assets yazımı yok", !/(insert\s+into|update|delete\s+from)\s+storage\.buckets/i.test(upNoLit));
   ok("static: S2_up grant/revoke/alter table/truncate/set role/RLS disable yok",
-     !/\b(grant|revoke|truncate)\b|\balter\s+table\b|\bset\s+(local\s+)?role\b|disable\s+row\s+level\s+security/i.test(up));
+     !/\b(grant|revoke|truncate)\b|\balter\s+table\b|\bset\s+(local\s+)?role\b|disable\s+row\s+level\s+security/i.test(upNoLit));
   ok("static: S2_up lock_timeout set local", /set\s+local\s+lock_timeout\s*=\s*'5s'\s*;/i.test(up));
 
   const dn = stripComments(DOWN);
+  const dnNoLit = stripLiterals(DOWN);
   ok("static: DOWN arming guard var", /current_setting\('sec_media\.s2_insecure_rollback',\s*true\)/.test(dn) && /S2_DOWN_INSECURE_NOT_ARMED/.test(dn));
   ok("static: DOWN arming guard ilk ifade", dn.trim().toLowerCase().startsWith("do $s2_arm$"));
-  const creates = [...dn.matchAll(/create\s+policy\s+"([^"]+)"\s+on\s+storage\.objects\s+as\s+permissive\s+for\s+(\w+)\s+to\s+public/gi)].map((m) => m[1] + ":" + m[2].toLowerCase());
-  ok("static: DOWN tam 3 create policy (to public)", creates.length === 3 &&
-     ["media anon insert:insert", "media anon update:update", "media anon delete:delete"].every((c) => creates.includes(c)), creates.join(","));
-  ok("static: DOWN read policy'ye dokunmaz", !/(drop|create|alter)\s+policy[^;]*media anon read/i.test(dn));
-  ok("static: DOWN bucket yazımı yok", !/(insert\s+into|update|delete\s+from)\s+storage\.buckets/i.test(dn));
+  const dAlters = [...dn.matchAll(/alter\s+policy\s+"([^"]+)"\s+on\s+storage\.objects\s+to\s+public\s*;/gi)].map((m) => m[1]);
+  ok("static: DOWN tam 3 ALTER POLICY .. TO public", sameSet(dAlters) && (dn.match(/alter\s+policy/gi) || []).length === 3, dAlters.join(","));
+  const dCmts = [...dn.matchAll(/comment\s+on\s+policy\s+"([^"]+)"\s+on\s+storage\.objects\s+is\s+null\s*;/gi)].map((m) => m[1]);
+  ok("static: DOWN tam 3 COMMENT ON POLICY .. IS NULL", sameSet(dCmts) && (dn.match(/comment\s+on/gi) || []).length === 3, dCmts.join(","));
+  ok("static: DOWN create policy / rename yok", !/\bcreate\s+policy\b|\brename\b/i.test(dnNoLit));
+  ok("static: DOWN read policy'ye dokunmaz", !/(alter|comment\s+on)\s+policy\s+"media anon read"/i.test(dn));
+  ok("static: DOWN bucket yazımı yok", !/(insert\s+into|update|delete\s+from)\s+storage\.buckets/i.test(dnNoLit));
   ok("static: DOWN dış begin/commit yok", !/^\s*(begin|commit|rollback|start\s+transaction|end)\s*;/im.test(dn));
+  ok("static: DOWN POST guard baseline md5 literali (= pre_assert satır 6)", dn.includes(`'${PROD_BASELINE_MD5}'`) && PRE_ASSERT.includes(`'${PROD_BASELINE_MD5}'`));
 
   for (const [n, s] of [["s2_pre_assert", PRE_ASSERT], ["s2_prod_assert", PROD_ASSERT]]) {
     const t = stripLiterals(s);
     ok(`static: ${n} salt-okunur (yalnız WITH/SELECT)`,
-       /^\s*with\b/i.test(t) && !/\b(insert|update|delete|drop|create|alter|grant|revoke|truncate|copy|call|perform|set_config|do)\b|\bset\s/i.test(t) && (t.match(/;/g) || []).length === 1);
+       /^\s*with\b/i.test(t) && !/\b(insert|update|delete|drop|create|alter|grant|revoke|truncate|copy|call|perform|set_config|do|comment)\b|\bset\s/i.test(t) && (t.match(/;/g) || []).length === 1);
   }
+  const md5Expr = (r) => (r || "").trim().replace(/^'[0-9a-f]{32}',\s*/, "");
   const rowSql = (s, n) => (stripComments(s).match(new RegExp(`select ${n}, '[^']*',([\\s\\S]*?), true\\n`)) || [])[1];
   for (const [n, s] of [["s2_pre_assert", PRE_ASSERT], ["s2_prod_assert", PROD_ASSERT]]) {
     ok(`static: ${n} satır 20 beklenen = production PRE literali (tek)`, s.split(`'${PROD_OTHER_POLICIES}'`).length === 2);
@@ -111,9 +148,19 @@ function stripLiterals(sql) {
      /order by schemaname, tablename, policyname/.test(rowSql(PRE_ASSERT, 20) || ""));
   ok("static: satır 21 file_size_limit/allowed_mime_types/type/versioning_status içerir",
      ["file_size_limit", "allowed_mime_types", "type::text", "versioning_status", "public::text"].every((c) => (rowSql(PRE_ASSERT, 21) || "").includes(c)));
+  // prod_assert v2 POST matrisi: satır 3-5 beklenenleri + satır 7 md5 literali (pre_assert satır 6 ile aynı formül)
+  ok("static: prod_assert satır 7 md5 sorgusu pre_assert satır 6 ile aynı formül",
+     !!rowSql(PRE_ASSERT, 6) && md5Expr(rowSql(PRE_ASSERT, 6)) === md5Expr(rowSql(PROD_ASSERT, 7)) && /order by policyname/.test(md5Expr(rowSql(PRE_ASSERT, 6))),
+     JSON.stringify([rowSql(PRE_ASSERT, 6), rowSql(PROD_ASSERT, 7)]));
+  ok("static: prod_assert satır 7 beklenen = v2 POST md5 literali (tek)", PROD_ASSERT.split(`'${POST_MD5_V2}'`).length === 2);
+  for (const l of V2_LINES.filter((x) => !x.startsWith("media anon read|"))) {
+    const exp = "'" + l.slice(l.indexOf("|") + 1).replace(/'/g, "''") + "'";
+    ok(`static: prod_assert v2 beklenen satır (${l.split("|")[0]})`, PROD_ASSERT.includes(exp), exp);
+  }
   const zf = stripComments(ZF);
   ok("static: ZF tek DO bloğu + REPORT raise ile biter", /^\s*do \$s2zf\$/i.test(zf) && /raise exception using message = 'REPORT:' \|\| rep, errcode = 'P0001';\s*end\s*\$s2zf\$;\s*$/i.test(zf));
-  ok("static: ZF commit/bucket yazımı yok", !/\bcommit\b/i.test(zf) && !/(insert\s+into|update|delete\s+from)\s+storage\.buckets/i.test(zf));
+  ok("static: ZF commit/bucket yazımı/policy değişikliği yok", !/\bcommit\b/i.test(zf) && !/(insert\s+into|update|delete\s+from)\s+storage\.buckets/i.test(zf) &&
+     !/\b(alter|create|comment\s+on)\s+policy\b/i.test(stripLiterals(ZF)));
   const zfNames = [...zf.matchAll(/values\s*\(\s*(?:v_seed,\s*)?'media',\s*([^,)]+)/gi)].map((m) => m[1].trim());
   ok("static: ZF yalnız zz-sec-media-s2-zf/ adları yazar", zfNames.length >= 2 && zfNames.every((x) => x === "v_seed_name" || x.startsWith("'zz-sec-media-s2-zf/'")), zfNames.join(" | "));
 }
@@ -128,7 +175,10 @@ const q = async (sql, params) => (await db.query(sql, params)).rows;
 async function errOf(fn) { try { await fn(); return null; } catch (e) { return { code: e.code, message: String(e.message || e) }; } }
 const MATRIX_MD5 = `select coalesce(md5(string_agg(policyname||'|'||cmd||'|'||roles::text||'|'||permissive||'|'||coalesce(qual,'<null>')||'|'||coalesce(with_check,'<null>'), E'\\n' order by policyname)),'<none>') m
                      from pg_policies where schemaname='storage' and tablename='objects'`;
-const SNAP = `select policyname, cmd, roles::text roles, permissive, qual, with_check from pg_policies where schemaname='storage' and tablename='objects' order by policyname`;
+// snapshot = pg_policies tüm kolonlar + policy açıklaması (COMMENT ON POLICY)
+const SNAP = `select p.policyname, p.cmd, p.roles::text roles, p.permissive, p.qual, p.with_check, obj_description(c.oid, 'pg_policy') cmt
+                from pg_policies p join pg_policy c on c.polrelid = 'storage.objects'::regclass and c.polname = p.policyname
+               where p.schemaname='storage' and p.tablename='objects' order by p.policyname`;
 const UNTOUCHED = `select md5(
    coalesce((select string_agg(id||':'||coalesce(public::text,'')||':'||name||':'||coalesce(file_size_limit::text,'')||':'||coalesce(allowed_mime_types::text,''), ',' order by id) from storage.buckets),'') || '#' ||
    coalesce((select string_agg(tgname||':'||tgenabled::text||':'||pg_get_triggerdef(oid), ',' order by tgname) from pg_trigger where tgrelid='storage.objects'::regclass and not tgisinternal),'') || '#' ||
@@ -140,7 +190,13 @@ const md5 = async () => (await q(MATRIX_MD5))[0].m;
 const snap = async () => JSON.stringify(await q(SNAP));
 const untouched = async () => (await q(UNTOUCHED))[0].m;
 const policyNames = async () => (await q(SNAP)).map((r) => r.policyname).join(",");
-const POST_MD5 = (await q(`select md5('media anon read|SELECT|{public}|PERMISSIVE|(bucket_id = ''media''::text)|<null>') m`))[0].m;
+const rolesOf = async () => (await q(SNAP)).map((r) => r.policyname + ":" + r.roles).join(",");
+const comments = async () => Object.fromEntries((await q(SNAP)).map((r) => [r.policyname, r.cmt]));
+const ALL4 = "media anon delete,media anon insert,media anon read,media anon update";
+const V2_ROLES = "media anon delete:{service_role},media anon insert:{service_role},media anon read:{public},media anon update:{service_role}";
+const BASE_ROLES = "media anon delete:{public},media anon insert:{public},media anon read:{public},media anon update:{public}";
+const v2Comments = async () => { const c = await comments(); return WRITES.every((n) => typeof c[n] === "string" && c[n].startsWith(COMMENT_PREFIX)) && c["media anon read"] === null; };
+const noComments = async () => Object.values(await comments()).every((v) => v === null);
 
 async function assertRows(name, sql, sentinel) {
   const r = await q(sql);
@@ -205,6 +261,9 @@ async function behavior(label, open) {
   ok(`${label}: service_role UPDATE rows=1`, r.ok && r.affected === 1, JSON.stringify(r));
   r = await asRole("service_role", `delete from storage.objects where id='${SEED}'`, { guc: true });
   ok(`${label}: service_role DELETE(guc=true) rows=1`, r.ok && r.affected === 1, JSON.stringify(r));
+  // etkisizlik kanıtı: media-only WITH CHECK'li policy'ler service_role için değerlendirilmez (BYPASSRLS)
+  r = await asRole("service_role", `insert into storage.objects(bucket_id,name) values ('email-assets-draft','x/svc-bypass.png')`);
+  ok(`${label}: service_role media dışı bucket'a yazar (policy değerlendirilmez = BYPASSRLS)`, r.ok && r.affected === 1, r.message);
   const s = await q(`select count(*)::int c, max(metadata::text) m from storage.objects where id=$1`, [SEED]);
   ok(`${label}: seed değişmedi (rollback'ler iz bırakmadı)`, s[0].c === 1 && s[0].m === '{"k": "seed"}', JSON.stringify(s));
   ok(`${label}: object sayısı sabit (2)`, (await q(`select count(*)::int c from storage.objects`))[0].c === 2);
@@ -215,6 +274,7 @@ async function runZF() {
   const msg = e ? e.message : "";
   return { e, msg, verdict: (msg.match(/S2_ZF_VERDICT=(\w+)/) || [])[1] };
 }
+const INJ = "\ndo $inj$ begin raise exception 'S2_TEST_INJECTED_FAILURE'; end $inj$;";
 
 try {
   // ---- fixture
@@ -233,6 +293,9 @@ try {
 
   const BASE_SNAP = await snap();
   ok("baseline: policy md5 == production baseline (birebir tanım)", (await md5()) === PROD_BASELINE_MD5, await md5());
+  ok("baseline: policy açıklamaları NULL (production 2026-10-07 read-only ile aynı)", await noComments());
+  ok("v2 POST md5 literali == beklenen v2 satırlarından hesaplanan md5",
+     (await q(`select md5($1) m`, [V2_LINES.join("\n")]))[0].m === POST_MD5_V2);
   const UNT = await untouched();
 
   // ---- PRE assert (seed objesi nedeniyle satır 12 (media count) beklenen FAIL)
@@ -247,7 +310,8 @@ try {
   ok("pre_assert(baseline): satır 21 bucket öznitelikleri == production literali (fixture birebir)",
      rowOf(a, 21).result === "PASS" && rowOf(a, 21).actual === PROD_BUCKET_ATTRS, rowOf(a, 21).actual);
   a = await assertRows("post", PROD_ASSERT, "S2_PROD_ASSERT_PASS");
-  ok("prod_assert(baseline): FAIL (açık tespit ediliyor)", a.overall === "S2_PROD_ASSERT_FAIL" && a.bad.some((x) => /^3:/.test(x)), a.bad.join(" | "));
+  ok("prod_assert(baseline): FAIL (açık tespit ediliyor: satır 3-7 + 18)",
+     a.overall === "S2_PROD_ASSERT_FAIL" && ["3", "4", "5", "6", "7", "18"].every((n) => a.bad.some((x) => x.startsWith(n + ":"))), a.bad.join(" | "));
   ok("prod_assert(baseline): satır 20/21 pre_assert ile aynı değeri hesaplar", envRowIs(a, PRE20) && rowOf(a, 21).actual === PROD_BUCKET_ATTRS);
 
   // ---- baseline davranışı (açık modellenmiş mi)
@@ -255,8 +319,9 @@ try {
 
   // ---- ZF testi baseline'da: açığı yakalamalı, iz bırakmamalı
   let z = await runZF();
-  ok("zf(baseline): REPORT ile biter", z.e && /^REPORT:/.test(z.msg.replace(/^.*?REPORT:/, "REPORT:")), z.msg.slice(0, 200));
+  ok("zf(baseline): REPORT ile biter", z.e && /REPORT:/.test(z.msg), z.msg.slice(0, 200));
   ok("zf(baseline): VERDICT=FAIL (red-before-green)", z.verdict === "FAIL" && /FAIL anon\.insert ALLOWED/.test(z.msg) && /FAIL authenticated\.insert ALLOWED/.test(z.msg), z.msg);
+  ok("zf(baseline): INFO policy rolleri raporda ({public})", z.msg.includes("INFO storage.objects policies=media anon delete:DELETE:{public},media anon insert:INSERT:{public},media anon read:SELECT:{public},media anon update:UPDATE:{public};"), z.msg.slice(0, 400));
   ok("zf(baseline): residue 0 / policy değişmedi", (await q(`select count(*)::int c from storage.objects where name like 'zz-sec-media-s2-zf/%'`))[0].c === 0 && (await snap()) === BASE_SNAP);
 
   // ---- DOWN silahsız reddedilir
@@ -267,13 +332,18 @@ try {
   // ---- UP
   e = await errOf(() => db.exec(UP));
   ok("up: uygulandı", !e, e && e.message);
-  ok("up: policy kümesi yalnız 'media anon read'", (await policyNames()) === "media anon read", await policyNames());
-  ok("up: policy md5 == beklenen POST", (await md5()) === POST_MD5);
+  ok("up: 4 policy kalır (adlar değişmez)", (await policyNames()) === ALL4, await policyNames());
+  ok("up: üç yazma policy'si {service_role}, read {public}", (await rolesOf()) === V2_ROLES, await rolesOf());
+  ok("up: policy md5 == v2 POST literali (cmd/qual/with_check değişmedi)", (await md5()) === POST_MD5_V2, await md5());
+  ok("up: üç yazma policy'sinde S2 açıklaması, read açıklamasız", await v2Comments(), JSON.stringify(await comments()));
   ok("up: buckets/trigger/grant/RLS/rol değişmedi", (await untouched()) === UNT);
+  const V2_SNAP = await snap();
   await db.exec(`insert into supabase_migrations.schema_migrations(version,name) values ('20990101000000','sec_media_close_anon_write')`);
   await db.exec(`select set_config('storage.allow_delete_query','true',false); delete from storage.objects where id='${SEED}'; select set_config('storage.allow_delete_query','false',false);`);
   a = await assertRows("post", PROD_ASSERT, "S2_PROD_ASSERT_PASS");
   ok("prod_assert(after up, seed yok): env satırı dışında tümü PASS (production'da S2_PROD_ASSERT_PASS karşılığı)", passModEnv(a, PRE20), a.bad.join(" | "));
+  ok("prod_assert(after up): 19 counted satır (1-16, 18, 20, 21)", /\/ 19 counted$/.test(rowOf(a, 99).actual || ""), rowOf(a, 99).actual);
+  ok("prod_assert(after up): satır 7 actual == v2 md5, satır 18 == 3", rowOf(a, 7).actual === POST_MD5_V2 && rowOf(a, 18).actual === "3");
   ok("prod_assert(after up): satır 20 POST == PRE (S2 diğer policy'lere dokunmadı)", envRowIs(a, PRE20), rowOf(a, ENV_ROW).actual);
   ok("prod_assert(after up): satır 21 PASS (bucket öznitelikleri değişmedi)", rowOf(a, 21).result === "PASS");
 
@@ -303,12 +373,24 @@ try {
              `update storage.buckets set versioning_status = 'DISABLED' where id = 'email-assets-draft'`, 21);
   await sens("media type", `update storage.buckets set type = 'ANALYTICS' where id = 'media'`,
              `update storage.buckets set type = 'STANDARD' where id = 'media'`, 21);
+  // v2'ye özgü prod_assert duyarlılığı: açıklama silinirse satır 18, bir yazma policy'si anon'a
+  // yeniden verilirse satır 4/6/7 FAIL
+  await db.exec(`comment on policy "media anon delete" on storage.objects is null`);
+  a = await assertRows("post", PROD_ASSERT, "S2_PROD_ASSERT_PASS");
+  ok("neg(satır 18): açıklama silindi -> yalnız satır 18 FAIL", badExceptEnv(a).map((b) => b.split(":")[0]).join(",") === "18", a.bad.join(" | "));
+  e = await errOf(() => db.exec(UP));
+  ok("neg(satır 18): S2_up yeniden -> açıklama geri, v2 snapshot birebir", !e && (await snap()) === V2_SNAP, e && e.message);
+  await db.exec(`alter policy "media anon update" on storage.objects to anon`);
+  a = await assertRows("post", PROD_ASSERT, "S2_PROD_ASSERT_PASS");
+  ok("neg(satır 4/6/7): update policy anon'a yeniden verildi -> yakalandı", badExceptEnv(a).map((b) => b.split(":")[0]).join(",") === "4,6,7", a.bad.join(" | "));
+  await db.exec(`alter policy "media anon update" on storage.objects to service_role`);
+  ok("neg(satır 4/6/7): geri alındı -> v2 snapshot", (await snap()) === V2_SNAP);
 
   SEED = (await q(`insert into storage.objects(bucket_id,name,metadata) values ('media','venues/seed-1.jpg','{"k":"seed"}') returning id`))[0].id;
   a = await assertRows("post", PROD_ASSERT, "S2_PROD_ASSERT_PASS");
   ok("prod_assert: beklenmeyen media objesi residue satırında yakalanır", !a.pass && badExceptEnv(a).length === 1 && /^13:/.test(badExceptEnv(a)[0]) && envRowIs(a, PRE20), a.bad.join(" | "));
   a = await assertRows("pre", PRE_ASSERT, "S2_PRE_ASSERT_PASS");
-  ok("pre_assert(after up): FAIL (durum değişti)", a.overall === "S2_PRE_ASSERT_FAIL");
+  ok("pre_assert(after up): FAIL (durum değişti: satır 3-6)", a.overall === "S2_PRE_ASSERT_FAIL" && ["3", "4", "5", "6"].every((n) => a.bad.some((x) => x.startsWith(n + ":"))), a.bad.join(" | "));
 
   // ---- kapalı davranış
   await behavior("after_up", false);
@@ -323,24 +405,26 @@ try {
                       "PASS anon.delete_no_guc blocked_by_protect_delete_trigger(not_RLS)",
                       "PASS anon.select media visible", "PASS authenticated.select media visible",
                       "PASS service_role.insert", "PASS service_role.update rows=1", "PASS service_role.delete rows=1",
-                      "PASS in_txn_residue=0"]) {
+                      "PASS in_txn_residue=0",
+                      "INFO storage.objects policies=media anon delete:DELETE:{service_role},media anon insert:INSERT:{service_role},media anon read:SELECT:{public},media anon update:UPDATE:{service_role};"]) {
     ok(`zf(after up): '${frag}'`, z.msg.includes(frag));
   }
   ok("zf(after up): residue 0, seed intact, policy değişmedi",
      (await q(`select count(*)::int c from storage.objects where name like 'zz-sec-media-s2-zf/%'`))[0].c === 0 &&
-     (await q(`select count(*)::int c from storage.objects`))[0].c === 2 && (await policyNames()) === "media anon read");
+     (await q(`select count(*)::int c from storage.objects`))[0].c === 2 && (await snap()) === V2_SNAP);
   ok("zf: rol/GUC sızmadı (current_user=postgres)", (await q(`select current_user u`))[0].u === "postgres");
 
-  // ---- idempotent ikinci UP
+  // ---- idempotent ikinci UP (PRE guard v2 durumunu kabul eder)
   e = await errOf(() => db.exec(UP));
   ok("up x2: idempotent (hata yok)", !e, e && e.message);
-  ok("up x2: matris aynı + diğerleri değişmedi", (await md5()) === POST_MD5 && (await untouched()) === UNT);
+  ok("up x2: snapshot (açıklamalar dahil) aynı + diğerleri değişmedi", (await snap()) === V2_SNAP && (await md5()) === POST_MD5_V2 && (await untouched()) === UNT);
 
   // ---- INSECURE rollback (armed) -> baseline birebir
   e = await errOf(() => db.exec(ARM_DOWN + DOWN));
   ok("down(armed): uygulandı", !e, e && e.message);
-  ok("down(armed): pg_policies birebir baseline (tüm kolonlar)", (await snap()) === BASE_SNAP);
+  ok("down(armed): pg_policies + açıklamalar birebir baseline", (await snap()) === BASE_SNAP);
   ok("down(armed): md5 == production baseline", (await md5()) === PROD_BASELINE_MD5);
+  ok("down(armed): açıklamalar NULL", await noComments());
   ok("down(armed): diğerleri değişmedi", (await untouched()) === UNT);
   a = await assertRows("pre", PRE_ASSERT, "S2_PRE_ASSERT_PASS");
   ok("down(armed): pre_assert satır 1–11/14/21 PASS, satır 20 == PRE (yalnız 12 seed, 13 ledger farkı)",
@@ -352,37 +436,67 @@ try {
 
   // ---- yeniden UP
   e = await errOf(() => db.exec(UP));
-  ok("re-up: uygulandı + POST matris", !e && (await md5()) === POST_MD5, e && e.message);
+  ok("re-up: uygulandı + v2 snapshot birebir", !e && (await snap()) === V2_SNAP, e && e.message);
   await behavior("after_reup", false);
 
-  // ---- drift / atomiklik negatifleri (her biri baseline'dan)
-  const toBaseline = async () => { await db.exec(ARM_DOWN + DOWN); return (await snap()) === BASE_SNAP; };
+  // ---- drift / atomiklik negatifleri
+  const toBaseline = async () => { await db.exec(ARM_FIX + BASE); return (await snap()) === BASE_SNAP; };
+  const upRefused = async (label, re) => {
+    const before = await snap();
+    const unt = await untouched();
+    const err = await errOf(() => db.exec(UP));
+    ok(`neg: ${label} -> UP ${re.source}, hiçbir şey değişmedi`, err && re.test(err.message) && (await snap()) === before && (await untouched()) === unt, err ? err.message : "UP çalıştı");
+  };
+  const downRefused = async (label, re) => {
+    const before = await snap();
+    const err = await errOf(() => db.exec(ARM_DOWN + DOWN));
+    ok(`neg: ${label} -> DOWN(armed) ${re.source}, hiçbir şey değişmedi`, err && re.test(err.message) && (await snap()) === before, err ? err.message : "DOWN çalıştı");
+  };
   ok("neg: baseline'a dönüldü", await toBaseline());
 
   await db.exec(`create policy "media extra anon insert" on storage.objects for insert to anon with check (bucket_id = 'media')`);
-  let before = await snap();
-  e = await errOf(() => db.exec(UP));
-  ok("neg: beklenmeyen policy -> S2_PRE_DRIFT, hiçbir şey değişmedi", e && /S2_PRE_DRIFT/.test(e.message) && (await snap()) === before, e && e.message);
-  e = await errOf(() => db.exec(ARM_DOWN + DOWN));
-  ok("neg: DOWN da beklenmeyen policy'de durur", e && /S2_DOWN_PRE_DRIFT/.test(e.message) && (await snap()) === before, e && e.message);
+  await upRefused("beklenmeyen ek policy", /S2_PRE_DRIFT/);
+  await downRefused("beklenmeyen ek policy", /S2_DOWN_PRE_DRIFT/);
   await db.exec(`drop policy "media extra anon insert" on storage.objects`);
 
-  await db.exec(`drop policy "media anon insert" on storage.objects; create policy "media anon insert" on storage.objects for insert to public with check ((bucket_id = 'media'::text) and true)`);
-  before = await snap();
+  await db.exec(`alter policy "media anon insert" on storage.objects to service_role`);
+  await upRefused("karışık roller (insert {service_role}, update/delete {public})", /S2_PRE_DRIFT: yazma policy rolleri karışık/);
+  e = await errOf(() => db.exec(ARM_DOWN + DOWN));
+  ok("neg: karışık roller -> DOWN(armed) birebir baseline'a çevirir", !e && (await snap()) === BASE_SNAP, e && e.message);
+
+  await db.exec(`alter policy "media anon insert" on storage.objects to anon`);
+  await upRefused("insert policy roles {anon} (baseline/v2 dışı)", /S2_PRE_DRIFT: yazma policy'si yok veya tanımı/);
+  await downRefused("insert policy roles {anon}", /S2_DOWN_PRE_DRIFT/);
+  ok("neg: fixture ile baseline", await toBaseline());
+
   e = await errOf(() => db.exec(UP));
-  ok("neg: yazma policy tanım drift'i -> S2_PRE_DRIFT, değişiklik yok", e && /S2_PRE_DRIFT/.test(e.message) && (await snap()) === before, e && e.message);
-  ok("neg: DOWN(armed) tanımı birebir baseline'a düzeltir", await toBaseline());
+  ok("neg hazırlık: v2 durumu", !e && (await snap()) === V2_SNAP, e && e.message);
+  await db.exec(`alter policy "media anon update" on storage.objects to service_role, anon`);
+  await upRefused("v2 + update roles {anon,service_role}", /S2_PRE_DRIFT/);
+  await downRefused("v2 + update roles {anon,service_role}", /S2_DOWN_PRE_DRIFT/);
+  await db.exec(`alter policy "media anon update" on storage.objects to service_role`);
+  await db.exec(`alter policy "media anon delete" on storage.objects using (true)`);
+  await upRefused("v2 + delete USING tanım drift'i", /S2_PRE_DRIFT/);
+  await downRefused("v2 + delete USING tanım drift'i", /S2_DOWN_PRE_DRIFT/);
+  ok("neg: fixture ile baseline", await toBaseline());
+
+  await db.exec(`drop policy "media anon insert" on storage.objects; create policy "media anon insert" on storage.objects for insert to public with check ((bucket_id = 'media'::text) and true)`);
+  await upRefused("baseline + insert WITH CHECK tanım drift'i", /S2_PRE_DRIFT/);
+  await downRefused("baseline + insert WITH CHECK tanım drift'i (v2 DOWN tanım düzeltmez)", /S2_DOWN_PRE_DRIFT/);
+  ok("neg: fixture ile baseline", await toBaseline());
+
+  await db.exec(`drop policy "media anon insert" on storage.objects; drop policy "media anon update" on storage.objects; drop policy "media anon delete" on storage.objects;`);
+  await upRefused("v1 durumu (yazma policy'leri yok, yalnız read)", /S2_PRE_DRIFT/);
+  await downRefused("v1 durumu (DOWN yeniden oluşturmaz)", /S2_DOWN_PRE_DRIFT/);
+  ok("neg: fixture ile baseline", await toBaseline());
 
   await db.exec(`drop policy "media anon read" on storage.objects; create policy "media anon read" on storage.objects for select to anon using (bucket_id = 'media'::text)`);
-  before = await snap();
-  e = await errOf(() => db.exec(UP));
-  ok("neg: read policy drift -> S2_PRE_DRIFT, değişiklik yok", e && /S2_PRE_DRIFT/.test(e.message) && (await snap()) === before, e && e.message);
-  await db.exec(ARM_FIX + BASE);
-  ok("neg: fixture ile baseline", (await snap()) === BASE_SNAP);
+  await upRefused("read policy drift", /S2_PRE_DRIFT/);
+  await downRefused("read policy drift", /S2_DOWN_PRE_DRIFT/);
+  ok("neg: fixture ile baseline", await toBaseline());
 
   await db.exec(`update storage.buckets set public=false where id='media'`);
-  e = await errOf(() => db.exec(UP));
-  ok("neg: media public=false -> S2_PRE_FAIL, değişiklik yok", e && /S2_PRE_FAIL/.test(e.message) && (await snap()) === BASE_SNAP, e && e.message);
+  await upRefused("media public=false", /S2_PRE_FAIL/);
   await db.exec(`update storage.buckets set public=true where id='media'`);
 
   await db.exec(`update storage.buckets set public=true where id='email-assets-draft'`);
@@ -394,21 +508,41 @@ try {
   e = await errOf(() => db.exec(UP));
   ok("neg: RLS kapalı -> S2_PRE_FAIL, değişiklik yok", e && /S2_PRE_FAIL/.test(e.message) && (await snap()) === BASE_SNAP, e && e.message);
   await db.exec(`alter table storage.objects enable row level security`);
+
+  await db.exec(`alter role service_role nobypassrls`);
+  e = await errOf(() => db.exec(UP));
+  ok("neg: service_role NOBYPASSRLS (etkisizlik argümanı çöker) -> S2_PRE_FAIL, değişiklik yok", e && /S2_PRE_FAIL: rol BYPASSRLS/.test(e.message) && (await snap()) === BASE_SNAP, e && e.message);
+  await db.exec(`alter role service_role bypassrls`);
+  await db.exec(`alter role anon bypassrls`);
+  e = await errOf(() => db.exec(UP));
+  ok("neg: anon BYPASSRLS -> S2_PRE_FAIL, değişiklik yok", e && /S2_PRE_FAIL: rol BYPASSRLS/.test(e.message) && (await snap()) === BASE_SNAP, e && e.message);
+  await db.exec(`alter role anon nobypassrls`);
   ok("neg: diğerleri baseline'a döndü", (await untouched()) === UNT);
 
-  // POST guard bloğu tek başına baseline'da çalışırsa reddetmeli
+  // POST guard blokları tek başına
   const postBlock = (UP.match(/do \$s2_post\$[\s\S]*?\$s2_post\$;/) || [])[0];
   e = await errOf(() => db.exec(postBlock));
-  ok("neg: POST guard baseline'da S2_POST_FAIL verir", postBlock && e && /S2_POST_FAIL/.test(e.message), e && e.message);
-  // Atomiklik: dosya gövdesi tek transaction'da; drop'lardan SONRA hata -> drop'lar geri alınır
-  e = await errOf(() => db.exec(UP + "\ndo $inj$ begin raise exception 'S2_TEST_INJECTED_FAILURE'; end $inj$;"));
-  ok("neg: drop sonrası hata -> tüm gövde geri alındı (atomik)", e && /S2_TEST_INJECTED_FAILURE/.test(e.message) && (await snap()) === BASE_SNAP, e && e.message);
-  e = await errOf(() => db.exec(ARM_DOWN + DOWN + "\ndo $inj$ begin raise exception 'S2_TEST_INJECTED_FAILURE'; end $inj$;"));
-  ok("neg: down(armed) gövdesi de atomik", e && /S2_TEST_INJECTED_FAILURE/.test(e.message) && (await snap()) === BASE_SNAP, e && e.message);
+  ok("neg: UP POST guard baseline'da S2_POST_FAIL verir", postBlock && e && /S2_POST_FAIL/.test(e.message), e && e.message);
+  // Atomiklik: dosya gövdesi tek transaction'da; ALTER/COMMENT'ten SONRA hata -> hepsi geri alınır
+  e = await errOf(() => db.exec(UP + INJ));
+  ok("neg: UP gövdesinden sonra hata -> rol + açıklama değişiklikleri geri alındı (atomik)", e && /S2_TEST_INJECTED_FAILURE/.test(e.message) && (await snap()) === BASE_SNAP, e && e.message);
+
+  e = await errOf(() => db.exec(UP));
+  ok("neg hazırlık: v2 durumu", !e && (await snap()) === V2_SNAP, e && e.message);
+  await db.exec(`comment on policy "media anon insert" on storage.objects is null`);
+  e = await errOf(() => db.exec(postBlock));
+  ok("neg: v2 + açıklama eksik -> UP POST guard S2_POST_FAIL (açıklama)", e && /S2_POST_FAIL: etkisizleştirme açıklaması/.test(e.message), e && e.message);
+  await db.exec(UP);
+  ok("neg: S2_up açıklamayı yeniden yazar -> v2 snapshot", (await snap()) === V2_SNAP);
+  const downPost = (DOWN.match(/do \$s2_down_post\$[\s\S]*?\$s2_down_post\$;/) || [])[0];
+  e = await errOf(() => db.exec(downPost));
+  ok("neg: DOWN POST guard v2 durumunda S2_DOWN_POST_FAIL verir", downPost && e && /S2_DOWN_POST_FAIL/.test(e.message), e && e.message);
+  e = await errOf(() => db.exec(ARM_DOWN + DOWN + INJ));
+  ok("neg: down(armed) gövdesi de atomik (v2 durumu korunur)", e && /S2_TEST_INJECTED_FAILURE/.test(e.message) && (await snap()) === V2_SNAP, e && e.message);
 
   // ---- son durum: UP uygulanmış
   e = await errOf(() => db.exec(UP));
-  ok("final: up uygulanmış durumda bitir", !e && (await policyNames()) === "media anon read", e && e.message);
+  ok("final: up uygulanmış durumda bitir", !e && (await snap()) === V2_SNAP, e && e.message);
   z = await runZF();
   ok("final: zf PASS", z.verdict === "PASS", z.msg);
   a = await assertRows("post", PROD_ASSERT, "S2_PROD_ASSERT_PASS");
