@@ -323,6 +323,7 @@ test("both pages load lib/asa-name exactly once, pinned to sha256(16) of the fil
     assert.ok(html.search(/<script>\s*\/\* ASALOCAL TripStore/) > html.indexOf(tag), name + ": before the first inline script");
   }
   for (const p of ["kopenhag/index.html", "amsterdam.html", "amsterdam_index_UID.html", "admin.html", "CDP3B/admin.html"]) {
+    if (p === "amsterdam_index_UID.html" && !existsSync(join(REPO, p))) continue; // retired in WP7 (301 to /amsterdam/)
     const h = read(p);
     assert.equal(/asa_name|asa-name|ASA_NAME|member_set_name/.test(h), false, p + " does not load WP5");
     const prev = show(PARENT, p);

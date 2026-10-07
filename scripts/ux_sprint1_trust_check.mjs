@@ -1,6 +1,6 @@
 // UX Sprint 1 acceptance checks. Requires jsdom (not a production dependency).
 //   NODE_PATH=/tmp/uxcheck/node_modules node scripts/ux_sprint1_trust_check.mjs
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -33,7 +33,9 @@ function checkSyntax(name, html) {
 
 const home = read("index.html");
 const city = read("amsterdam/index.html");
-const uid = read("amsterdam_index_UID.html");
+// WP7: the legacy personal UID page is retired (deleted + 301 to /amsterdam/ in _redirects)
+const uidRetired = !existsSync(join(repo, "amsterdam_index_UID.html"));
+const uid = uidRetired ? "" : read("amsterdam_index_UID.html");
 const admin = read("CDP3B/admin.html");
 const cph = read("kopenhag/index.html");
 
@@ -42,6 +44,7 @@ checkSyntax("city", city);
 checkSyntax("admin", admin);
 
 ok("pw property removed from home/city", !/\bpw\s*:/.test(home) && !/\bpw\s*:/.test(city) && !/\bpw\s*:/.test(uid));
+ok("legacy UID page retired with a 301 to /amsterdam/", uidRetired && /^\/amsterdam_index_UID\.html\s+\/amsterdam\/\s+301$/m.test(read("_redirects")));
 ok("footer copyright", home.includes("© 2026 ASALOCAL · yerel gibi"));
 ok("footer has no placeholder links", !/<footer[\s\S]*?href\s*=\s*"#"/.test(home));
 ok("ilgimi birak live region and 4s", /id="goNote"[^>]*aria-live="polite"/.test(home) && home.includes("setTimeout(r,4000)") && home.includes("interestFlight"));
