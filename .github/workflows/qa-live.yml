@@ -131,6 +131,15 @@ jobs:
       - name: Publish WP4 result
         if: contains(env.QA_PHASES, ',wp4,')
         run: node LIVE_CHECKS/qa/qa_runner.mjs signal wp4 "$S1_OUT_DIR/exit_wp4.json" "$S1_OUT_DIR/wp4_live_result.json"
+      - name: "WP5: private name + profile completion (QA member, own row only)"
+        if: contains(env.QA_PHASES, ',wp5,')
+        run: |
+          set +e -uo pipefail
+          node LIVE_CHECKS/qa/wp5_live.mjs; e=$?
+          echo "{\"wp5_live\":$e}" > "$S1_OUT_DIR/exit_wp5.json"; cat "$S1_OUT_DIR/exit_wp5.json"
+      - name: Publish WP5 result
+        if: contains(env.QA_PHASES, ',wp5,')
+        run: node LIVE_CHECKS/qa/qa_runner.mjs signal wp5 "$S1_OUT_DIR/exit_wp5.json" "$S1_OUT_DIR/wp5_live_result.json"
       - name: "WP6: end-to-end acceptance (anon + QA member, controlled writes undone in-run)"
         if: contains(env.QA_PHASES, ',wp6,')
         env:
