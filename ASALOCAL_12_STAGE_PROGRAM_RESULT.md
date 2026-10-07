@@ -11,8 +11,8 @@
 ## ASALOCAL_12_STAGE_PROGRAM_RESULT
 
 ```text
-Overall: PARTIAL   (İP1–İP4 canlı PASS; İP5 sürüyor; SEC-VIEWS güvenlik hotfix'i uygulandı)
-Main final SHA: cfdf79eabfa5b47621a19d14bfbe6c7c992e0217   (PR #14 WP4 merge; önceki 8acfb0e ← 7a548e9)
+Overall: PARTIAL   (İP1–İP5 canlı PASS; SEC-VIEWS güvenlik hotfix'i uygulandı; İP6 sürüyor)
+Main final SHA: e1bfd045ead53292a8cb528c5667749579b41fb5   (PR #15 WP5 merge; önceki cfdf79e ← 8acfb0e ← 7a548e9)
 Production URLs: https://www.asalocal.club  (/, /amsterdam/, /kopenhag/, /admin → 302 /CDP3B/admin.html)
                  — canlı girişsiz smoke GitHub Actions + Playwright ile: 50/50 PASS (bkz. §2.1)
 Production Edge versions (salt-okunur, değişmedi):
@@ -24,12 +24,13 @@ Production Edge versions (salt-okunur, değişmedi):
   adim2-dispatch-once v6 verify_jwt=true (410 gone stub)
 Migration ledger additions: sec_media_close_anon_write (2026-10-07, İP2 v2)
                             sec_public_views_readonly  (2026-10-07, SEC-VIEWS hotfix — §5.8)
+                            wp5_member_private_name    (2026-10-07, İP5 — §5.9)
 
 Stage 01: PASS        — SEC_MEDIA_UPLOAD_ACCEPTANCE_PASS (canlı, QA run 37629590923): gerçek admin upload Edge yolu, 17/17 negatif, residue=0 (§5.4)
 Stage 02: PASS        — SEC_MEDIA_STORAGE_CLOSED: v2 (ALTER POLICY TO service_role, Mete onaylı) uygulandı; prod_assert 19/19, zero-footprint PASS, canlı HTTP 15/15, residue 0 (§5.5)
 Stage 03: PASS        — PR #13 merge 8acfb0e; Cloudflare preview 55/55 + production live 55/55 + live smoke PASS (§5.6)
 Stage 04: PASS        — PR #14 merge cfdf79e; preview QA üye 37/37 + production QA üye 37/37 + live smoke 50/50 + WP3 live 55/55 (§5.7)
-Stage 05: IN PROGRESS — DB canlı PASS (27/27, ZF PASS); web PR #15 preview 38/38 PASS; merge + production doğrulaması sürüyor (§5.9)
+Stage 05: PASS        — DB canlı (27/27, ZF PASS); PR #15 merge e1bfd04; preview 38/38 + production QA 38/38 + WP4 regresyon 37/37 + live smoke 56/56 + WP3 55/55 (§5.9)
 Stage 06: NOT STARTED — sıra kuralı
 Stage 07: NOT STARTED — sıra kuralı
 Stage 08: NOT STARTED — sıra kuralı
@@ -356,6 +357,9 @@ Kalan kök neden (kapsam dışı, öneri): Supabase varsayılan yetkileri `publi
 | Yerel | WP5 unit 17/0 (DB politikası eşleşmesi 18/18); WP5 e2e 405/0 (1366/390/360); mutasyon 16/16; WP4 e2e 342/0; WP3 e2e 454/0; WP3 78/78; UX PASS; Kopenhag birebir; WSE PASS |
 | Preview kabul (gerçek DB, QA üye) | QA run 37672669867: 36/37. Tek FAIL testin kendisinden geliyordu: bilerek gönderilen ve reddedilen PATCH'in 400'ü konsola düştü (site hatası değil). Test düzeltildi; QA run [37673198744](https://github.com/metebagci88/amsterdam/actions/runs/37673198744) **38/38 PASS**:<br>• banner (şehir + ana sayfa) ve "Şimdi değil" kalıcılığı<br>• XSS, 51 karakter, boş girdi reddi<br>• sunucu reddi (script, U+3164, 51, boş, rakam)<br>• doğrudan PATCH 23514; e-posta sabit<br>• kayıt, düzenleme ve kalıcılık<br>• display_name korundu<br>• dolu profilde banner yok<br>• anon için isimler görünmez ve RPC çalıştırılamaz (42703/42501) |
 | QA verisi | Her koşu öncesi QA üyede ad/soyad NULL, display_name işaret değeri yapılır; sonrası temizlenir. Hesaplar kilitli |
+| Merge | PR #15 normal merge commit `e1bfd04`. WP3 gates ilk denemede bağımlılık kurulumunda 20 dk zaman aşımına uğradı; hiçbir test çalışmamıştı. Tek yeniden çalıştırmada ✅ |
+| Production | Cloudflare deploy ✅. QA run [37675285996](https://github.com/metebagci88/amsterdam/actions/runs/37675285996): **WP5 38/38 + WP4 regresyon 37/37 PASS** (www.asalocal.club). Live smoke [37675285966](https://github.com/metebagci88/amsterdam/actions/runs/37675285966) 56/56 (sayfa SHA = main) + WP3 55/55 |
+| Temizlik | QA üye ad/soyad tekrar NULL; isim girilmiş üye sayısı 0; QA e-postası değişmedi; hesaplar kilitli |
 
 ## 6. Yeniden başlamak için gereken tek karar
 
