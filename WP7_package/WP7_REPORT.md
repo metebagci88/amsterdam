@@ -8,9 +8,9 @@ Status: **IN PROGRESS** (the merge waits for WP6 PASS, per PRD §4). Static-only
 |---|---|---|---|
 | 1 | Paket 1–6 PASS | pending | WP6 fix PR and live E2E run (report Stage 06) |
 | 2 | Production URL + canonical www | done on branch | apex 301 → www (live smoke). `<link rel=canonical>` + `og:url` on `/` and `/amsterdam/`. The Kopenhag stub stays byte-pinned (WP3/WP4/WP5 gates) |
-| 3 | `/`, `/amsterdam/`, `/kopenhag/`, `/admin` smoke | preview pending | `LIVE_CHECKS/live_smoke.mjs` + `LIVE_CHECKS/wp7_live.mjs` |
+| 3 | `/`, `/amsterdam/`, `/kopenhag/`, `/admin` smoke | preview PASS | `LIVE_CHECKS/wp7_live.mjs` on the preview at 4d725d6: **26/26 PASS** (Actions run 37694235612). Production smoke after merge |
 | 4 | Kopenhag stub + alias redirects kept | done | preview: `/copenhagen`, `/copenhagen/`, `/kopenhag.html`, `/copenhagen.html` → 302 `/kopenhag/`. `/amsterdam/?city=Kopenhag` → `/kopenhag/` |
-| 5 | No internal text / personal plan / `file://` / WhatsApp-whisper / test data | done on branch | `amsterdam_index_UID.html` deleted, 301 → `/amsterdam/`. The 144 internal repo files (docs, SQL, gates, Edge sources, zip, checksums, workflows) all answer 3xx on the preview. City page: public source labels, `publicNote()` reader wording, no Unsplash venue images. Member-view dry run is clean |
+| 5 | No internal text / personal plan / `file://` / WhatsApp-whisper / test data | done on branch | `amsterdam_index_UID.html` deleted, 301 → `/amsterdam/`. The 146 internal repo files (docs, SQL, gates, Edge sources, zip, checksums, workflows) all answer 3xx on the preview. City page: public source labels, `publicNote()` reader wording, no Unsplash venue images. Member-view dry run is clean |
 | 6 | Real footer, no broken `#` links | done | home footer has no anchors. The city page and stub have no footer. Visible `#` links = 0 on the preview |
 | 7 | No marketing/cookie tracking without consent | done | preview Chromium request hosts: own site, supabase, jsdelivr, tailwind CDN, Google Fonts, unpkg (Leaflet), Unsplash (home city cards only). No tracker host, no `/cdn-cgi/` beacon. marketing flags false |
 | 8 | Marketing/SMS/push/journey closed | done | `marketing_enabled=false`, `marketing_capture_enabled=false`. email essential/service/public_go_live all false. No cron, no pg_net, no http triggers |
