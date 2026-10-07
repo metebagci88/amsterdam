@@ -36,7 +36,11 @@ async function ctxFor(vp) {
   const page = await ctx.newPage();
   const errs = [];
   page.on("pageerror", (e) => errs.push(`pageerror: ${String(e.message).slice(0, 100)}`));
-  page.on("console", (m) => { if (m.type() === "error") errs.push(m.text().slice(0, 100)); });
+  // deliberate negative requests (e.g. the CHECK-violating PATCH → 400) are logged by Chromium as "Failed to load
+  // resource"; only those, and only inside an expectNetErr() window, are excluded from the console-error count
+  const st = { expect: 0, excused: [] };
+  page.on("console", (m) => { if (m.type() !== "error") return; const t = m.text().slice(0, 100); if (st.expect > 0 && /^Failed to load resource: the server responded with a status of 4\d\d/.test(t)) { st.excused.push(t); return; } errs.push(t); });
+  page.__wp5 = st;
   return { ctx, page, errs };
 }
 const noOverflow = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
@@ -153,8 +157,11 @@ async function saveVia(page, prefix, first, last) {
       return { script: await call("<script>", "Üye"), filler: await call("ㅤ", "Üye"), long: await call("a".repeat(51), "Üye"), empty: await call("", "Üye"), digits: await call("Qa1", "Üye") };
     });
     rec(`${P} server rejects bad names via member_set_name (script, U+3164, 51, empty, digit)`, srv.script === "bad_first" && srv.filler === "bad_first" && srv.long === "bad_first" && srv.empty === "bad_first" && srv.digits === "bad_first", JSON.stringify(srv));
+    page.__wp5.expect++;
     const patch = await page.evaluate(async () => { try { const { data: s } = await db.auth.getSession(); const uid = s.session.user.id; const r = await db.from("members").update({ first_name: "<b>x</b>" }).eq("user_id", uid); return r.error ? (r.error.code || "err") : "accepted"; } catch (e) { return "THROW"; } });
+    await page.waitForTimeout(300); page.__wp5.expect--;
     rec(`${P} direct PATCH of first_name with HTML → CHECK 23514`, patch === "23514", patch);
+    rec(`${P} the deliberate PATCH produced exactly one excused 4xx console line`, page.__wp5.excused.length === 1, page.__wp5.excused.join(" | "));
     const anonEmail = await page.evaluate(async () => { try { const { data: s } = await db.auth.getSession(); const uid = s.session.user.id; await db.from("members").update({ email: "zz-wp5-live@example.invalid" }).eq("user_id", uid); const r = await db.from("members").select("email").eq("user_id", uid).maybeSingle(); return r.data ? (r.data.email === "zz-wp5-live@example.invalid" ? "changed" : "pinned") : "?"; } catch (e) { return "THROW"; } });
     rec(`${P} e-mail PATCH to another address is pinned by the guard`, anonEmail === "pinned", anonEmail);
     // valid save in the banner
