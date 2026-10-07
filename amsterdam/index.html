@@ -407,6 +407,9 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 .planctl{margin:6px 0 18px}
 .planbtns{display:flex;gap:10px;flex-wrap:wrap}
 .planhint{font-size:13px;color:var(--ink2);margin-top:10px;background:var(--scl);border-radius:8px;padding:10px 12px;line-height:1.5}
+.asa-sn{background:#fff7e6;border:1px solid #e6c98a;color:var(--ink);border-radius:12px;padding:12px 14px;margin:10px 0 12px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
+.asa-sn p{margin:6px 0 0}
+.asa-sn-btn{margin-top:10px;min-height:40px;padding:8px 16px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -429,6 +432,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 </header>
 
 <main class="wrap">
+  <div id="asaStoreNotice" class="asa-sn hide" role="status" aria-live="polite"></div>
 
   <!-- PANO -->
   <section class="view active" id="v-pano">
@@ -562,6 +566,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/lib/asa-storage/asa_storage.js?v=d3b3e32eb81a46bf"></script>   <!-- WP3 şehir-izole depolama; SHA-256(16), her güncellemede yenile -->
 <script>
 /* ASALOCAL TripStore (A2 veri katmanı) — A1 sözleşmesine göre, production'da doğrulandı */
 (function(global){
@@ -593,14 +598,16 @@ window.asaDB=function(){ try{ if(!window.__asaSB && window.supabase && window.su
 /* A5/A9 TripSync: plan+tercihleri DB trip'ine otomatik kaydet, durum göster, geri yükle */
 window.TripSync=(function(){
   var TS={status:'idle',_t:null,_hide:null};
-  function P(k,d){ try{var v=localStorage.getItem(k);return v?(JSON.parse(v)||d):d;}catch(e){return d;} }
+  function P(k,d){ try{ return (window.ASA_ST?window.ASA_ST.get(k,d):d)||d; }catch(e){return d;} }   // WP3: asa:ams:<domain>
+  function T(){ try{ return (window.ASA_ST&&window.ASA_ST.trip())||{}; }catch(e){return {};} }
+  function S(k,v){ try{ if(window.ASA_ST)window.ASA_ST.set(k,v); }catch(e){} }
   function pill(){ var el=document.getElementById('tripSyncPill'); if(!el){ el=document.createElement('div'); el.id='tripSyncPill'; el.style.cssText='position:fixed;right:12px;bottom:80px;z-index:99999;font-size:12px;padding:6px 12px;border-radius:999px;color:#fff;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.25)'; if(document.body)document.body.appendChild(el);} return el; }
   TS.setStatus=function(s){ TS.status=s; var el=pill(); if(!el)return; var map={saving:['Kaydediliyor…','#555'],saved:['Kaydedildi ✓','#2e7d32'],error:['Kaydedilemedi ⚠','#b3261e']}; var m=map[s]; if(!m){el.style.opacity='0';return;} el.textContent=m[0]; el.style.background=m[1]; el.style.opacity='1'; if(s==='saved'){ clearTimeout(TS._hide); TS._hide=setTimeout(function(){el.style.opacity='0';},1800);} };
   TS.collect=function(){
-    var pp=P('asa_plan_prefs',{}), t=P('asa_trip',{});
+    var pp=P('plan_prefs',{}), t=T();
     try{ var _liveAcc=(window.__asaGetAccommodation?window.__asaGetAccommodation():null); if(_liveAcc){ pp.accommodation=_liveAcc; pp.base_area=_liveAcc.label||pp.base_area||null; } }catch(e){}
     var patch={ preferences:{ vacation_types:(t.vacation_types||(window.TRIP&&window.TRIP.preferences&&window.TRIP.preferences.vacation_types)||[]), duration:(t.duration||null), duration_days:(t.duration_days||null), plan_prefs:pp, accommodation:(pp&&pp.accommodation)||null },
-      plan:{ dayven:P('ams_dayven',{}), cal:P('ams_cal',{}), plan:P('ams_plan',{}), updated_at:new Date().toISOString() },
+      plan:{ dayven:P('dayven',{}), cal:P('cal',{}), plan:P('plan',{}), updated_at:new Date().toISOString() },
       setup_completed:!!(pp&&pp.saved) };
     if(t.start_date)patch.start_date=t.start_date;
     if(t.end_date)patch.end_date=t.end_date;
@@ -618,8 +625,8 @@ window.TripSync=(function(){
   };
   TS.schedule=function(){ if(!window.TRIP)return; clearTimeout(TS._t); TS.setStatus('saving'); TS._t=setTimeout(function(){TS.flush();},1200); };
   TS.hydrate=function(t){ if(!t)return; try{
-    if(t.preferences&&t.preferences.plan_prefs&&Object.keys(t.preferences.plan_prefs).length){ localStorage.setItem('asa_plan_prefs',JSON.stringify(t.preferences.plan_prefs)); }
-    if(t.plan){ if(t.plan.dayven)localStorage.setItem('ams_dayven',JSON.stringify(t.plan.dayven)); if(t.plan.cal)localStorage.setItem('ams_cal',JSON.stringify(t.plan.cal)); if(t.plan.plan)localStorage.setItem('ams_plan',JSON.stringify(t.plan.plan)); }
+    if(t.preferences&&t.preferences.plan_prefs&&Object.keys(t.preferences.plan_prefs).length){ S('plan_prefs',t.preferences.plan_prefs); }
+    if(t.plan){ if(t.plan.dayven)S('dayven',t.plan.dayven); if(t.plan.cal)S('cal',t.plan.cal); if(t.plan.plan)S('plan',t.plan.plan); }
   }catch(e){} try{ if(window.PSET&&window.PSET._reload)window.PSET._reload(); }catch(e){} };
   return TS;
 })();
@@ -947,23 +954,80 @@ const SRCLBL={user:"Benim listem",deck:"Önceki araştırmam",extra:"Ek araştı
 function byId(id){return V.find(v=>v.id===id);}
 function winopen(u){if(!u)return;try{const w=window.open(u,"_blank","noopener");if(!w)location.href=u;}catch(e){location.href=u;}}
 
+/* ===== WP3 · ŞEHİR-İZOLE TARAYICI DEPOLAMA (asa:ams:*) — window.AsaStorage (lib/asa-storage) =====
+   Amsterdam verisi yalnız asa:ams:<domain> anahtarlarından okunur/yazılır. Eski ams_* / asa_trip /
+   asa_plan_prefs anahtarları SİLİNMEZ (geri dönüş güvencesi); açılışta idempotent kopyalanır ve
+   asa:ams:_migrated işareti tutulur (reconcile). Tek istisna (sahibi kararı, açılışta asla): fotoğraf kaydı
+   depolama dolu diye reddedilirse, işaret eski ams_calphoto'yu "hesaba katılmış" gösteriyorsa ve bu sekme açılışta aynı baytları okuduysa LIB.setSafeMove
+   eski anahtarı kaldırıp yeniden dener; başarılıysa işarete "retired" kaydı düşer, olmazsa eski baytları birebir geri yazar. Yeni değer otoritedir; eski≠yeni ise sessiz overwrite
+   YOK, kullanıcıya uyarı gösterilir. Başka şehrin seyahati Amsterdam'ınki gibi gösterilmez.
+   Eski asa_trip başka şehri gösterdiği için Amsterdam'a bağlanmayan eski plan tercihleri (yalnız bu sayfa yazardı)
+   kullanıcıya gösterilir; yalnız "Amsterdam planına aktar" ile kopyalanır (otomatik değil, eski kayıt silinmez).
+   Kayıt başarısız olursa (depolama dolu) ekrandaki değişiklik geri alınır ve kullanıcıya söylenir.
+   asa_session ve Supabase auth anahtarları bu katmanın DIŞINDADIR. Kopenhag (cph) anahtarları burada okunmaz. */
+window.ASA_ST=(function(){
+  var CODE="ams", LIB=window.AsaStorage||null, LS=null, mode="ok", rep=null, other="", extra=[], seen=false, adopted=false, unsaved=false, readFp=null;
+  var NAMES={fav:"Favoriler",plan:"Gün planı notları",dayven:"Günlük mekân listeleri",cal:"Takvim notları",calphoto:"Takvim fotoğrafları",trip:"Seyahat bilgileri",plan_prefs:"Plan tercihleri"};
+  try{ LS=window.localStorage; }catch(e){ LS=null; }
+  if(!LIB||typeof LIB.reconcile!=="function"||!LS) mode="unavailable";
+  else { var pc=null; try{ pc=LIB.cityCodeFromLabel(CITY); }catch(e){} if(pc!==CODE){ mode="locked"; other=String(CITY||"").slice(0,64); } }
+  if(mode==="ok"){ try{ rep=LIB.reconcile(LS,CODE); }catch(e){ rep=null; mode="unavailable"; } try{ var pe=rep&&rep.marker&&rep.marker.keys&&rep.marker.keys.ams_calphoto; readFp=(pe&&typeof pe.fp==="string"&&pe.state!=="retired")?pe.fp:null; }catch(e){ readFp=null; } }   // readFp: bu sekmenin açılışta okuduğu eski ams_calphoto baytları
+  function writable(){ return mode==="ok"; }
+  function read(d){ if(mode!=="ok")return {present:false,value:null}; try{ var r=LIB.get(LS,CODE,d); return {present:r.source!=="missing",value:(r.ok?r.value:null)}; }catch(e){ return {present:true,value:null}; } }
+  function get(d,x){ var r=read(d); return (r.value!=null)?r.value:x; }
+  // Fotoğraflar: kota reddinde hesaba katılmış eski ams_calphoto güvenli taşınır (LIB.setSafeMove; yalnız yazım anında, yalnız bu sekmenin açılışta okuduğu baytlar — readFp; başka sekme/ana sayfa işareti sonradan yenilese bile).
+  function set(d,v){ unsaved=false; if(mode!=="ok")return false; try{ var r=(d==="calphoto"&&typeof LIB.setSafeMove==="function")?LIB.setSafeMove(LS,CODE,d,v,{expectLegacyFp:readFp}):LIB.set(LS,CODE,d,v); unsaved=(d==="calphoto"&&r.reason==="restore_failed"); return r.ok===true; }catch(e){ return false; } }
+  function tripCityOk(t){ try{ return mode==="ok"&&LIB.checkTripCity(t,CODE).match===true; }catch(e){ return false; } }
+  function trip(){ var t=get("trip",null); return (t&&tripCityOk(t))?t:null; }
+  function stranded(){ return (!seen&&!adopted&&mode==="ok"&&rep&&rep.stranded)?rep.stranded.filter(function(x){return x.domain==="plan_prefs"&&!x.acknowledged;}):[]; }
+  function notice(){
+    var box=document.getElementById("asaStoreNotice"); if(!box)return;
+    var msgs=[], ackC=false, ackM=null, st=stranded();
+    if(!seen&&mode==="unavailable") msgs.push("Kayıtlı favori, plan ve seyahat bilgilerin şu an yüklenemedi; bu açılışta yapılan değişiklikler kaydedilmeyecek. Mevcut kayıtların silinmedi — sayfayı yenilemeyi dene.");
+    if(!seen&&mode==="locked") msgs.push("Bu sayfa Amsterdam rehberidir. “"+other+"” için açılan bu görünümde Amsterdam’a ait kayıtlı favori, plan ve seyahat bilgilerin gösterilmiyor; buradaki değişiklikler bu cihaza kaydedilmiyor.");
+    if(!seen&&rep&&rep.conflicts&&rep.conflicts.length){ ackC=true; msgs.push("Bu cihazda şu kayıtların iki farklı kopyası bulundu: "+rep.conflicts.map(function(c){return NAMES[c.domain]||c.domain;}).join(", ")+". Yeni kayıt kullanılıyor; eski kopya silinmedi ve bu cihazda saklanmaya devam ediyor. Eski kopya, sitenin önceki sürümünün açık kalmış bir sekmesinden gelmiş olabilir."); }
+    if(!seen&&rep&&rep.mismatch&&!rep.mismatch.acknowledged){ ackM=rep.mismatch.fp; msgs.push("Bu cihazdaki kayıtlı seyahat planın "+(rep.mismatch.cityLabel||"başka bir şehir")+" için. Amsterdam planı olarak gösterilmiyor; o kayıt silinmedi."); }
+    if(st.length) msgs.push("Bu cihazda kayıtlı plan tercihlerin var; eski seyahat kaydın "+(st[0].cityLabel||"başka bir şehir")+" için işaretli olduğundan Amsterdam planına bağlanmadı. Bu tercihleri Amsterdam rehberinde kaydettiysen Amsterdam planına aktarabilirsin. Aktarmazsan Amsterdam planında kullanılmaz; eski kayıt silinmez.");
+    extra.forEach(function(m){ msgs.push(m); });
+    box.textContent="";
+    if(!msgs.length){ box.classList.add("hide"); return; }
+    var h=document.createElement("strong"); h.textContent="Kayıtlı verilerinle ilgili bilgi"; box.appendChild(h);
+    msgs.forEach(function(m){ var p=document.createElement("p"); p.textContent=m; box.appendChild(p); });
+    if(st.length){ var a=document.createElement("button"); a.type="button"; a.className="asa-sn-btn"; a.style.marginRight="8px"; a.textContent="Amsterdam planına aktar"; a.onclick=adopt; box.appendChild(a); }
+    var b=document.createElement("button"); b.type="button"; b.className="asa-sn-btn"; b.textContent="Anladım";
+    b.onclick=function(){ try{ if(mode==="ok"&&(ackC||ackM||st.length))LIB.acknowledge(LS,CODE,{conflicts:ackC,mismatchFp:(ackM||undefined),stranded:(st.length>0)}); }catch(e){} seen=true; extra=[]; box.textContent=""; box.classList.add("hide"); };
+    box.appendChild(b); box.classList.remove("hide");
+  }
+  // Yalnız kullanıcı tıklayınca: eski plan tercihleri asa:ams:plan_prefs'e birebir kopyalanır (varsa üzerine yazılmaz).
+  function adopt(){
+    var r=null; try{ r=(mode==="ok")?LIB.adoptLegacy(LS,CODE,"plan_prefs"):null; }catch(e){ r=null; }
+    if(r&&(r.ok||r.reason==="kept_existing")){ adopted=true; extra.push(r.ok?"Plan tercihlerin Amsterdam planına aktarıldı. Eski kayıt silinmedi.":"Amsterdam planında zaten kayıtlı plan tercihlerin var; üzerine yazılmadı. Eski kayıt silinmedi."); try{ if(window.PSET&&window.PSET._reload)window.PSET._reload(); }catch(e){} try{ if(r.ok&&window.__tripDirty)window.__tripDirty(); }catch(e){} }
+    else extra.push("Plan tercihlerin aktarılamadı"+(r&&r.reason==="write_failed"?": cihaz depolaması dolu":"")+". Eski kayıt silinmedi.");
+    notice();
+  }
+  function say(m){ extra.push(m); notice(); }
+  function foreignTrip(label){ say("Açılan seyahat "+(label||"başka bir şehir")+" için. Amsterdam planına yüklenmedi; Amsterdam’daki kayıtların değişmedi."); }
+  // Depolama yazımı reddedildiğinde (kota): çağıran ekrandaki değişikliği geri alır, kullanıcıya söylenir.
+  function full(m){ if(unsaved) m="Takvim fotoğrafların bu cihaza kaydedilemedi ve eski fotoğraf kaydı geri yazılamadı; fotoğraflarının bir kısmı şu an yalnız bu sekmede olabilir. Sekmeyi kapatma: cihazda yer açıp bir fotoğraf ekleyerek ya da silerek yeniden kaydetmeyi dene."; try{ alert(m); }catch(e){} }
+  try{ notice(); }catch(e){}
+  return { CODE:CODE, mode:function(){return mode;}, report:function(){return rep;}, writable:writable, read:read, get:get, set:set, trip:trip, tripCityOk:tripCityOk, foreignTrip:foreignTrip, notice:notice, say:say, full:full, adopt:adopt };
+})();
+
 /* ===== FAVORITES ===== */
 let favSet=new Set();
 (function initFav(){
-  let raw=null;
-  try{ raw=localStorage.getItem("ams_fav"); }catch(e){ raw=""; }
-  if(raw!==null){
-    let parsed=null;
-    try{ parsed=JSON.parse(raw); }catch(e){ parsed=null; }
-    if(Array.isArray(parsed)) parsed.forEach(function(id){ if(typeof id==="string"&&id) favSet.add(id); });
+  const favRaw=ASA_ST.read("fav");
+  if(favRaw.present){
+    if(Array.isArray(favRaw.value)) favRaw.value.forEach(function(id){ if(typeof id==="string"&&id) favSet.add(id); });
     return;
   }
+  if(!ASA_ST.writable()) return;   // depolama kapalı/kilitli: seed yazılmaz
   V.forEach(function(v){ if(v&&v.fav&&typeof v.id==="string"&&v.id) favSet.add(v.id); });
-  try{ localStorage.setItem("ams_fav", JSON.stringify(Array.from(favSet))); }catch(e){}
+  ASA_ST.set("fav", Array.from(favSet));
 })();
 function isFav(id){return favSet.has(id);}
-function toggleFav(id){if(favSet.has(id))favSet.delete(id);else favSet.add(id);
- try{localStorage.setItem("ams_fav",JSON.stringify([...favSet]));}catch(e){}
+function toggleFav(id){const had=favSet.has(id);if(had)favSet.delete(id);else favSet.add(id);
+ if(!ASA_ST.set("fav",[...favSet])&&ASA_ST.writable()){ if(had)favSet.add(id);else favSet.delete(id); ASA_ST.full("Favorin kaydedilemedi: cihaz depolaması dolu. Değişiklik geri alındı."); return; }   // WP3: kaydedilmeyen değişiklik ekranda kalmaz
  renderCards();if(MAP.map)drawMarkers();
  if(window.ASA){ASA.onFav(id,favSet.has(id));}}
 
@@ -1360,19 +1424,19 @@ document.getElementById("locBtn").onclick=getLoc;
 
 /* ===== CALENDAR ===== */
 const DOW=["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
-let calNotes={};try{calNotes=JSON.parse(localStorage.getItem("ams_cal")||"{}");}catch(e){}
+let calNotes=ASA_ST.get("cal",{});
 let calPlans={},calPhotos={};
-try{calPlans=JSON.parse(localStorage.getItem("ams_plan")||"{}");}catch(e){}
-try{calPhotos=JSON.parse(localStorage.getItem("ams_calphoto")||"{}");}catch(e){}
+calPlans=ASA_ST.get("plan",{});
+calPhotos=ASA_ST.get("calphoto",{});
 let dayVenues={},dayCur=null;
-try{dayVenues=JSON.parse(localStorage.getItem("ams_dayven")||"{}");}catch(e){}
+dayVenues=ASA_ST.get("dayven",{});
 function escT(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
-function saveLS(k,o){try{localStorage.setItem(k,JSON.stringify(o));}catch(e){alert("Depolama dolu olabilir (özellikle fotoğraflar). Bazı fotoğrafları silip tekrar dene.");} try{ if(/^(ams_dayven|ams_cal|ams_plan)$/.test(k)&&window.__tripDirty)window.__tripDirty(); }catch(e){}}
-function addPhoto(d,ev){const f=ev.target.files&&ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const mx=800;let w=img.width,h2=img.height;if(w>mx){h2=Math.round(h2*mx/w);w=mx;}const cv=document.createElement("canvas");cv.width=w;cv.height=h2;cv.getContext("2d").drawImage(img,0,0,w,h2);const data=cv.toDataURL("image/jpeg",0.7);(calPhotos[d]=calPhotos[d]||[]).push(data);saveLS("ams_calphoto",calPhotos);refreshDayUI();};img.src=rd.result;};rd.readAsDataURL(f);}
-function delPhoto(d,i){if(calPhotos[d]){calPhotos[d].splice(i,1);if(!calPhotos[d].length)delete calPhotos[d];saveLS("ams_calphoto",calPhotos);refreshDayUI();}}
+function saveLS(k,o,quiet){const ok=ASA_ST.set(k,o);if(!ok&&!quiet&&ASA_ST.writable())ASA_ST.full("Depolama dolu olabilir (özellikle fotoğraflar); bu değişiklik bu cihaza kaydedilemedi."); try{ if(/^(dayven|cal|plan)$/.test(k)&&window.__tripDirty)window.__tripDirty(); }catch(e){} return ok;}
+function addPhoto(d,ev){const f=ev.target.files&&ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const mx=800;let w=img.width,h2=img.height;if(w>mx){h2=Math.round(h2*mx/w);w=mx;}const cv=document.createElement("canvas");cv.width=w;cv.height=h2;cv.getContext("2d").drawImage(img,0,0,w,h2);const data=cv.toDataURL("image/jpeg",0.7);(calPhotos[d]=calPhotos[d]||[]).push(data);if(!saveLS("calphoto",calPhotos,true)&&ASA_ST.writable()){calPhotos[d].pop();if(!calPhotos[d].length)delete calPhotos[d];ASA_ST.full("Fotoğraf kaydedilemedi: cihaz depolaması dolu. Fotoğraf eklenmedi; kayıtlı fotoğrafların değişmedi.");}refreshDayUI();};img.src=rd.result;};rd.readAsDataURL(f);}
+function delPhoto(d,i){if(calPhotos[d]){const prev=calPhotos[d].slice();calPhotos[d].splice(i,1);if(!calPhotos[d].length)delete calPhotos[d];if(!saveLS("calphoto",calPhotos,true)&&ASA_ST.writable()){calPhotos[d]=prev;ASA_ST.full("Fotoğraf silme kaydedilemedi: cihaz depolaması dolu. Fotoğraf yerinde bırakıldı; kayıtlı fotoğrafların değişmedi.");}refreshDayUI();}}
 function buildCalDays(){
- let trip=null; try{trip=JSON.parse(localStorage.getItem("asa_trip")||"null");}catch(e){}
+ let trip=ASA_ST.trip();
  const MON=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
  const arr=[];
  if(trip&&trip.start_date&&trip.end_date){
@@ -1406,7 +1470,7 @@ function catOf(v){
  if(/mağaza|magaza|alışveriş|alisveris|konsept|dükkan|dukkan/.test(t))return"shop";
  return"food";
 }
-function tripInterests(){ let t=null; try{t=JSON.parse(localStorage.getItem("asa_trip")||"null");}catch(e){} return (t&&t.vacation_types)||[]; }
+function tripInterests(){ let t=ASA_ST.trip(); return (t&&t.vacation_types)||[]; }
 function interestCats(){
  const its=tripInterests().map(s=>s.toLowerCase()); const set=new Set();
  its.forEach(i=>{
@@ -1443,11 +1507,11 @@ function autoGeneratePlan(force){
      calPlans[key]=picks.map(p=>p.slot+": "+p.v.name+(p.v.area?" ("+p.v.area+")":"")).join("\n");
    }
  });
- saveLS("ams_dayven",dayVenues); saveLS("ams_plan",calPlans); renderPlanCtl(); renderCal();
+ saveLS("dayven",dayVenues); saveLS("plan",calPlans); renderPlanCtl(); renderCal();
 }
 function clearPlan(){
  CAL.days.forEach(D=>{ delete dayVenues[D.key]; if(calPlans[D.key]&&/^(Sabah|Öğle|Öğleden|Akşam):/.test(calPlans[D.key]))delete calPlans[D.key]; });
- saveLS("ams_dayven",dayVenues); saveLS("ams_plan",calPlans); renderPlanCtl(); renderCal();
+ saveLS("dayven",dayVenues); saveLS("plan",calPlans); renderPlanCtl(); renderCal();
 }
 function renderPlanCtl(){
  const el=document.getElementById("planCtl"); if(!el)return;
@@ -1468,8 +1532,8 @@ var PSET=(function(){
  const LBL='block text-[12px] text-on-surface-variant mb-1 font-medium';
  const SEC='font-kicker text-kicker text-on-surface-variant uppercase mt-5 mb-2';
  let s=null, warn="";
- function trip(){ try{return JSON.parse(localStorage.getItem("asa_trip")||"{}")||{};}catch(e){return {};} }
- function prefs(){ try{return JSON.parse(localStorage.getItem("asa_plan_prefs")||"{}")||{};}catch(e){return {};} }
+ function trip(){ return ASA_ST.trip()||{}; }
+ function prefs(){ return ASA_ST.get("plan_prefs",{})||{}; }
  function invList(){ return (typeof V!=="undefined"?V:[]).filter(v=>v&&v.city===CITY&&v.active!==false).map(v=>({id:v.id,name:v.name})); }
  function nameOf(id){ const v=(typeof V!=="undefined")?V.find(x=>x.id===id):null; return v?v.name:id; }
  function load(){ const t=trip(),p=prefs(); s={ startDate:t.start_date||"", endDate:t.end_date||"", arrival:p.arrival||"14:00", departure:p.departure||"11:00", dayStart:p.dayStart||"09:00", dayEnd:p.dayEnd||"23:00", tempo:p.tempo||"Dengeli", transport:p.transport||{walk:true,bike:true,transit:false}, dietary:p.dietary||[], mustSee:p.mustSee||[], avoid:p.avoid||[], reservations:p.reservations||[], otherNote:p.otherNote||"", auto:(p.auto!==false), resDraft:{id:"",date:"",start:"",end:""}, open:!p.saved, cats:CATS.map(c=>({...c,v:(p.interests&&p.interests[c.key]!=null)?p.interests[c.key]:c.v,locked:false})) }; try{ var _acc=p.accommodation||(t.plan_prefs&&t.plan_prefs.accommodation)||null; s.baseArea=(p.base_area||(_acc&&_acc.label)||""); if(_acc&&_acc.lat!=null&&_acc.lng!=null){ if(window.__asaApplyAccommodation)window.__asaApplyAccommodation(_acc); else userLoc={lat:_acc.lat,lng:_acc.lng,label:(_acc.label||null)}; } }catch(e){} }
@@ -1489,7 +1553,7 @@ var PSET=(function(){
  API.diet=(t)=>{ const i=s.dietary.indexOf(t); if(i<0)s.dietary.push(t); else s.dietary.splice(i,1); render(); };
  API.pick=(list,id)=>{ if(!id)return; const other=(list==="mustSee")?"avoid":"mustSee"; s[other]=s[other].filter(x=>x!==id); if(!s[list].includes(id))s[list].push(id); render(); };
  API.unpick=(list,id)=>{ s[list]=s[list].filter(x=>x!==id); render(); };
- API.setDate=(k,v)=>{ s[k]=v; const t=trip(); t[k==="startDate"?"start_date":"end_date"]=v; try{localStorage.setItem("asa_trip",JSON.stringify(t));}catch(e){} try{CAL=buildCalDays();}catch(e){} render(); try{if(document.getElementById("cal"))renderCal();}catch(e){} };
+ API.setDate=(k,v)=>{ s[k]=v; const t=trip(); t[k==="startDate"?"start_date":"end_date"]=v; ASA_ST.set("trip",t); try{CAL=buildCalDays();}catch(e){} render(); try{if(document.getElementById("cal"))renderCal();}catch(e){} };
  API.setTime=(k,v)=>{ s[k]=v; render(); };
  API.setDraft=(k,v)=>{ s.resDraft[k]=v; };
  API.addRes=()=>{ const d=s.resDraft; if(!d.id||!d.date||!d.start){warn="Rezervasyon için mekân, tarih ve başlangıç saati gerekli.";render();setTimeout(()=>{warn="";render();},2400);return;} if(s.startDate&&s.endDate&&(d.date<s.startDate||d.date>s.endDate)){warn="Rezervasyon tarihi seyahat tarihleri içinde olmalı.";render();setTimeout(()=>{warn="";render();},2600);return;} if(d.end&&d.end<=d.start){warn="Rezervasyon bitiş saati başlangıçtan sonra olmalı.";render();setTimeout(()=>{warn="";render();},2600);return;} s.reservations.push({...d}); s.resDraft={id:"",date:"",start:"",end:""}; render(); };
@@ -1500,7 +1564,7 @@ var PSET=(function(){
  API.edit=()=>{ s.open=true; render(); };
  API.getPrefs=()=>({ base:(typeof userLoc!=="undefined"?userLoc:null), startDate:s.startDate, endDate:s.endDate, arrival:s.arrival, departure:s.departure, dayStart:s.dayStart, dayEnd:s.dayEnd, tempo:s.tempo, transport:s.transport, interests:(function(){var o={};s.cats.forEach(c=>o[c.key]=c.v);return o;})(), must_see_ids:s.mustSee.slice(), avoid_ids:s.avoid.slice(), reservations:s.reservations.slice() });
  API.submit=()=>{ const c=cta(); if(!c.ok)return; savePrefs(); try{CAL=buildCalDays();}catch(e){} var ok=false; try{ ok=runEngine(); }catch(e){} if(!ok){ try{autoGeneratePlan(true);}catch(e){} } s.open=false; render(); try{renderCal();}catch(e){} const el=document.getElementById("planCtl"); if(el)el.scrollIntoView({behavior:"smooth",block:"start"}); try{ if(window.__snapshotPlan)setTimeout(function(){window.__snapshotPlan();},1500); }catch(e){} };
- function savePrefs(){ const interests={}; s.cats.forEach(c=>interests[c.key]=c.v); const p={interests,tempo:s.tempo,transport:s.transport,arrival:s.arrival,departure:s.departure,dayStart:s.dayStart,dayEnd:s.dayEnd,dietary:s.dietary,mustSee:s.mustSee,avoid:s.avoid,reservations:s.reservations,otherNote:s.otherNote,auto:s.auto,base_area:(s.baseArea||null),accommodation:((typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng,label:(s.baseArea||null)}:null),saved:true,updated_at:new Date().toISOString()}; try{localStorage.setItem("asa_plan_prefs",JSON.stringify(p));}catch(e){} const t=trip(); t.start_date=s.startDate; t.end_date=s.endDate; t.plan_prefs=Object.assign({},p,{accommodation:(typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng}:null}); try{localStorage.setItem("asa_trip",JSON.stringify(t));}catch(e){} try{window.__tripDirty&&window.__tripDirty();}catch(e){} }
+ function savePrefs(){ const interests={}; s.cats.forEach(c=>interests[c.key]=c.v); const p={interests,tempo:s.tempo,transport:s.transport,arrival:s.arrival,departure:s.departure,dayStart:s.dayStart,dayEnd:s.dayEnd,dietary:s.dietary,mustSee:s.mustSee,avoid:s.avoid,reservations:s.reservations,otherNote:s.otherNote,auto:s.auto,base_area:(s.baseArea||null),accommodation:((typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng,label:(s.baseArea||null)}:null),saved:true,updated_at:new Date().toISOString()}; ASA_ST.set("plan_prefs",p); const t=trip(); t.start_date=s.startDate; t.end_date=s.endDate; t.plan_prefs=Object.assign({},p,{accommodation:(typeof userLoc!=="undefined"&&userLoc)?{lat:userLoc.lat,lng:userLoc.lng}:null}); ASA_ST.set("trip",t); try{window.__tripDirty&&window.__tripDirty();}catch(e){} }
  // ---- render ----
  function chip(on,txt,onclick,extra){ return '<button type="button" class="rounded-full border px-3 py-2 text-[12.5px] min-h-[38px] inline-flex items-center transition-colors '+(on?"bg-primary text-on-primary border-primary":"bg-surface border-outline-variant text-on-surface hover:bg-surface-container")+'" '+(extra||"")+' onclick="'+onclick+'">'+txt+'</button>'; }
  function invOpt(sel){ return '<option value="">— mekân seç —</option>'+invList().map(x=>'<option value="'+esc(x.id)+'"'+(sel===x.id?' selected':'')+'>'+esc(x.name)+'</option>').join(""); }
@@ -1616,7 +1680,7 @@ var ENGINE=(function(){
  function _reason(v,win,theme,tr){var b=[];if((v.time_windows||[]).indexOf(win)>-1)b.push(win+" için uygun");if(v.neighborhood_key===theme)b.push("bugünün ana bölgesi "+theme);b.push("önceki duraktan ~"+tr+" dk");if(v.anchor_strength>=0.7)b.push("güçlü cazibe");return b.join(" · ");}
  return {plan:plan};
 })();
-function runEngine(){ try{ var prefs=PSET.getPrefs(); if(!prefs||!prefs.base) return false; var inv=(typeof V!=="undefined"?V:[]).filter(function(v){return v&&v.city===CITY&&v.active!==false;}).map(enrichVenue); var res=ENGINE.plan(prefs,inv); if(!res||!res.itinerary) return false; window.planResult={}; res.itinerary.forEach(function(d){ dayVenues[d.key]=d.stops.map(function(x){return x.id;}); window.planResult[d.key]={theme:d.theme,window:d.window,stops:d.stops}; }); window.planEngineMeta=res; try{saveLS("ams_dayven",dayVenues);}catch(e){} return true; }catch(e){ return false; } }
+function runEngine(){ try{ var prefs=PSET.getPrefs(); if(!prefs||!prefs.base) return false; var inv=(typeof V!=="undefined"?V:[]).filter(function(v){return v&&v.city===CITY&&v.active!==false;}).map(enrichVenue); var res=ENGINE.plan(prefs,inv); if(!res||!res.itinerary) return false; window.planResult={}; res.itinerary.forEach(function(d){ dayVenues[d.key]=d.stops.map(function(x){return x.id;}); window.planResult[d.key]={theme:d.theme,window:d.window,stops:d.stops}; }); window.planEngineMeta=res; try{saveLS("dayven",dayVenues);}catch(e){} return true; }catch(e){ return false; } }
 let planSelDay=null, dayFilter="all";
 const SLOT_EMO={"Sabah":"☀️","Öğle":"🍽️","Öğleden sonra":"🎨","Akşam":"🌙"};
 function renderCal(){
@@ -1672,8 +1736,8 @@ function renderDayFlow(d){
 function openDay(d){renderDay(d);const m=document.getElementById("dayModal");m.classList.remove("hide");window.scrollTo({top:0});}
 function closeDay(){const m=document.getElementById("dayModal");if(m)m.classList.add("hide");renderCal();}
 function refreshDayUI(){const m=document.getElementById("dayModal");if(m&&!m.classList.contains("hide")&&dayCur!=null)renderDay(dayCur);renderCal();}
-function addDayVenue(d,id){dayVenues[d]=dayVenues[d]||[];if(dayVenues[d].indexOf(id)<0)dayVenues[d].push(id);saveLS("ams_dayven",dayVenues);renderDay(d);}
-function removeDayVenue(d,id){if(dayVenues[d]){dayVenues[d]=dayVenues[d].filter(x=>x!==id);if(!dayVenues[d].length)delete dayVenues[d];saveLS("ams_dayven",dayVenues);renderDay(d);}}
+function addDayVenue(d,id){dayVenues[d]=dayVenues[d]||[];if(dayVenues[d].indexOf(id)<0)dayVenues[d].push(id);saveLS("dayven",dayVenues);renderDay(d);}
+function removeDayVenue(d,id){if(dayVenues[d]){dayVenues[d]=dayVenues[d].filter(x=>x!==id);if(!dayVenues[d].length)delete dayVenues[d];saveLS("dayven",dayVenues);renderDay(d);}}
 function dayRoute(d){const list=(dayVenues[d]||[]).map(byId).filter(Boolean);if(list.length)winopen(gmapsRoute(list));}
 const DAY_FILTERS=[["all","Tümü"],["coffee","☕ Kahve"],["brunch","🥐 Kahvaltı"],["food","🍽️ Yemek"],["wine","🍷 Şarap/Bar"],["culture","🎨 Kültür"],["park","🌳 Park"],["shop","🛍️ Mağaza"]];
 function setDayFilter(d,f){dayFilter=f;renderDayFilter(d);}
@@ -1698,7 +1762,7 @@ function dayDragAfter(container,y){
  const els=[...container.querySelectorAll(".dayitem")].filter(e=>e!==window.__dragEl);
  return els.reduce((c,ch)=>{const b=ch.getBoundingClientRect();const off=y-b.top-b.height/2;return (off<0&&off>c.offset)?{offset:off,element:ch}:c;},{offset:-Infinity}).element;
 }
-function commitDayOrder(d){const list=document.getElementById("dayList");if(!list)return;dayVenues[d]=[...list.querySelectorAll(".dayitem")].map(x=>x.getAttribute("data-id"));saveLS("ams_dayven",dayVenues);}
+function commitDayOrder(d){const list=document.getElementById("dayList");if(!list)return;dayVenues[d]=[...list.querySelectorAll(".dayitem")].map(x=>x.getAttribute("data-id"));saveLS("dayven",dayVenues);}
 function wireDayDrag(d){
  const list=document.getElementById("dayList"); if(!list)return;
  list.querySelectorAll(".dayitem").forEach(it=>{
@@ -1739,8 +1803,8 @@ function renderDay(d){
  document.getElementById("dayBody").innerHTML=x;
  renderDayFilter(d);
  wireDayDrag(d);
- const pt=document.getElementById("dayPlan");if(pt)pt.addEventListener("input",()=>{calPlans[d]=pt.value;saveLS("ams_plan",calPlans);});
- const nt=document.getElementById("dayNote");if(nt)nt.addEventListener("input",()=>{calNotes[d]=nt.value;saveLS("ams_cal",calNotes);});
+ const pt=document.getElementById("dayPlan");if(pt)pt.addEventListener("input",()=>{calPlans[d]=pt.value;saveLS("plan",calPlans);});
+ const nt=document.getElementById("dayNote");if(nt)nt.addEventListener("input",()=>{calNotes[d]=nt.value;saveLS("cal",calNotes);});
  const pi=document.getElementById("dayPhotoInput");if(pi)pi.addEventListener("change",ev=>addPhoto(d,ev));
 }
 
@@ -2115,20 +2179,22 @@ const ASA = (function(){
       try{ await loadTripContext(); }catch(e){}
     }
   }
-  // A2/A3: ?trip=<id> ile gelen seyahati DB'den yükle, bağlamı kur (window.TRIP + asa_trip köprüsü)
+  // A2/A3: ?trip=<id> ile gelen seyahati DB'den yükle, bağlamı kur (window.TRIP + yerel seyahat köprüsü: asa:ams:trip)
   async function loadTripContext(){
     var tid=null; try{ tid=new URLSearchParams(location.search).get("trip"); }catch(e){}
     if(!tid||!window.TripStore) return;
+    if(!ASA_ST.writable()) return;       // WP3: depolama kapalı/kilitli görünümde DB planı yerele taşınmaz, yerelden DB'ye yazılmaz
     var t=await window.TripStore.get(tid);
     if(!t) return;                       // sahibi değilse / yoksa RLS null döner
+    if(!ASA_ST.tripCityOk(t)){ ASA_ST.foreignTrip(t.city); return; }   // WP3: başka şehrin seyahati Amsterdam verisine yazılmaz
     window.TRIP=t;
     try{ if(window.TripSync)window.TripSync.hydrate(t); }catch(e){}
     try{
-      var cur={}; try{cur=JSON.parse(localStorage.getItem("asa_trip")||"{}")||{};}catch(e){}
+      var cur=ASA_ST.trip()||{};
       cur.id=t.id; cur.revision=t.revision; cur.city=t.city; cur.country=t.country;
       cur.start_date=t.start_date; cur.end_date=t.end_date;
       if(t.preferences){ if(t.preferences.vacation_types)cur.vacation_types=t.preferences.vacation_types; if(t.preferences.duration)cur.duration=t.preferences.duration; if(t.preferences.duration_days)cur.duration_days=t.preferences.duration_days; }
-      localStorage.setItem("asa_trip",JSON.stringify(cur));
+      ASA_ST.set("trip",cur);
     }catch(e){}
     try{ if(typeof renderTripBanner==="function") renderTripBanner(); }catch(e){}
   }
@@ -2136,7 +2202,8 @@ const ASA = (function(){
   async function importGuestTrip(){
     if(!window.TripStore) return;
     if(window.TRIP && window.TRIP.id) return;                 // zaten DB seyahati yüklü (?trip=)
-    var t={}; try{ t=JSON.parse(localStorage.getItem("asa_trip")||"{}")||{}; }catch(e){}
+    if(!ASA_ST.writable()) return;                            // WP3: depolama kapalı/kilitli görünüm
+    var t=ASA_ST.trip()||{};
     if(t.id) return;                                          // zaten DB'ye bağlı
     if(!t.city || !t.start_date || !t.end_date) return;       // taşınacak kesin seyahat yok
     var existing=null; try{ existing=await window.TripStore.findOverlap(t.city,t.start_date,t.end_date); }catch(e){}
@@ -2144,12 +2211,12 @@ const ASA = (function(){
       // Aynı şehir+çakışan tarihte DB seyahati var → onu benimse, DB'yi otorite say (yerelin üstüne yazma)
       window.TRIP=existing;
       try{ if(window.TripSync)window.TripSync.hydrate(existing); }catch(e){}
-      try{ t.id=existing.id; t.revision=existing.revision; localStorage.setItem("asa_trip",JSON.stringify(t)); }catch(e){}
+      try{ t.id=existing.id; t.revision=existing.revision; ASA_ST.set("trip",t); }catch(e){}
     } else {
       var res=await window.TripStore.create({ city:t.city, country:t.country||null, start_date:t.start_date, end_date:t.end_date, timezone:asaCityTz(t.city), preferences:{vacation_types:t.vacation_types||[], duration:t.duration||null, duration_days:t.duration_days||null}, dupCheck:false });
       if(!res || !res.ok || !res.trip) return;
       window.TRIP=res.trip;
-      try{ t.id=res.trip.id; t.revision=res.trip.revision; localStorage.setItem("asa_trip",JSON.stringify(t)); }catch(e){}
+      try{ t.id=res.trip.id; t.revision=res.trip.revision; ASA_ST.set("trip",t); }catch(e){}
       // Misafirin yerel planını/tercihlerini yeni DB seyahatine it
       try{ if(window.TripSync){ var patch=window.TripSync.collect(); var sres=await window.TripStore.saveWithRetry(res.trip.id, res.trip.revision, patch); if(sres&&sres.ok)window.TRIP.revision=sres.revision; } }catch(e){}
     }
@@ -2209,7 +2276,7 @@ const ASA = (function(){
     const toAdd=local.filter(id=>!cloud.includes(id)).map(id=>({email,venue_id:id,city:CITY}));
     if(toAdd.length){ try{ await db.from("favorites").upsert(toAdd,{onConflict:"user_id,venue_id",ignoreDuplicates:true}); }catch(e){} }
     favSet=new Set(union);
-    try{localStorage.setItem("ams_fav",JSON.stringify([...favSet]));}catch(e){}
+    if(!ASA_ST.set("fav",[...favSet])&&ASA_ST.writable()) ASA_ST.say("Hesabındaki favoriler bu cihaza kaydedilemedi: cihaz depolaması dolu. Bu oturumda gösteriliyor; bu cihazdaki kayıtlı favorilerin değişmedi.");   // WP3: birleşim asa:ams:fav'a yazılır (ams_fav dokunulmaz)
     // PUAN: favori sayısından DEĞİL; members.points güvenli aksiyon RPC'leriyle güncellenir.
     member={uid,email,display_name:m.display_name,tier:m.tier||"Kaşif",points:m.points||0};
     session={uid,email,display_name:m.display_name};
@@ -2442,7 +2509,7 @@ if(document.readyState!=="loading"){ try{ASA.init();}catch(e){} }
 /* ===== gezi bağlamı afişi (ana sayfadan / DB'den gelen seyahat) ===== */
 function renderTripBanner(){
   try{
-    var t=JSON.parse(localStorage.getItem("asa_trip")||"null");
+    var t=ASA_ST.trip();
     var el=document.getElementById("tripBanner");
     if(t&&el&&(t.city===CITY||!t.city)){
       var vt=(t.vacation_types&&t.vacation_types.length)?t.vacation_types.join(", "):null;

@@ -288,6 +288,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/lib/asa-storage/asa_storage.js?v=d3b3e32eb81a46bf"></script>   <!-- WP3 şehir-izole depolama; SHA-256(16), her güncellemede yenile -->
 <script>
 /* ASALOCAL TripStore (A2 veri katmanı) — A1 sözleşmesine göre, production'da doğrulandı */
 (function(global){
@@ -419,7 +420,11 @@ function renderDests(){
 async function saveTrip(navigate){
   const c=COUNTRIES.find(x=>x.code===sel.country);
   const trip={country:c?c.name:null,city:sel.city,duration:sel.duration,duration_days:sel.durationDays,start_date:sel.startDate,end_date:sel.endDate,approx_period:sel.approx,vacation_types:[...sel.types]};
-  try{ localStorage.setItem("asa_trip",JSON.stringify(trip)); }catch(e){}
+  // WP3 · Trip Policy A: seyahat yalnız kendi şehrinin anahtarına yazılır (Amsterdam → asa:ams:trip, Kopenhag → asa:cph:trip).
+  // Henüz açılmamış şehir (ör. Paris) hiçbir şehrin seyahatinin üstüne yazılmaz. Eski asa_trip'e yazılmaz ve silinmez.
+  // Amsterdam: yazmadan önce idempotent migrasyon/işaret (reconcile), böylece eski kayıt sessizce kaybolmaz.
+  // Kopenhag açılana kadar cph migrasyonu ÇALIŞTIRILMAZ (eski Amsterdam verisi asa:cph:*'a kopyalanmaz); yalnız seyahat yazılır.
+  try{ const S=window.AsaStorage, code=S?S.cityCodeFromLabel(sel.city):null; if(code){ if(code==="ams") S.reconcile(localStorage,code); S.set(localStorage,code,"trip",trip); } }catch(e){}
   if(!navigate) return;
   // A4: giriş yapılmış + kesin tarih varsa gerçek trips kaydı oluştur (mükerrer kontrollü)
   if(session && window.TripStore && sel.startDate && sel.endDate){
