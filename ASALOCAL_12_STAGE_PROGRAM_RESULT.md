@@ -12,7 +12,7 @@
 
 ```text
 Overall: PARTIAL_BLOCKED   (İş Paketi 1 başlamadan durduruldu; tek production değişikliği: Mete onaylı admin-api v18 deploy'u)
-Main final SHA: 7a548e979b7b72556622edc6a8d52391a5874b7e   (değişmedi; PR #12 merge commit'i)
+Main final SHA: 8acfb0ef81a35118e6802b221c2fe488b0e7e199   (PR #13 WP3 merge; önceki 7a548e9)
 Production URLs: https://www.asalocal.club  (/, /amsterdam/, /kopenhag/, /admin → 302 /CDP3B/admin.html)
                  — canlı girişsiz smoke GitHub Actions + Playwright ile: 50/50 PASS (bkz. §2.1)
 Production Edge versions (salt-okunur, değişmedi):
@@ -26,7 +26,7 @@ Migration ledger additions: sec_media_close_anon_write (2026-10-07, İP2 v2)
 
 Stage 01: PASS        — SEC_MEDIA_UPLOAD_ACCEPTANCE_PASS (canlı, QA run 37629590923): gerçek admin upload Edge yolu, 17/17 negatif, residue=0 (§5.4)
 Stage 02: PASS        — SEC_MEDIA_STORAGE_CLOSED: v2 (ALTER POLICY TO service_role, Mete onaylı) uygulandı; prod_assert 19/19, zero-footprint PASS, canlı HTTP 15/15, residue 0 (§5.5)
-Stage 03: NOT STARTED — sıra kuralı (PRD §4)
+Stage 03: PASS        — PR #13 merge 8acfb0e; Cloudflare preview 55/55 + production live 55/55 + live smoke PASS (§5.6)
 Stage 04: NOT STARTED — sıra kuralı
 Stage 05: NOT STARTED — sıra kuralı
 Stage 06: NOT STARTED — sıra kuralı
@@ -288,6 +288,21 @@ Girişsiz, yazmasız canlı smoke testi; sonuçlar §2.1'de. Her push'ta ya da e
 | Final | media obje 0 (**residue 0**); toplam 3 Edge upload, hepsi temizlendi; QA hesapları kilitlendi (`encrypted_password=''`) |
 
 Rollback: `S2_down_INSECURE.sql`. Bu dosya güvenliği gevşetir, arming GUC'u ister ve policy'leri `TO public`'e çevirir; içinde `DROP` yoktur.
+
+### 5.6 İş Paketi 3 — CANLI: city-scoped browser storage (2026-10-07)
+
+| Adım | Sonuç |
+|---|---|
+| Yerel | unit 78/78; Playwright e2e 454/0 (25 senaryo × masaüstü/390 px); UX trust PASS; mutasyon kontrolleri yakalandı |
+| Adversarial denetim | 2 tur. Bulunanlar:<br>• **gerçek veri kaybı yolu:** eski sekme ve stale reader nedeniyle takvim fotoğrafı kaybı<br>• quota > %50 kullanıcılarda foto eklenip silinememesi<br>• restore_failed durumunda yanıltıcı mesaj<br>Hepsi düzeltildi. |
+| PR | [#13](https://github.com/metebagci88/amsterdam/pull/13). CI: WP3 gates, CDP3C gates/edge, asa-storage ✅. Cloudflare Pages: ilk build GitHub'ın push'ta 500 verdiği anda başarısız oldu; bir sonraki gerçek commit'te ✅ |
+| Preview kabul | `https://wp3-storage-city-isolation.amsterdam-zhw.pages.dev` → [run 37651095011](https://github.com/metebagci88/amsterdam/actions/runs/37651095011) **55/55 PASS** |
+| Merge | normal merge commit `8acfb0e` (squash/rebase yok); rollback referansı: önceki main `7a548e9` |
+| Production | Cloudflare deploy ✅. [Live smoke run 37651483258](https://github.com/metebagci88/amsterdam/actions/runs/37651483258):<br>• sayfalar canlı = main (SHA eşit)<br>• redirect + admin-api kontrolleri PASS<br>• 4 sayfa × 2 viewport console error 0<br>• **WP3 live 55/55 PASS**: migrasyon bayt bayt, legacy korunur, reload idempotent, çakışma ve yanlış şehir bildirimi, Kopenhag izolasyonu |
+
+Açık ürün kararı (owner delegasyonuyla verildi):
+- `plan_prefs` için seçenek (c) korundu: kütüphane sözleşmesi değişmedi, kullanıcıya "Amsterdam planına aktar" seçeneği sunuluyor.
+- `ams_calphoto` yalnız kota hatasında, yazma anında ve bu sekmenin okuduğu baytlar aynıysa güvenli taşıma ile emekliye ayrılıyor.
 
 ## 6. Yeniden başlamak için gereken tek karar
 
