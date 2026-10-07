@@ -52,15 +52,17 @@ jobs:
           range="HEAD~1 HEAD"
           if [ -n "${EV_BEFORE:-}" ] && ! [[ "$EV_BEFORE" =~ ^0+$ ]] && git cat-file -e "$EV_BEFORE" 2>/dev/null; then range="$EV_BEFORE $EV_AFTER"; fi
           req="$(git diff --name-only $range -- qa_signals/request/ | tail -1 || true)"
-          phases="s1,s2"; url="https://www.asalocal.club"
+          phases="s1,s2"; url="https://www.asalocal.club"; xfail=""
           if [ -n "$req" ] && [ -f "$req" ]; then
+            xfail="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.wp6_xfail||""))' "$req")"
             phases="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.phases||"s1,s2"))' "$req")"
             url="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.url||"https://www.asalocal.club"))' "$req")"
           fi
           case "$phases" in *[!a-z0-9,]*) echo "bad phases"; exit 2;; esac
           case "$url" in https://www.asalocal.club|https://*.amsterdam-zhw.pages.dev) ;; *) echo "refusing url: $url"; exit 2;; esac
-          { echo "QA_PHASES=,$phases,"; echo "ASALOCAL_BASE_URL=$url"; } >> "$GITHUB_ENV"
-          echo "request=$req phases=$phases url=$url"
+          case "$xfail" in *[!A-Za-z0-9/_,.-]*) echo "bad wp6_xfail"; exit 2;; esac
+          { echo "QA_PHASES=,$phases,"; echo "ASALOCAL_BASE_URL=$url"; echo "QA_WP6_XFAIL=$xfail"; } >> "$GITHUB_ENV"
+          echo "request=$req phases=$phases url=$url wp6_xfail=${xfail:-none}"
       - name: Generate passwords in-runner, publish bcrypt hashes only
         run: node LIVE_CHECKS/qa/qa_runner.mjs gen
       - name: Wait for operator to install hashes (login poll)
@@ -129,6 +131,17 @@ jobs:
       - name: Publish WP4 result
         if: contains(env.QA_PHASES, ',wp4,')
         run: node LIVE_CHECKS/qa/qa_runner.mjs signal wp4 "$S1_OUT_DIR/exit_wp4.json" "$S1_OUT_DIR/wp4_live_result.json"
+      - name: "WP6: end-to-end acceptance (anon + QA member, controlled writes undone in-run)"
+        if: contains(env.QA_PHASES, ',wp6,')
+        env:
+          WP6_XFAIL: ${{ env.QA_WP6_XFAIL }}
+        run: |
+          set +e -uo pipefail
+          node LIVE_CHECKS/qa/wp6_live.mjs; e=$?
+          echo "{\"wp6_live\":$e}" > "$S1_OUT_DIR/exit_wp6.json"; cat "$S1_OUT_DIR/exit_wp6.json"
+      - name: Publish WP6 result
+        if: contains(env.QA_PHASES, ',wp6,')
+        run: node LIVE_CHECKS/qa/qa_runner.mjs signal wp6 "$S1_OUT_DIR/exit_wp6.json" "$S1_OUT_DIR/wp6_live_result.json"
       - name: Secret scan of outputs
         if: always()
         run: |

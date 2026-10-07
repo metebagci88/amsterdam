@@ -8,7 +8,8 @@
 //   fonts.googleapis Material Symbols -> CSS emulating the icon font's 1em glyph boxes (no fake overflow)
 //   images / fonts / css / other   -> empty
 // Env: DRY_ROOT (served checkout, origin/main), DRY_STUB_DIR (this dir), ASALOCAL_BASE_URL (http://127.0.0.1:<port>),
-//      PW_REAL (real playwright, default /opt/node-tools/node_modules/playwright), DRY_STATE_OUT (optional: dump final store).
+//      PW_REAL (real playwright, default /opt/node-tools/node_modules/playwright), DRY_STATE_OUT (optional: dump final store),
+//      DRY_FAULTS (optional: "DELETE:favorites,rpc:trip_save,..." -> HTTP 500, to exercise the cleanup reporting).
 // Never reaches the network: anything not listed above is fulfilled locally (204/empty).
 "use strict";
 const fs = require("fs");
@@ -138,7 +139,11 @@ function rpc(name, a, uid, email) {
     default: return { status: 404, error: { message: `Could not find the function public.${name}`, code: "PGRST202" } };
   }
 }
+// fault injection for exercising wp6_live.mjs's undo/cleanup reporting: DRY_FAULTS="DELETE:favorites,rpc:trip_save,..."
+const FAULTS = new Set(String(process.env.DRY_FAULTS || "").split(",").map((x) => x.trim()).filter(Boolean));
 function backend(u, method, headers, bodyText) {
+  { const p0 = u.pathname; const key = p0.startsWith("/rest/v1/rpc/") ? `rpc:${p0.slice(13)}` : p0.startsWith("/rest/v1/") ? `${method}:${p0.slice(9)}` : null;
+    if (key && FAULTS.has(key)) { DB.calls.push(`500 ${p0} (injected)`); return { status: 500, json: { error: { message: "dry-run injected fault" } } }; } }
   let body = {}; try { body = JSON.parse(bodyText || "{}") || {}; } catch {}
   if (method === "GET") { try { body = JSON.parse(u.searchParams.get("wp6q") || "{}"); } catch { body = {}; } }
   const auth = String(headers.authorization || "");

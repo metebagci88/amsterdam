@@ -29,6 +29,9 @@
 // Side effects that are normal site behaviour (not undone): member_upsert_profile on login, log_city_view events,
 // service_pref_set audit rows for the round trip, Supabase sessions (closed by the UI logout).
 // Anything that could not be undone is listed in result.cleanup (ids + owner label only, never e-mails).
+// Console check = JS errors (console.error + uncaught); "Failed to load resource" lines are covered by the network checks.
+// Env: WP6_XFAIL="<id>,<id>" marks operator-acknowledged product defects as XFAIL (shown, not counted in the verdict);
+//      WP6_TIME_LIMIT_MS (default 30 min hard limit; pending writes are then listed in cleanup).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -73,8 +76,11 @@ function scrub(v) {
     .replace(/\bstack\b/gi, "stk").replace(/\bat(\s+\S+\s+)\(/g, "at$1[")
     .replace(/\s+/g, " ").trim();
 }
+// WP6_XFAIL="<check id>,<check id>": operator-acknowledged product defects -> "XFAIL" (listed, not counted in the verdict)
+const XFAIL = new Set(String(process.env.WP6_XFAIL || "").split(",").map((x) => x.trim()).filter(Boolean));
 function rec(id, ok, detail = "") {
-  const result = ok === null ? "SKIP" : ok === "INFO" ? "INFO" : ok ? "PASS" : "FAIL";
+  let result = ok === null ? "SKIP" : ok === "INFO" ? "INFO" : ok ? "PASS" : "FAIL";
+  if (result === "FAIL" && XFAIL.has(id)) result = "XFAIL";
   checks.push({ id, result, detail: scrub(detail).slice(0, 200) });
   return ok === true;
 }
@@ -647,7 +653,6 @@ async function memberReadOnly(vp) {
       const cp = await page.evaluate(() => ({ rows: document.querySelectorAll("#asaPrefsBody button[data-prefkey]").length, err: (document.getElementById("asaPrefsErr")?.textContent || "").trim(), failed: /yüklenemedi/.test(document.getElementById("asaPrefsBody")?.textContent || "") }));
       rec(`${P}/city-member-area-prefs`, cp.rows > 0 && !cp.err && !cp.failed, JSON.stringify(cp));
       await recOverflow(`tech/no-horizontal-overflow/${w}/member-amsterdam-member`, page, w);
-      noWrites(`${P}/no-writes-in-read-only-part`, [mon]);
     });
     if (loggedIn) await step(`${P}/logout`, async () => {
       await gotoHome(page, { member: true });
@@ -655,7 +660,7 @@ async function memberReadOnly(vp) {
       loggedIn = false;
       rec(`${P}/logout`, /Giriş yap/.test(o.label || "") && o.asaSession === null && o.sbKeys === 0 && o.focus === "acctBtn", JSON.stringify(o));
     });
-  } finally { techChecks(P, [mon]); await closeCtx(ctx); }
+  } finally { noWrites(`${P}/no-writes-in-read-only-part`, [mon]); techChecks(P, [mon]); await closeCtx(ctx); }
 }
 
 // ================================================================================================ WRITES + ISOLATION + PERSISTENCE
@@ -664,7 +669,6 @@ async function writeScenario() {
   const S = await newCtx("d1366", { preseedFav: true });
   const w = await openPage(W), s = await openPage(S);
   const wp = w.page, sp = s.page;
-  const mons = [w.mon, s.mon];
   let memberTrip = null, secondTrip = null, X = null, Y = null, wIn = false, sIn = false;
   try {
     // ---------------- baselines + leftovers from aborted runs
@@ -696,7 +700,7 @@ async function writeScenario() {
     if (!ok0) return;
 
     // ---------------- favourite add -> reload -> present (device + server)
-    const favAdded = await step("write/fav-add", async () => {
+    await step("write/fav-add", async () => {
       await heart(wp, X);
       pending.favs.push({ owner: "member", venue: X });
       await wp.waitForFunction((v) => isFav(v), X, { timeout: T.short });
@@ -707,7 +711,6 @@ async function writeScenario() {
       await view(wp, "list");
       const st2 = await favState(wp, X);
       rec("write/fav/present-after-reload", st2.mem && st2.local && st2.icon === "favorite" && (await cloudHas(wp, X)) === true, JSON.stringify(st2));
-      return true;
     });
 
     // ---------------- trip create via the home search form -> trip page -> reopen from the trips list
@@ -823,9 +826,10 @@ async function writeScenario() {
         const a = await archiveTripUI(sp, secondTrip);
         const db = await read(sp, "trips", "id,archived_at", [["eq", "id", Number(secondTrip)]]);
         const archived = !db.error && (db.rows.length === 0 || !!db.rows[0].archived_at);
-        rec("iso/second-trip-archived-via-ui", a.ok && archived, `${a.okTxt || a.err || a.why} ${db.error ? db.error : db.rows.length ? "archived_at set" : "row no longer readable"}`);
+        rec("iso/second-trip-archived-via-ui", a.ok && archived, `${a.okTxt || a.err || a.why} ${db.error ? db.error : db.rows.length ? (db.rows[0].archived_at ? "archived_at set" : "archived_at NULL") : "row no longer readable"}`);
         if (a.ok && archived) { drop(pending.trips, (t) => t.owner === "second"); cleanup.push({ table: "trips", id: Number(secondTrip), owner: ACC.second.label, state: "archived_by_ui", note: "row kept with archived_at; optional hard delete" }); }
       }
+      await sweepQaTrips(sp, "second", "iso");
       await gotoAms(sp, { member: true });
       await view(sp, "member");
       await press(sp, "#asaLogout");
@@ -875,6 +879,7 @@ async function writeScenario() {
     techChecks("write-member", [w.mon]);
     techChecks("write-second", [s.mon]);
     if (sIn) await step("iso/second-logout-fallback", async () => { await gotoHome(sp); if (await sp.evaluate(memberLabel)) await logoutHome(sp); });
+    if (wIn) await step("write/member-logout-fallback", async () => { await gotoHome(wp); if (await wp.evaluate(memberLabel)) await logoutHome(wp); });
     await closeCtx(S);
     await closeCtx(W);
   }
@@ -929,9 +934,29 @@ async function persistAndUndo() {
   } finally { techChecks("persist-undo", [mon]); await closeCtx(ctx); }
 }
 
+// Safety sweep: any still-active trip of this owner starting in 2099 (the QA marker) is archived through the UI —
+// catches a trip whose id was lost (e.g. a timeout right after "Keşfet") and leftovers of aborted runs.
+async function sweepQaTrips(page, owner, prefix = "cleanup") {
+  const lab = owner === "member" ? ACC.member.label : ACC.second.label;
+  const id0 = `${prefix}/${owner}-qa-trip-sweep`;
+  await step(id0, async () => {
+    await gotoHome(page, { member: true });
+    const r = await read(page, "trips", "id,start_date,archived_at,user_id", [["is", "archived_at", null]]);
+    if (r.error) { rec(id0, false, r.error); return; }
+    const ids = r.rows.filter((t) => String(t.start_date || "").startsWith(QA_YEAR)).map((t) => String(t.id));
+    const left = [];
+    for (const id of ids) {
+      const a = await archiveTripUI(page, id);
+      drop(pending.trips, (x) => x.owner === owner && String(x.id) === id);
+      if (a.ok) cleanup.push({ table: "trips", id: Number(id), owner: lab, state: "archived_by_ui", note: "QA trip found by the 2099 sweep; row kept with archived_at" });
+      else { left.push(id); pending.trips.push({ owner, id }); }
+    }
+    rec(id0, left.length === 0, ids.length ? `archived ${ids.length - left.length}/${ids.length}: ${ids.join(",")}` : "no active 2099 trips");
+  });
+}
+
 // Undo every pending write of one owner through the UI (plan clear -> favourite remove -> trip archive -> pref restore).
-async function undoAll(page, owner) {
-  const P = owner === "member" ? "undo" : `undo-${owner}`;
+async function undoAll(page, owner, P = owner === "member" ? "undo" : `undo-${owner}`) {
   for (const pl of pending.plans.filter((x) => x.owner === owner)) await step(`${P}/plan`, async () => {
     await gotoAms(page, { qs: `&trip=${pl.trip}`, member: true });
     await page.waitForFunction((id) => window.TRIP && String(window.TRIP.id) === String(id), pl.trip, { timeout: T.app });
@@ -958,9 +983,10 @@ async function undoAll(page, owner) {
     const a = await archiveTripUI(page, t.id);
     const db = await read(page, "trips", "id,archived_at", [["eq", "id", Number(t.id)]]);
     const archived = !db.error && (db.rows.length === 0 || !!db.rows[0].archived_at);
-    rec(`${P}/trip-archived-via-arsivle`, a.ok && archived, `${a.okTxt || a.err || a.why} ${db.error ? db.error : db.rows.length ? "archived_at set" : "row no longer readable"}`);
+    rec(`${P}/trip-archived-via-arsivle`, a.ok && archived, `${a.okTxt || a.err || a.why} ${db.error ? db.error : db.rows.length ? (db.rows[0].archived_at ? "archived_at set" : "archived_at NULL") : "row no longer readable"}`);
     if (a.ok && archived) { drop(pending.trips, (x) => x === t); cleanup.push({ table: "trips", id: Number(t.id), owner: owner === "member" ? ACC.member.label : ACC.second.label, state: "archived_by_ui", note: "row kept with archived_at; optional hard delete (with its trip_plan_versions)" }); }
   });
+  await sweepQaTrips(page, owner, P);
   if (owner === "member") for (const p of [...pending.prefs]) await step(`${P}/pref`, async () => {
     await gotoHome(page, { member: true });
     let st = await openPrefs(page);
@@ -983,11 +1009,10 @@ async function finalCleanup() {
     let ctx = null;
     try {
       ctx = await newCtx("d1366", { preseedFav: true });
-      const { page, mon } = await openPage(ctx);
+      const { page } = await openPage(ctx);
       await loginHome(page, ACC[owner]);
-      await undoAll(page, owner);
-      await step(`cleanup/${owner}-logout`, async () => { await gotoHome(page, { member: true }); await logoutHome(page); });
-      void mon;
+      await undoAll(page, owner, `cleanup-retry/${owner}`);
+      await step(`cleanup-retry/${owner}/logout`, async () => { await gotoHome(page, { member: true }); await logoutHome(page); });
     } catch (e) { rec(`cleanup/${owner}: retry failed`, false, errMsg(e)); }
     finally { await closeCtx(ctx); }
   }
@@ -1009,14 +1034,15 @@ function finish(code) {
   const fail = checks.filter((c) => c.result === "FAIL").length;
   const pass = checks.filter((c) => c.result === "PASS").length;
   const skip = checks.filter((c) => c.result === "SKIP").length;
-  const res = { base: BASE, verdict: fail || !pass ? "FAIL" : "PASS", pass, fail, skip, checks, cleanup, side_effects: [...sideEffects] };
+  const xfail = checks.filter((c) => c.result === "XFAIL").length;
+  const res = { base: BASE, verdict: fail || !pass ? "FAIL" : "PASS", pass, fail, skip, xfail, checks, cleanup, side_effects: [...sideEffects] };
   let body = JSON.stringify(res, null, 2);
   if (/eyJ[A-Za-z0-9_-]{10,}\.|\bat\s+\S+\s+\(|file:\/\/|ReferenceError|TypeError|service_role/i.test(body) || MASK.some((m) => body.includes(m))) {
     try { body = JSON.stringify(JSON.parse(scrub(body)), null, 2); } catch { body = JSON.stringify({ base: BASE, verdict: "FAIL", pass, fail: fail + 1, skip, checks: [{ id: "run: result scrub", result: "FAIL", detail: "result contained token/stack-like text; details dropped" }], cleanup }, null, 2); }
   }
   writeFileSync(OUT_FILE, body + "\n");
-  console.log("WP6_LIVE_SUMMARY " + JSON.stringify({ base: BASE, total: checks.length, pass, fail, skip, cleanup: cleanup.length, verdict: res.verdict }));
-  for (const c of checks) console.log(`${c.result.padEnd(4)} ${c.id} :: ${c.detail}`);
+  console.log("WP6_LIVE_SUMMARY " + JSON.stringify({ base: BASE, total: checks.length, pass, fail, skip, xfail, cleanup: cleanup.length, verdict: res.verdict }));
+  for (const c of checks) console.log(`${c.result.padEnd(5)} ${c.id} :: ${c.detail}`);
   for (const c of cleanup) console.log(`CLEANUP ${JSON.stringify(c)}`);
   process.exit(code != null ? code : fail || !pass ? 1 : 0);
 }
@@ -1024,6 +1050,7 @@ const hard = setTimeout(async () => {
   rec("run: global time limit reached", false, `${HARD_LIMIT_MS} ms`);
   const lab = (o) => (o === "member" ? "qa_member" : "qa_admin_as_member");
   for (const t of pending.trips) cleanup.push({ table: "trips", id: Number(t.id), owner: lab(t.owner), state: "active_not_undone" });
+  for (const p of pending.plans) cleanup.push({ table: "trips", id: Number(p.trip), owner: lab(p.owner), state: "plan_not_cleared" });
   for (const f of pending.favs) cleanup.push({ table: "favorites", venue_id: f.venue, owner: lab(f.owner), state: "not_removed" });
   for (const p of pending.prefs) cleanup.push({ table: "service_prefs", key: p.key, owner: "qa_member", state: "not_restored", start_state: p.start });
   finish(1);
