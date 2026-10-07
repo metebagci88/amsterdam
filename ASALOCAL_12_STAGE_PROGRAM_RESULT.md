@@ -200,7 +200,38 @@ Not: Her iki dosyanın başlık yorumunda hâlâ "NOT deployed" yazıyor (`index
 
 ## 5. Hazırlanan paketler (production'a dokunmaz)
 
-_(bölüm aşağıda doldurulacak)_
+PRD §4 gereği yalnız **hazırlık** yapıldı. Hiçbiri production'a uygulanmadı ve `main`'e merge edilmedi. Hepsi branch `cdp3b-asset-preview-2y4qmd` üzerinde.
+
+### 5.1 İş Paketi 1 — `SEC_MEDIA_package/stage1/` (commit `aae20bb`)
+
+| Bileşen | Açıklama |
+|---|---|
+| `S1_ACCEPTANCE.md` | Türkçe runbook. S1-00…S1-12 adımları; PRD İP1'deki her adım, negatif test ve kabul kriteri bir check ID'sine eşlenmiş. S1-00 baseline'ı: admin-api v18 + iki dosya hash'i. S1-00b: girişli runtime kontrolü (`counts` 200, OPTIONS 200, yazma 0). |
+| `gates/s1_admin_upload_acceptance.mjs` | Gerçek `/admin` UI'ında Playwright ile tek seferlik upload (`S1_CONFIRM_UPLOAD=YES` şart). Doğruladıkları: multipart, tarayıcının ürettiği boundary, Bearer var ama değeri hiçbir çıktıya yazılmıyor, form alanları yalnız `action`/`prefix`/`file`, `public_url` HTTPS + `media` bucket + `venues/<uuid>`, public URL 200 `image/png` + bayt eşit, doğrudan Storage yazımı 0. Ön kontrol FAIL olursa upload yapılmaz. Kanıt dosyası create-only; ikinci koşu durdurulur. |
+| `gates/s1_negative.mjs` | 17 negatif test, hiçbiri obje oluşturmaz: auth yok / anon → 401; normal üye → 403; izinsiz prefix → 400; JSON → 415; 7 bozuk multipart → 4xx. Her yanıt stack/secret taramasından geçer. Üye hesabı yoksa sonuç `INCOMPLETE` olur, PASS değil. |
+| `gates/s1_snapshot.sql` + `s1_snapshot_diff.mjs` | Salt-okunur PRE / MID0 / MID / POST snapshot karşılaştırması: obje sayısı, policy md5, rate token, residue=0. |
+| Temizlik tasarımı | Test objesi Supabase Dashboard → Storage üzerinden Mete tarafından silinir. SQL ile silme `protect_objects_delete` trigger'ı nedeniyle mümkün değil ve dosyayı yetim bırakır; açık anon DELETE policy'sini kullanmak yasak client fallback olur. |
+| Doğrulama | Yerel: `S1_OFFLINE_GATE_PASS` (selftest 58/27/13, rehearsal 25/25 senaryo, secret scan temiz). CI: [run 37620936386](https://github.com/metebagci88/amsterdam/actions/runs/37620936386) **success**. |
+| Canlı koşu | **YAPILMADI**: admin ve üye test hesabı yok (B2). |
+
+### 5.2 İş Paketi 2 — `SEC_MEDIA_package/stage2/` (commit `aae20bb`)
+
+| Bileşen | Açıklama |
+|---|---|
+| `S2_up.sql` | Yalnız `"media anon insert"`, `"media anon update"`, `"media anon delete"` policy'lerini kaldırır (`DROP POLICY IF EXISTS`). PRE guard: baseline'dan herhangi bir sapmada hiçbir şeyi değiştirmeden durur. POST guard: storage.objects'te yalnız `"media anon read"` kalmalı, public/anon/authenticated için yazma policy'si 0 olmalı, RLS açık kalmalı, bucket bayrakları değişmemeli. `lock_timeout` 5s; dış BEGIN/COMMIT yok, `apply_migration` ile atomik. |
+| `S2_down_INSECURE.sql` | Üç policy'yi orijinal tanımlarıyla geri kurar. **Güvenliği gevşettiği için** ayrı bir transaction ayarı olmadan çalışmayı reddeder. |
+| `gates/s2_pre_assert.sql`, `s2_prod_assert.sql` | Salt-okunur PRE/POST matrisi. Satır 20: storage.objects dışındaki 25 policy'nin md5'i. Satır 21: tüm bucket öznitelikleri. Böylece "diğer bucket/policy'ler değişmedi" kriteri kanıtlanır. Production PRE: `S2_PRE_ASSERT_PASS`. |
+| `gates/s2_zero_footprint_test.sql` | Apply sonrası production'da çalışacak test. anon/authenticated INSERT 42501, UPDATE/DELETE 0 satır, SELECT izinli. Kendi içinde `RAISE` ile geri alınır, kalıntı bırakmaz. |
+| Yerel doğrulama | PGlite PG17: **201/0**. psql PG16: 30/0. Client direct-write taraması temiz: canlı kodda anon yazma policy'sine dayanan yol yok. |
+| CI (gerçek Supabase storage şeması, CLI 2.118.0 → storage-api v1.77.0, `storage.migrations` md5 = production) | [run 37620936407](https://github.com/metebagci88/amsterdam/actions/runs/37620936407) **39/0 PASS**:<br>• up sonrası anon upload/PUT/upsert/delete/move/copy reddediliyor<br>• service_role upload + public URL çalışıyor<br>• up iki kez idempotent<br>• down gerçekten geri açıyor, re-up yeniden kapatıyor<br>• residue 0, teardown 0 container/volume<br>• log secret taraması temiz |
+| Production apply | **YAPILMADI**: önkoşul İP1 PASS (B2). |
+
+Denetim: Her paket ayrı bir ajan tarafından adversarial olarak denetlendi. Toplam 8 "major" bulgu çıktı ve hepsi düzeltildi. Örnekler: başarısız ön kontrolden sonra upload yapılabilmesi, kanıt dosyasının üzerine yazılabilmesi, CI'da `latest` CLI kullanılması, diğer policy/bucket'lar için kanıt eksikliği.
+
+### 5.3 Canlı kontrol aracı — `LIVE_CHECKS/` (commit `ce8202e`)
+
+Girişsiz, yazmasız canlı smoke testi; sonuçlar §2.1'de. Her push'ta ya da elle tetiklenerek yeniden çalıştırılabilir.
+
 
 ---
 
