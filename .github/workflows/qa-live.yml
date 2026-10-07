@@ -1,0 +1,100 @@
+name: QA live (dedicated test accounts, hash handshake)
+
+# Canlı admin/üye kabul testleri — ADANMIŞ, ETİKETLİ test hesaplarıyla.
+# Parola yalnız bu runner'ın belleğinde/RUNNER_TEMP'te rastgele üretilir ve maskelenir;
+# dışarı yalnız bcrypt özeti çıkar (qa_signals/<run>/hashes.json). Operatör özeti Supabase'de
+# test hesabına yazar; runner giriş yapabildiğinde testleri koşar. Adımlar arasında operatör
+# snapshot alır ve qa_signals/<run>/go_<adım> ile devam izni verir (abort ile durdurur).
+# Tetik: qa_signals/request/** altına bir istek dosyası push edilmesi. Kimlik bilgisi/secret
+# kullanılmaz; ücretli kaynak yok.
+on:
+  push:
+    branches: [cdp3b-asset-preview-2y4qmd]
+    paths: ["qa_signals/request/**"]
+permissions:
+  contents: write
+concurrency:
+  group: qa-live
+  cancel-in-progress: false
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    env:
+      ASALOCAL_BASE_URL: https://www.asalocal.club
+      ASALOCAL_ADMIN_EMAIL: asalocal-qa-admin@example.com
+      ASALOCAL_MEMBER_EMAIL: asalocal-qa-member@example.com
+      QA_BRANCH: cdp3b-asset-preview-2y4qmd
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cdp3b-asset-preview-2y4qmd
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dependencies (pinned)
+        run: |
+          set -euo pipefail
+          { echo "QA_DEPS=$RUNNER_TEMP/qadeps"; echo "S1_OUT_DIR=$RUNNER_TEMP/s1out"; echo "S1_NODE_MODULES=$RUNNER_TEMP/qadeps/node_modules"; } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/qadeps" "$RUNNER_TEMP/s1out"
+          cd "$RUNNER_TEMP/qadeps"
+          npm init -y >/dev/null
+          npm i --no-audit --no-fund bcryptjs@2.4.3 playwright@1.56.1 @supabase/supabase-js@2.117.2 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Selftest
+        run: node LIVE_CHECKS/qa/qa_runner.mjs selftest
+      - name: Generate passwords in-runner, publish bcrypt hashes only
+        run: node LIVE_CHECKS/qa/qa_runner.mjs gen
+      - name: Wait for operator to install hashes (login poll)
+        run: node LIVE_CHECKS/qa/qa_runner.mjs wait-login
+      - name: "S1: preflight + runtime + negative tests (no upload)"
+        run: |
+          set -uo pipefail
+          set -a; . "$RUNNER_TEMP/qa_secrets.env"; set +a
+          cd SEC_MEDIA_package/stage1
+          node gates/s1_admin_upload_acceptance.mjs --preflight; e1=$?
+          node gates/s1_admin_upload_acceptance.mjs --runtime;   e2=$?
+          node gates/s1_negative.mjs;                            e3=$?
+          echo "{\"preflight\":$e1,\"runtime\":$e2,\"negative\":$e3}" > "$S1_OUT_DIR/exit_a.json"
+          cat "$S1_OUT_DIR/exit_a.json"
+      - name: Publish step A results
+        run: node LIVE_CHECKS/qa/qa_runner.mjs signal tests_a "$S1_OUT_DIR/exit_a.json" "$S1_OUT_DIR/s1_preflight_result.json" "$S1_OUT_DIR/s1_runtime_result.json" "$S1_OUT_DIR/s1_negative_result.json"
+      - name: Wait for operator (MID0 snapshot) -> go_upload
+        run: node LIVE_CHECKS/qa/qa_runner.mjs wait upload
+      - name: "S1: the single real admin upload"
+        run: |
+          set -uo pipefail
+          set -a; . "$RUNNER_TEMP/qa_secrets.env"; set +a
+          cd SEC_MEDIA_package/stage1
+          S1_CONFIRM_UPLOAD=YES node gates/s1_admin_upload_acceptance.mjs; e=$?
+          echo "{\"upload\":$e}" > "$S1_OUT_DIR/exit_b.json"; cat "$S1_OUT_DIR/exit_b.json"
+      - name: Publish upload result
+        run: node LIVE_CHECKS/qa/qa_runner.mjs signal uploaded "$S1_OUT_DIR/exit_b.json" "$S1_OUT_DIR/s1_upload_result.json"
+      - name: Wait for operator (MID snapshot) -> go_cleanup
+        run: node LIVE_CHECKS/qa/qa_runner.mjs wait cleanup
+      - name: "S1: cleanup via temporary qa-media-cleanup + verify gone"
+        run: |
+          set -uo pipefail
+          set -a; . "$RUNNER_TEMP/qa_secrets.env"; set +a
+          node LIVE_CHECKS/qa/qa_runner.mjs cleanup "$S1_OUT_DIR/s1_object_ref.local.json"; e1=$?
+          (cd SEC_MEDIA_package/stage1 && node gates/s1_admin_upload_acceptance.mjs --verify-gone); e2=$?
+          echo "{\"cleanup\":$e1,\"verify_gone\":$e2}" > "$S1_OUT_DIR/exit_c.json"; cat "$S1_OUT_DIR/exit_c.json"
+      - name: Publish cleanup result
+        run: node LIVE_CHECKS/qa/qa_runner.mjs signal cleaned "$S1_OUT_DIR/exit_c.json" "$S1_OUT_DIR/qa_cleanup_result.json" "$S1_OUT_DIR/s1_verify_gone_result.json"
+      - name: Wait for operator (POST snapshot + Stage 2 apply) -> go_s2
+        run: node LIVE_CHECKS/qa/qa_runner.mjs wait s2
+      - name: "S2: production HTTP acceptance"
+        run: |
+          set -uo pipefail
+          set -a; . "$RUNNER_TEMP/qa_secrets.env"; set +a
+          node LIVE_CHECKS/qa/qa_runner.mjs s2-http; e=$?
+          echo "{\"s2_http\":$e}" > "$S1_OUT_DIR/exit_d.json"; cat "$S1_OUT_DIR/exit_d.json"
+      - name: Publish S2 result
+        run: node LIVE_CHECKS/qa/qa_runner.mjs signal s2 "$S1_OUT_DIR/exit_d.json" "$S1_OUT_DIR/s2_http_result.json"
+      - name: Secret scan of outputs
+        if: always()
+        run: |
+          set -uo pipefail
+          rm -f "$RUNNER_TEMP/qa_secrets.env"
+          bash CDP3C_package/gates/secret_scan.sh "$S1_OUT_DIR" qa_signals || exit 1

@@ -12,6 +12,7 @@
 
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 const BASE = (process.env.ASALOCAL_BASE_URL || "https://www.asalocal.club").replace(/\/+$/, "");
 const ORIGIN = "https://www.asalocal.club";
@@ -35,6 +36,12 @@ const REDIRECTS = [
   { path: "/copenhagen", to: "/kopenhag/" },
   { path: "/kopenhag.html", to: "/kopenhag/" },
 ];
+
+// Production serves origin/main; compare against that, not the (possibly ahead) branch tree.
+function deployedRef(file) {
+  try { return execFileSync("git", ["show", `origin/main:${file}`], { maxBuffer: 64 << 20 }); }
+  catch { return readFileSync(file); }
+}
 
 export function maskKey(s) {
   return typeof s === "string" && s.length > 16 ? `${s.slice(0, 6)}…(${s.length})` : "(none)";
@@ -61,7 +68,7 @@ async function checkPages() {
     const r = await fetch(BASE + p.path + `?cb=${Date.now()}`, { redirect: "follow", headers: { "cache-control": "no-cache" } });
     const buf = Buffer.from(await r.arrayBuffer());
     const live = sha(buf);
-    const repo = sha(readFileSync(p.file));
+    const repo = sha(deployedRef(p.file));
     rec(`page${p.path}:status`, r.status === 200, `http=${r.status} final=${new URL(r.url).pathname}`);
     rec(`page${p.path}:sha256`, live === repo, `live=${live.slice(0, 16)} repo=${repo.slice(0, 16)} bytes=${buf.length}`);
     const title = (buf.toString("utf8").match(/<title>([^<]*)<\/title>/) || [])[1] || "";
