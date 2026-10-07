@@ -1,0 +1,38 @@
+name: Preview check (Cloudflare Pages preview, anonymous)
+
+# PRD "preview kabul": bir PR'ın Cloudflare Pages önizlemesine karşı, merge'den ÖNCE,
+# girişsiz ve sunucuya yazmasız WP3 depolama kontrollerini gerçek Chromium ile koşar.
+# Tetik: qa_signals/preview/*.json (alan: url, yalnız https://*.amsterdam-zhw.pages.dev).
+on:
+  push:
+    branches: [cdp3b-asset-preview-2y4qmd]
+    paths: ["qa_signals/preview/**"]
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Target URL from the triggering request
+        run: |
+          set -euo pipefail
+          req="$(git diff --name-only HEAD~1 HEAD -- qa_signals/preview/ | tail -1)"
+          url="$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).url||""))' "$req")"
+          case "$url" in https://*.amsterdam-zhw.pages.dev) ;; *) echo "refusing url: $url"; exit 2;; esac
+          echo "ASALOCAL_BASE_URL=$url" >> "$GITHUB_ENV"; echo "target=$url"
+      - name: Install Playwright Chromium
+        run: |
+          set -euo pipefail
+          npm i --no-save --no-audit --no-fund playwright@1.48.2 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: WP3 storage checks against the preview
+        env:
+          WP3_FORCE: "1"
+        run: node LIVE_CHECKS/wp3_live.mjs

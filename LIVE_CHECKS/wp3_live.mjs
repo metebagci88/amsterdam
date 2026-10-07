@@ -29,7 +29,7 @@ const LEGACY = {
 const MAP = { ams_fav: "fav", ams_cal: "cal", ams_plan: "plan", ams_dayven: "dayven", asa_trip: "trip" };
 
 async function run() {
-  const ships = mainShipsWp3();
+  const ships = process.env.WP3_FORCE === "1" ? true : mainShipsWp3();
   if (ships !== true) {
     rec("wp3 shipped on origin/main", null, ships === null ? "origin/main not available" : "main does not load asa_storage.js yet");
     return finish();
