@@ -410,6 +410,28 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 .asa-sn{background:#fff7e6;border:1px solid #e6c98a;color:var(--ink);border-radius:12px;padding:12px 14px;margin:10px 0 12px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
 .asa-sn p{margin:6px 0 0}
 .asa-sn-btn{margin-top:10px;min-height:40px;padding:8px 16px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font-weight:600;cursor:pointer}
+/* WP5 · ad/soyad: profil tamamlama çağrısı + Kart'taki alanlar (Tailwind'e bağlı değil) */
+.asa-np{background:var(--card);border:1px solid var(--line2);border-radius:12px;padding:14px;margin:10px 0 14px;overflow-wrap:anywhere}
+.asa-np-t{font-family:"Fraunces",Georgia,serif;font-size:17px;font-weight:600;line-height:1.35;color:var(--accent2);margin:0}
+.asa-np-d{font-size:13px;color:var(--ink2);line-height:1.5;margin:4px 0 10px}
+.asa-np-done{font-size:13.5px;color:var(--accent2);margin:0;overflow-wrap:anywhere}
+.asa-np-done:not(:empty){margin:10px 0 12px}
+.asa-nf-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+@media (min-width:640px){.asa-nf-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.asa-nf-field{min-width:0}
+.asa-nf-lbl{display:block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);margin-bottom:4px}
+.asa-nf-in{display:block;width:100%;max-width:100%;box-sizing:border-box;min-height:44px;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;font:inherit;font-size:16px;background:var(--card);color:var(--ink)}
+.asa-nf-in:focus{outline:2px solid var(--accent2);outline-offset:1px}
+.asa-nf-in[aria-invalid="true"]{border-color:var(--accent)}
+.asa-nf-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.asa-nf-btn,.asa-nf-btn2{min-height:44px;padding:10px 20px;border-radius:999px;font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+.asa-nf-btn{border:0;background:var(--accent2);color:#fff}
+.asa-nf-btn2{border:1px solid var(--line2);background:var(--card);color:var(--ink)}
+.asa-nf-btn[aria-disabled="true"],.asa-nf-btn2[aria-disabled="true"]{opacity:.55;cursor:default}
+.asa-nf-err,.asa-nf-ok{font-size:13px;line-height:1.45;margin:8px 0 0;overflow-wrap:anywhere}
+.asa-nf-err{color:var(--accent)}
+.asa-nf-ok{color:var(--accent2)}
+.asa-nf-err:empty,.asa-nf-ok:empty{margin:0}
 </style>
 </head>
 <body>
@@ -433,6 +455,13 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 
 <main class="wrap">
   <div id="asaStoreNotice" class="asa-sn hide" role="status" aria-live="polite"></div>
+  <!-- WP5 · Profil tamamlama çağrısı: yalnız girişli üye, ad/soyad eksikse; kapatılabilir ("Şimdi değil"). Modal değil, siteyi engellemez. -->
+  <section id="asaNamePrompt" class="asa-np hide" aria-labelledby="asaNpTitle">
+    <h2 id="asaNpTitle" class="asa-np-t">Profilini tamamla: adını ve soyadını ekle.</h2>
+    <p class="asa-np-d">Zorunlu değil. Adın ve soyadın herkese açık profilinde gösterilmez; istersen daha sonra Üye → Kart bölümünden ekleyebilirsin.</p>
+    <div id="asaNpForm"></div>
+  </section>
+  <p id="asaNpDone" class="asa-np-done" role="status" aria-live="polite" tabindex="-1"></p>
 
   <!-- PANO -->
   <section class="view active" id="v-pano">
@@ -567,6 +596,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/lib/asa-storage/asa_storage.js?v=d3b3e32eb81a46bf"></script>   <!-- WP3 şehir-izole depolama; SHA-256(16), her güncellemede yenile -->
+<script src="/lib/asa-name/asa_name.js?v=d2eb540e0eed9401"></script>   <!-- WP5 özel ad/soyad (ASA_NAME); SHA-256(16), her güncellemede yenile -->
 <script>
 /* ASALOCAL TripStore (A2 veri katmanı) — A1 sözleşmesine göre, production'da doğrulandı */
 (function(global){
@@ -2240,9 +2270,14 @@ const ASA = (function(){
   async function afterAuth(user){
     const uid=user&&user.id; const email=((user&&user.email)||"").toLowerCase();
     if(!uid) return {ok:false,msg:"Oturum alınamadı."};
-    try{ await db.rpc("member_upsert_profile",{p_display_name:email.split("@")[0],p_bio:null,p_home_city:null,p_gender:null}); }catch(e){}
+    // WP5: görünen ad her girişte / sayfa açılışında ezilmez — kendi satırında display_name varsa (ya da okunamadıysa) null gönderilir,
+    // member_upsert_profile COALESCE ile mevcut değeri korur; satır yoksa / ad boşsa e-posta yerel kısmı. Kayıt (signup) çağrısı değişmedi.
+    let keepName=false;
+    try{ const ex=await db.from("members").select("display_name").eq("user_id",uid).maybeSingle(); keepName=!!(ex&&(ex.error||(ex.data&&ex.data.display_name))); }catch(e){ keepName=true; }
+    try{ await db.rpc("member_upsert_profile",{p_display_name:keepName?null:email.split("@")[0],p_bio:null,p_home_city:null,p_gender:null}); }catch(e){}
     try{ const {data:mrow}=await db.from("members").select("blocked").eq("user_id",uid).maybeSingle(); if(mrow&&mrow.blocked){ try{await db.auth.signOut();}catch(e){} session=null;member=null;render(); return {ok:false,msg:"Bu hesap engellendi. Erişimin kısıtlı."}; } }catch(e){}
     await syncOnLogin(uid,email,false);
+    refreshName();   // WP5: ad/soyad durumu arka planda okunur (girişi bekletmez)
     try{ await importGuestTrip(); }catch(e){}
     try{ await asaLogCityView(); }catch(e){}
     return {ok:true};
@@ -2325,7 +2360,75 @@ const ASA = (function(){
     if(btn){btn.disabled=false;btn.textContent="Kaydedildi ✓";setTimeout(function(){var b2=el("asaNameBtn");if(b2)b2.textContent="Değişiklikleri Kaydet";},1600);}
   }
 
-  async function logout(){ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); try{refreshGated();}catch(e){} }
+  async function logout(){ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} render(); try{refreshGated();}catch(e){} nameReset(); }
+
+  /* ---------- WP5 · Ad ve soyad (özel) + "Profilini tamamla" çağrısı (İŞ PAKETİ 5) ----------
+     Kaynak lib/asa-name (window.ASA_NAME). Okuma: yalnız kendi members satırı (first_name,last_name; RLS self-select).
+     Yazma: yalnız rpc member_set_name (sunucu normalleştirir ve doğrular; otorite sunucudur). Görünen ad (display_name) akışı ayrı ve değişmedi.
+     Backend yoksa (42703 / PGRST202) ya da kütüphane yüklenmediyse çağrı ve alanlar HİÇ görünmez; başka hiçbir şey değişmez.
+     Çağrı yalnız: girişli üye + satırı hazır + ad ya da soyad eksik + "Şimdi değil" denmemiş. Modal değil; odak çalmaz.
+     İsimler yalnız input .value ile yazılır (innerHTML yok). */
+  let nameInfo=null, nameSeq=0, pfWrap=null;   // pfWrap: Kart'taki Ad/Soyad formu (render() Kart'ı sık yeniden çizer; form öğesi korunur)
+  const NAME_CLS={ grid:"asa-nf-grid", field:"asa-nf-field", label:"asa-nf-lbl", input:"asa-nf-in", actions:"asa-nf-acts", submit:"asa-nf-btn", later:"asa-nf-btn2", err:"asa-nf-err", ok:"asa-nf-ok" };
+  function nameLib(){ const N=window.ASA_NAME; return (N&&typeof N.load==="function"&&typeof N.form==="function")?N:null; }
+  function nameFor(uid){ return (uid&&nameInfo&&nameInfo.uid===uid&&session&&session.uid===uid)?nameInfo:null; }
+  function memberBtn(){ return document.querySelector('header.app button[aria-label="Üyelik ve hesabım"]'); }
+  async function refreshName(){
+    try{
+      const seq=++nameSeq; nameInfo=null; pfWrap=null; renderNamePrompt(); renderNameFields();
+      const N=nameLib(); if(!N||!db||!session) return;
+      const uid=session.uid; let info=null;
+      try{ info=await N.load(db,uid); }catch(e){ info=null; }
+      if(seq!==nameSeq||!session||session.uid!==uid||!info) return;   // yarış: bu arada çıkış, başka hesap ya da yeni bir yükleme
+      nameInfo=Object.assign({},info,{uid:uid});
+      renderNamePrompt(); renderNameFields();
+    }catch(e){}
+  }
+  function renderNamePrompt(){
+    const box=el("asaNamePrompt"), host=el("asaNpForm"); if(!box||!host) return;
+    const N=nameLib(), uid=session&&session.uid, info=nameFor(uid);
+    if(!N||!info||!N.shouldPrompt(info,uid)){
+      const had=!box.classList.contains("hide")&&box.contains(document.activeElement);
+      box.classList.add("hide"); host.textContent="";
+      if(had){ const b=memberBtn(); if(b) b.focus(); }
+      return;
+    }
+    if(!host.firstChild){ const f=N.form(document,{ prefix:"asaNp", values:info, db:()=>db, cls:NAME_CLS, onSaved:r=>onNameSaved(r,"prompt",uid), onLater:dismissNamePrompt }); host.appendChild(f.el); }
+    box.classList.remove("hide");
+  }
+  // "Şimdi değil": bu üye için bir kez kaydedilir (depolama kapalıysa bu sayfa açık kaldıkça); odak üst bardaki üye düğmesine
+  function dismissNamePrompt(){
+    const N=nameLib(); if(N&&session) N.dismiss(session.uid);
+    const box=el("asaNamePrompt"), host=el("asaNpForm"); if(box) box.classList.add("hide"); if(host) host.textContent="";
+    const b=memberBtn(); if(b) b.focus();
+  }
+  function renderNameFields(){
+    const slot=el("asaNameSlot"); if(!slot) return;
+    const N=nameLib(), uid=session&&session.uid, info=nameFor(uid);
+    if(!N||!info||!info.supported||!info.ready){ pfWrap=null; slot.classList.add("hide"); slot.textContent=""; return; }
+    // Kart yeniden çizildiğinde aynı form yeniden takılır: yazılan değer ve süren kayıt korunur (yeniden çizim ikinci RPC açmaz)
+    if(!pfWrap||pfWrap.uid!==uid){
+      const w=document.createElement("div");
+      const h=document.createElement("h2"); h.className="font-headline-md text-headline-md text-on-surface mb-1"; h.textContent="Ad ve soyad";
+      const p=document.createElement("p"); p.className="text-body-sm text-on-surface-variant mb-3"; p.textContent="Zorunlu değil. Herkese açık profilinde gösterilmez; görünen adın değişmez.";
+      const f=N.form(document,{ prefix:"asaPf", values:info, db:()=>db, cls:NAME_CLS, onSaved:r=>onNameSaved(r,"profile",uid) });
+      w.appendChild(h); w.appendChild(p); w.appendChild(f.el);
+      pfWrap={ uid:uid, el:w, form:f };
+    }
+    if(pfWrap.el.parentNode!==slot){ slot.textContent=""; slot.appendChild(pfWrap.el); }
+    slot.classList.remove("hide");
+  }
+  // Kayıt başarılı (çağrıdan ya da Kart'tan): çağrı kapanır, Kart alanları güncellenir; çağrıdan kaydedildiyse onay satırı + odak
+  function onNameSaved(res,from,uid){
+    if(!session||session.uid!==uid) return;
+    if(nameInfo&&nameInfo.uid===uid){ nameInfo.first=res.first; nameInfo.last=res.last; }
+    const box=el("asaNamePrompt"), host=el("asaNpForm"), done=el("asaNpDone");
+    const had=!!(box&&!box.classList.contains("hide")&&box.contains(document.activeElement));
+    if(box) box.classList.add("hide"); if(host) host.textContent="";
+    if(from!=="profile"&&pfWrap&&pfWrap.uid===uid) pfWrap.form.setValues(res.first,res.last);
+    if(from==="prompt"&&done){ done.textContent=res.message; if(had) done.focus(); }
+  }
+  function nameReset(){ nameSeq++; nameInfo=null; pfWrap=null; const d=el("asaNpDone"); if(d) d.textContent=""; renderNamePrompt(); renderNameFields(); }
 
   function favNames(){
     try{ return [...favSet].map(id=>{const v=V.find(x=>x.id===id);return v?v.name:null;}).filter(Boolean); }catch(e){ return []; }
@@ -2373,7 +2476,7 @@ const ASA = (function(){
   function seg(s){ curSeg=s; render(); }
   function renderSeg(){
     const b=el("segBody"); if(!b) return;
-    if(curSeg==="passport"){ b.innerHTML=passportHtml(); const nb=el("asaNameBtn"); if(nb)nb.onclick=()=>saveProfile(); }
+    if(curSeg==="passport"){ b.innerHTML=passportHtml(); const nb=el("asaNameBtn"); if(nb)nb.onclick=()=>saveProfile(); renderNameFields(); }
     else if(curSeg==="points"){ b.innerHTML=pointsHtml(); }
     else if(curSeg==="likes"){ b.innerHTML=likesHtml(); }
     else if(curSeg==="posts"){ b.innerHTML=postsHtml(); loadPosts(); }
@@ -2471,7 +2574,9 @@ const ASA = (function(){
           +'<button id="asaNameBtn" class="mt-lg w-full bg-primary text-on-primary font-button text-button py-3 rounded-lg hover:opacity-90 transition-opacity" type="button">Değişiklikleri Kaydet</button>'
           +'<p class="text-body-sm text-on-surface-variant">Bu bilgiler sana daha uygun öneriler ve zevk grupları için kullanılır.</p>'
         +'</div>'
-      +'</section>';
+      +'</section>'
+      // WP5: Ad / Soyad (özel) bu yuvaya DOM API ile kurulur (renderNameFields); backend yoksa yuva gizli ve boş kalır
+      +'<section id="asaNameSlot" data-wp5-slot="profile-name" class="bg-surface-container p-lg rounded-xl mt-6 hide"></section>';
   }
   function pointsHtml(){
     const points=(member&&member.points)||0; const t=tierFor(points); const nt=nextTier(points);
