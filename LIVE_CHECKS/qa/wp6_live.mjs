@@ -25,7 +25,7 @@
 //   technical   console errors 0 per scenario · no 4xx/5xx on critical requests (site documents/scripts/xhr, supabase
 //               rest/auth) · third-party hosts listed · no horizontal overflow 360/390/768/1366 · keyboard (Tab reaches the
 //               account button and the main CTA, Enter activates)
-//   wp5         name completion PLACEHOLDER (feature-detected window.ASA_NAME; SKIP until WP5 ships)
+//   wp5         name completion: Profilim slot read-only check + one labelled write round trip (operator resets to NULL)
 // Side effects that are normal site behaviour (not undone): member_upsert_profile on login, log_city_view events,
 // service_pref_set audit rows for the round trip, Supabase sessions (closed by the UI logout).
 // Anything that could not be undone is listed in result.cleanup (ids + owner label only, never e-mails).
@@ -555,26 +555,47 @@ async function keyboardAnon() {
   } finally { techChecks("keyboard-anon", [mon]); await closeCtx(ctx); }
 }
 
-// ================================================================================================ WP5 PLACEHOLDER
-// WP5 · name completion — PLACEHOLDER. Fill the selectors after WP5 lands (operator). Guarded by feature detection:
-// without window.ASA_NAME every check is SKIP. Read-only until the write round trip below is filled in.
+// ================================================================================================ WP5 NAME (read-only part)
+// WP5 · name completion (shipped in e1bfd04). Read-only here: the Profilim slot shows Ad/Soyad fields whose values equal the
+// member's own row (RLS self-select through the page's own client). The write round trip runs in the write phase (wp5NameWrite).
+const OWN_NAME = (page) => page.evaluate(async () => {
+  try { const { data: s } = await db.auth.getSession(); const uid = s && s.session && s.session.user && s.session.user.id;
+        const r = await db.from("members").select("first_name,last_name").eq("user_id", uid).maybeSingle();
+        return r.error ? { error: r.error.code || "err" } : (r.data || { none: true }); } catch (e) { return { error: "throw" }; } });
 async function wp5NameChecks(page, P) {
   const has = await page.evaluate(() => typeof window.ASA_NAME !== "undefined" && window.ASA_NAME !== null).catch(() => false);
   if (!has) { rec(`${P}/wp5-name-completion`, null, "window.ASA_NAME not present (WP5 not deployed)"); return; }
-  const SEL = {
-    slot: "#amWp5Slot",     // WP4 slot inside Profilim (data-wp5-slot="profile-name")
-    first: null,            // WP5-TODO: first-name input selector
-    last: null,             // WP5-TODO: last-name input selector
-    save: null,             // WP5-TODO: save button selector
-    prompt: null,           // WP5-TODO: "Profilini tamamla" prompt selector (if any)
-  };
   await menuAction(page, "profile");
-  await page.waitForTimeout(400);
-  const slot = await page.evaluate((s) => { const el = document.querySelector(s); return el ? { hidden: el.hidden || getComputedStyle(el).display === "none", inputs: el.querySelectorAll("input,select,textarea").length } : null; }, SEL.slot);
-  rec(`${P}/wp5-slot-visible-in-profilim`, !!slot && !slot.hidden && slot.inputs > 0, JSON.stringify(slot));
+  await page.waitForFunction(() => { const s = document.getElementById("amWp5Slot"); return !!s && !s.hidden && !!document.getElementById("profFirst"); }, null, { timeout: T.app }).catch(() => {});
+  const slot = await page.evaluate(() => { const el = document.getElementById("amWp5Slot"); return el ? { hidden: el.hidden || getComputedStyle(el).display === "none", inputs: el.querySelectorAll("input").length, first: (document.getElementById("profFirst") || {}).value, last: (document.getElementById("profLast") || {}).value } : null; });
+  rec(`${P}/wp5-slot-visible-in-profilim`, !!slot && !slot.hidden && slot.inputs === 2, JSON.stringify({ hidden: slot && slot.hidden, inputs: slot && slot.inputs }));
+  const own = await OWN_NAME(page);
+  rec(`${P}/wp5-profilim-values-equal-own-row`, !!slot && !own.error && (slot.first || "") === (own.first_name || "") && (slot.last || "") === (own.last_name || ""), own.error ? `read error ${own.error}` : "equal");
   await closeDialogs(page);
-  if (!SEL.first || !SEL.last || !SEL.save) { rec(`${P}/wp5-name-write-roundtrip`, null, "WP5-TODO: selectors not filled in yet; no write performed"); return; }
-  // WP5-TODO: read current values -> write QA test value -> reload -> verify -> restore exact start values -> verify.
+}
+// Write round trip (desktop, write phase): save a labelled QA name through Profilim, re-read the own row, reload and re-check.
+// member_set_name cannot clear a name (empty is rejected by design), so the operator resets first/last to NULL afterwards;
+// the run lists it in cleanup.
+async function wp5NameWrite(page) {
+  const has = await page.evaluate(() => typeof window.ASA_NAME !== "undefined" && window.ASA_NAME !== null).catch(() => false);
+  if (!has) { rec("write/wp5/name-save-via-profilim", null, "window.ASA_NAME not present"); return; }
+  const before = await OWN_NAME(page);
+  await menuAction(page, "profile");
+  await page.waitForFunction(() => !!document.getElementById("profFirst"), null, { timeout: T.app }).catch(() => {});
+  await page.fill("#profFirst", "Qa"); await page.fill("#profLast", "Wp Altı");
+  await press(page, "#profSave");
+  await page.waitForFunction(() => (document.getElementById("profOk")?.textContent || "").length > 0 || (document.getElementById("profErr")?.textContent || "").length > 0, null, { timeout: T.app }).catch(() => {});
+  const res = await page.evaluate(() => ({ ok: document.getElementById("profOk")?.textContent || "", err: document.getElementById("profErr")?.textContent || "" }));
+  await closeDialogs(page);
+  cleanup.push({ table: "members", owner: ACC.member.label, state: "names_set_by_wp6", note: `first_name/last_name set to the QA label; operator resets to their start values (start: ${before.first_name == null ? "NULL" : "set"}/${before.last_name == null ? "NULL" : "set"})` });
+  const after = await OWN_NAME(page);
+  rec("write/wp5/name-save-via-profilim", res.ok.length > 0 && !res.err && after.first_name === "Qa" && after.last_name === "Wp Altı", `ok=${!!res.ok} err=${res.err.slice(0, 40)} row=${after.first_name === "Qa" && after.last_name === "Wp Altı"}`);
+  await gotoHome(page, { member: true });
+  await menuAction(page, "profile");
+  await page.waitForFunction(() => !!document.getElementById("profFirst") && document.getElementById("profFirst").value !== "", null, { timeout: T.app }).catch(() => {});
+  const v = await page.evaluate(() => ({ f: document.getElementById("profFirst")?.value, l: document.getElementById("profLast")?.value, banner: !!(document.getElementById("namePrompt") && !document.getElementById("namePrompt").hidden) }));
+  rec("write/wp5/name-persists-after-reload-no-banner", v.f === "Qa" && v.l === "Wp Altı" && !v.banner, JSON.stringify({ persisted: v.f === "Qa" && v.l === "Wp Altı", banner: v.banner }));
+  await closeDialogs(page);
 }
 
 // ================================================================================================ MEMBER READ-ONLY
@@ -864,6 +885,9 @@ async function writeScenario() {
       rec("write/prefs/off-on-roundtrip", a.state === other && a.ok && b.state === start && back, `key=${key} ${start}->${a.state}->${b.state} reread_equal=${back} ${a.err || b.err}`);
       if (back) drop(pending.prefs, (p) => p.key === key);
     });
+
+    // ---------------- WP5: name completion round trip (own row only; operator resets afterwards)
+    await step("write/wp5", async () => { await gotoHome(wp, { member: true }); await wp5NameWrite(wp); });
 
     // ---------------- logout -> anonymous again
     await step("persist/logout", async () => {

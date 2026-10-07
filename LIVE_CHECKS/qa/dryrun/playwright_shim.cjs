@@ -107,9 +107,21 @@ function rpc(name, a, uid, email) {
     case "member_upsert_profile": {
       if (!uid) return needAuth();
       let m = tbl("members").find((r) => r.user_id === uid);
-      if (!m) { m = { user_id: uid, email, display_name: a.p_display_name || null, tier: "Kaşif", points: 0, blocked: false, created_at: new Date().toISOString() }; tbl("members").push(m); }
+      if (!m) { m = { user_id: uid, email, display_name: a.p_display_name || null, tier: "Kaşif", points: 0, blocked: false, first_name: null, last_name: null, created_at: new Date().toISOString() }; tbl("members").push(m); }
       else { for (const [k, c] of [["display_name", "p_display_name"], ["bio", "p_bio"], ["home_city", "p_home_city"], ["gender", "p_gender"]]) if (m[k] == null && a[c] != null) m[k] = a[c]; }
       return { status: 200, data: { ok: true } };
+    }
+    case "member_set_name": {
+      // WP5 (production since wp5_member_private_name): own row only; empty / >50 / non-letter-ish input rejected (simplified policy v1)
+      if (!uid) return { status: 401, error: { code: "42501", message: "permission denied for function member_set_name" } };
+      const norm = (x) => (typeof x === "string" ? x.replace(/\s+/gu, " ").trim().normalize("NFC") : "");
+      const ok = (x) => x.length >= 1 && x.length <= 50 && /^[\p{L}\p{M}' .\u2019\u2010-]+$/u.test(x) && /\p{L}/u.test(x) && !/^[ '.\u2019\u2010-]/.test(x);
+      const f = norm(a.p_first), l = norm(a.p_last);
+      if (!ok(f)) return { status: 200, data: { ok: false, reason: "bad_first" } };
+      if (!ok(l)) return { status: 200, data: { ok: false, reason: "bad_last" } };
+      const m = tbl("members").find((r) => r.user_id === uid);
+      if (!m) return { status: 200, data: { ok: false, reason: "no_member_row" } };
+      m.first_name = f; m.last_name = l; return { status: 200, data: { ok: true } };
     }
     case "consent_get_my_state": return uid ? { status: 200, data: { consent: {}, service_prefs: clone(prefsOf(uid)) } } : needAuth();
     case "service_pref_set": {
