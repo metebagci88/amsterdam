@@ -6,9 +6,6 @@ name: WP3 storage city isolation gates
 # bağlanmaz; secret kullanmaz.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [cdp3b-asset-preview-2y4qmd]
-    paths: ["WP3_package/**", "lib/asa-storage/**", "amsterdam/index.html", "index.html", ".github/workflows/wp3-storage-gates.yml"]
   pull_request:
     paths:
       - "amsterdam/index.html"

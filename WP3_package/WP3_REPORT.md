@@ -17,7 +17,7 @@
 | `scripts/ux_sprint1_trust_check.mjs` | değişti (kütüphaneyi inline eder; seed kontrolleri yeni anahtara) | `6c2ecc762ac564ba245feeb7ac926f356c3c302b3c1e0c15399f513c77035572` |
 | `SHA256SUMS` | `amsterdam/index.html` satırı güncellendi (kopenhag satırı aynı) | `5a706b7560e50f941712e175d4aacf6fbe45a4309f246bc4b0ce2960e3a0f4dc` |
 | `.github/workflows/asa-storage-inert.yml` | yalnız açıklama yorumu (check adı korunsun diye ad değişmedi) | `0a04ec7eb3f0035fdf9209a89470beb93fff026ede4563eb6daf75486634ae61` |
-| `.github/workflows/wp3-storage-gates.yml` | yeni (pull_request + bu dala push + workflow_dispatch; takip turunda değişmedi) | `2ace2973cc226c481c0ca68d5f18428a4b4d7d1d6bfe0d64700f62022b68deec` |
+| `.github/workflows/wp3-storage-gates.yml` | yeni (pull_request + workflow_dispatch; çalışma dalına özel push tetikleyicisi main PR'ında kaldırıldı) | `9ce520553f84f256890a471e20ad55fc53ddbe0aeaa68499847e915b756253f8` |
 | `WP3_package/WP3_INVENTORY.md` | yeni (takip turu: satır numaraları + `setSafeMove` noktası; review: `readFp`) | `c49b82dd41674274b6bcf85b2b40f18b8154554ddd0526fd3485dd090611fc13` |
 | `WP3_package/tests/run_all.sh` | yeni | `97a18d16920b1b0da594e77ad3d49b3e665f1e09ca458bad7e62893b45684b09` |
 | `WP3_package/tests/wp3_unit.test.mjs` | yeni (13 test) | `085c1e5889bb02d898b5b59e53e33c0bccfe1606dcc05b8c1c43045934854026` |
@@ -136,7 +136,7 @@ Review düzeltmesi turunda (§3c) yerelde `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-brow
 
 Dış istekler (hepsi route() stub'ı; hiçbiri ağa çıkmadı): `cdn.tailwindcss.com`, `fonts.googleapis.com`, `unpkg.com/leaflet@1.9.4` (js+css), `cdn.jsdelivr.net/npm/@supabase/supabase-js@2`, `images.unsplash.com/*`. Beklenen tek console mesajı: kütüphane-404 senaryosunda "Failed to load resource: 404" (kasıtlı). Gerçek kota senaryolarındaki sentetik fotoğraflar geçerli 1×1 GIF + base64 dolgu (tarayıcı hatasız çizer).
 
-CI: `.github/workflows/wp3-storage-gates.yml` (pull_request: dokunulan yollar + bu dala push + workflow_dispatch; `fetch-depth: 0`; playwright@1.56.1 + jsdom@24.1.3 checkout dışına; `WP3_GATES_PASS` şart). `49d6450` push'unda koştu: **success** (run 37630044247, job "gates" 1m24s; log indirme bu ortamdan 403, sonuç `gh run view` ile okundu). **Bu takip turu push edilmediği için CI'da henüz koşmadı.** `SHA256SUMS` değiştiği için PR'da `cdp3c-gates.yml` (Supabase yerel stack) de tetiklenir; yerelde yalnız onun SHA256SUMS kapısı ve statik testleri koşturuldu.
+CI: `.github/workflows/wp3-storage-gates.yml` (pull_request: dokunulan yollar + workflow_dispatch; `fetch-depth: 0`; playwright@1.56.1 + jsdom@24.1.3 checkout dışına; `WP3_GATES_PASS` şart). `49d6450` push'unda koştu: **success** (run 37630044247, job "gates" 1m24s; log indirme bu ortamdan 403, sonuç `gh run view` ile okundu). **Bu takip turu push edilmediği için CI'da henüz koşmadı.** `SHA256SUMS` değiştiği için PR'da `cdp3c-gates.yml` (Supabase yerel stack) de tetiklenir; yerelde yalnız onun SHA256SUMS kapısı ve statik testleri koşturuldu.
 
 ## 5. Rollback
 Commit revert edilir (yalnız bu dosyalar). Eski kod yalnız eski anahtarları okur. WP3 eski anahtarları açılışta ve okuma/kopya yollarında hiç silmez/değiştirmez; **tek istisna** §3b güvenli taşıma (`ams_calphoto`).
