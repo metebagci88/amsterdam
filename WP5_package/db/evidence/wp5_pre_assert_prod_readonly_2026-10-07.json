@@ -1,0 +1,41 @@
+{
+  "source": "Supabase MCP execute_sql (READ-ONLY), project tosqsabuaomgqjtogdrn, 2026-10-07, gates/wp5_pre_assert.sql (header comment trimmed)",
+  "engine": "PostgreSQL 17.6 (production)",
+  "overall": "WP5_PRE_ASSERT_PASS",
+  "summary": "0 FAIL / 20 counted",
+  "rows": [
+    {"ord":1,"check":"server_encoding","actual":"UTF8","result":"PASS"},
+    {"ord":2,"check":"members RLS enabled|forced","actual":"true|false","result":"PASS"},
+    {"ord":3,"check":"members 11 baseline column signature md5","actual":"d9c4f34edd211326976abb53c40c559f","result":"PASS"},
+    {"ord":4,"check":"first_name/last_name columns","actual":"0","result":"PASS"},
+    {"ord":5,"check":"WP5 CHECK constraints","actual":"0","result":"PASS"},
+    {"ord":6,"check":"member_set_name overloads","actual":"0","result":"PASS"},
+    {"ord":7,"check":"guard md5(prosrc)","actual":"9bba990aa5a30cd94c93f7609babb7d2","result":"PASS"},
+    {"ord":8,"check":"guard md5(pg_get_functiondef)","actual":"48bd6e33c6becde922a033d6093a81b5","result":"PASS"},
+    {"ord":9,"check":"guard attributes","actual":"true|search_path=public, pg_temp|postgres|{postgres=X/postgres,service_role=X/postgres}|trigger|true","result":"PASS"},
+    {"ord":10,"check":"member_upsert_profile md5|attrs","actual":"ef472f2ed6dd8398be7c3ed54007ec8a|false|search_path=public, pg_temp|postgres|{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}|jsonb|true","result":"PASS"},
+    {"ord":11,"check":"complete_profile md5|attrs","actual":"631b3b67ae91b914c377684724e65f59|true|search_path=public, pg_temp|postgres|{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}|jsonb|true","result":"PASS"},
+    {"ord":12,"check":"members policy matrix md5","actual":"464d74a49a1cc84a16f0a1572cf7c22e","result":"PASS"},
+    {"ord":13,"check":"members trigger matrix md5","actual":"55b31b212c9588e1a8f15e185bd08bb6","result":"PASS"},
+    {"ord":14,"check":"members table ACL","actual":"{postgres=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}","result":"PASS"},
+    {"ord":15,"check":"anon members privilege | column ACL count","actual":"false|0","result":"PASS"},
+    {"ord":16,"check":"member_public columns","actual":"display_name,tier","result":"PASS"},
+    {"ord":17,"check":"comments_public columns","actual":"id,venue_id,city,display_name,body,photo_url,created_at","result":"PASS"},
+    {"ord":18,"check":"view definition md5","actual":"comments_public:8217b12d443b3470d9e7332a2a5e52db,member_public:c5240d36e89c7daeba5086ebcd31f710","result":"PASS"},
+    {"ord":19,"check":"role BYPASSRLS","actual":"anon=f,authenticated=f,service_role=t","result":"PASS"},
+    {"ord":20,"check":"ledger wp5_member_private_name","actual":"0","result":"PASS"},
+    {"ord":21,"check":"INFO guard contains email lock","actual":"false","result":"INFO"},
+    {"ord":22,"check":"INFO members row count","actual":"2","result":"INFO"},
+    {"ord":23,"check":"INFO default EXECUTE ACL for new public functions (postgres)","actual":"{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}","result":"INFO"},
+    {"ord":24,"check":"INFO members rewrite dependants","actual":"behavior_events:created_at,user_id ; comment_reaction_counts:blocked,user_id ; comments_public:blocked,user_id ; member_public:blocked,display_name,tier","result":"INFO"},
+    {"ord":25,"check":"INFO PRE-EXISTING FINDING member_public updatable mask | anon write privilege","actual":"28|true","result":"INFO"}
+  ],
+  "additional_readonly_facts_2026-10-07": {
+    "server_version": "PostgreSQL 17.6",
+    "db_collation_provider": "icu (en_US.UTF-8) - WP5 CHECK uses only code-point ranges, no locale classes",
+    "members_in_publication": "none",
+    "fk_referencing_members": "none",
+    "client_executable_functions_returning_members_rowtype": "none",
+    "member_public": "is_updatable=YES, is_insertable_into=YES, security_invoker=false, owner postgres (BYPASSRLS) -> anon/authenticated DML through the view is not filtered by members RLS (pre-existing, out of WP5 scope)"
+  }
+}

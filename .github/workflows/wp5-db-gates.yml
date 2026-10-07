@@ -1,0 +1,75 @@
+name: WP5 DB gates (PGlite PG17 + PG18 — production'a DOKUNMAZ)
+# İŞ PAKETİ 5 (ad-soyad + e-posta kilidi) DB HAZIRLIK paketi kapıları.
+# Hiçbir job production'a bağlanmaz, migration uygulamaz, Edge deploy etmez, ücretli kaynak açmaz, secret kullanmaz.
+#   SHA256SUMS (paket bütünlüğü) + secret scan + MCP token scan (MCP'ye giden dosyalarda /drop/i YOK;
+#   WP5_DB_down.sql sahip-çalıştırmalı ve etiketli) + PGlite gate (0.3.16 = PG17, 0.5.8 = PG18).
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [cdp3b-asset-preview-2y4qmd]
+    paths: ["WP5_package/db/**", ".github/workflows/wp5-db-gates.yml"]
+  pull_request:
+    paths:
+      - "WP5_package/db/**"
+      - ".github/workflows/wp5-db-gates.yml"
+permissions:
+  contents: read
+jobs:
+  local-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: SHA256SUMS (paket bütünlüğü)
+        working-directory: WP5_package/db
+        run: sha256sum -c SHA256SUMS
+
+      - name: Secret scan (WP5 DB paketi + bu workflow)
+        run: bash CDP3C_package/gates/secret_scan.sh WP5_package/db .github/workflows/wp5-db-gates.yml
+
+      - name: MCP token scan (WP5_DB_up / pre / prod / zero-footprint'te /drop/i yok)
+        run: |
+          set -euo pipefail
+          bash WP5_package/db/gates/wp5_mcp_token_scan.sh | tee "$RUNNER_TEMP/wp5_mcp_scan.log"
+          grep -q '^WP5_MCP_TOKEN_SCAN_CLEAN$' "$RUNNER_TEMP/wp5_mcp_scan.log" || { echo "GATE_FAILED:mcp_token_scan"; exit 1; }
+
+      - name: PGlite kur (sabit 0.3.16 = PostgreSQL 17; checkout dışına)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pglite17" && cd "$RUNNER_TEMP/pglite17"
+          npm init -y >/dev/null 2>&1
+          npm i --no-audit --no-fund @electric-sql/pglite@0.3.16 >/dev/null 2>&1
+          echo "pglite 0.3.16 kuruldu"
+
+      - name: PGlite gate (PG17)
+        run: |
+          set -euo pipefail
+          PGLITE_DIR="$RUNNER_TEMP/pglite17" node WP5_package/db/gates/wp5_pglite_gate.mjs | tee "$RUNNER_TEMP/wp5_pglite17.log"
+          grep -q '^WP5_LOCAL_PGLITE_GATE_PASS$' "$RUNNER_TEMP/wp5_pglite17.log" || { echo "GATE_FAILED:pglite17"; exit 1; }
+          grep -q '^-- engine: PostgreSQL 17' "$RUNNER_TEMP/wp5_pglite17.log" || { echo "GATE_FAILED:pglite_engine_not_pg17"; exit 1; }
+
+      - name: PGlite kur (sabit 0.5.8 = PostgreSQL 18; checkout dışına)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pglite18" && cd "$RUNNER_TEMP/pglite18"
+          npm init -y >/dev/null 2>&1
+          npm i --no-audit --no-fund @electric-sql/pglite@0.5.8 >/dev/null 2>&1
+          echo "pglite 0.5.8 kuruldu"
+
+      - name: PGlite gate (PG18)
+        run: |
+          set -euo pipefail
+          PGLITE_DIR="$RUNNER_TEMP/pglite18" node WP5_package/db/gates/wp5_pglite_gate.mjs | tee "$RUNNER_TEMP/wp5_pglite18.log"
+          grep -q '^WP5_LOCAL_PGLITE_GATE_PASS$' "$RUNNER_TEMP/wp5_pglite18.log" || { echo "GATE_FAILED:pglite18"; exit 1; }
+          grep -q '^-- engine: PostgreSQL 18' "$RUNNER_TEMP/wp5_pglite18.log" || { echo "GATE_FAILED:pglite_engine_not_pg18"; exit 1; }
+
+      - name: Log secret taraması (gate çıktıları)
+        if: always()
+        run: |
+          set -uo pipefail
+          ls "$RUNNER_TEMP"/wp5_*.log >/dev/null 2>&1 || { echo "log yok (erken hata)"; exit 0; }
+          bash CDP3C_package/gates/secret_scan.sh "$RUNNER_TEMP"/wp5_*.log
