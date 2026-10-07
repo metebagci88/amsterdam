@@ -26,6 +26,18 @@
 //               rest/auth) · third-party hosts listed · no horizontal overflow 360/390/768/1366 · keyboard (Tab reaches the
 //               account button and the main CTA, Enter activates)
 //   wp5         name completion: Profilim slot read-only check + one labelled write round trip (operator resets to NULL)
+//   sync (WP6)  plan / trip sync integrity on the QA member's QA trip: a browsing reference (List neighbourhood) never rewrites
+//               the saved accommodation · revision conflict between two devices (device B saves; the stale device edits →
+//               newer server plan kept, #tripSyncNotice + kept local copy in asa:ams:plan_sync, upload only via explicit
+//               "Bu cihazdaki sürümü geri yükle") and between two tabs of one browser (stale tab never wins; "Sunucudaki planla
+//               devam et" writes nothing) · trip_save never overlaps on one page · a new trip (2099-03-10..12) opened on the
+//               device of the QA trip starts empty locally and on the server (forced flush), then archived via the UI · guest
+//               search overlapping the QA trip with other dates + city login adopts the DB trip (dates kept, user told, nothing
+//               pushed, no duplicate; a ?trip= page never runs the guest import) · device storage full while opening the trip
+//               blocks uploads and says so · Plan tab opened before the delayed ?trip= fetch shows the saved plan and dates
+//   fav (WP6)   a device's 7 seeded default favourites are never uploaded at login · logout clears the account's favourites
+//               on the device · nothing is carried into the next account · a favourite removed on one device does not come
+//               back when an older device reloads. Unexpected cloud rows (regressions) are removed via the heart UI.
 // Side effects that are normal site behaviour (not undone): member_upsert_profile on login, log_city_view events,
 // service_pref_set audit rows for the round trip, Supabase sessions (closed by the UI logout).
 // Anything that could not be undone is listed in result.cleanup (ids + owner label only, never e-mails).
@@ -684,13 +696,359 @@ async function memberReadOnly(vp) {
   } finally { noWrites(`${P}/no-writes-in-read-only-part`, [mon]); techChecks(P, [mon]); await closeCtx(ctx); }
 }
 
+// ================================================================================================ WP6 SYNC INTEGRITY (D1–D7)
+// Plan/trip/favourite sync checks for the WP6 fix. They run inside the write / persist phases on the QA member's own QA trip
+// (2099-01-10..12) and the two QA accounts only. Every write is undone in-run through the UI or listed in `cleanup`.
+const QA_TRIP3 = { start: "2099-03-10", end: "2099-03-12", label: "10 Mar–12 Mar" };
+const SRV = async (id) => {
+  const t = await window.TripStore.get(id); if (!t) return null;
+  const pr = t.preferences || {}, pp = pr.plan_prefs || null;
+  return { rev: t.revision, start: t.start_date, end: t.end_date, setup: !!t.setup_completed, plan: t.plan || null, dayven: (t.plan && t.plan.dayven) || {}, pp,
+    acc: pr.accommodation === undefined ? null : pr.accommodation, ppAcc: pp && pp.accommodation !== undefined ? pp.accommodation : null };
+};
+const srv = (page, id) => page.evaluate(SRV, id);
+const cnt = (dv, d) => (dv && Array.isArray(dv[d]) ? dv[d].length : 0);
+const norm = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]]));
+const nSaves = (mon) => mon.writes.filter((x) => x === "rpc:trip_save").length;
+const onTrip = (page, id) => page.waitForFunction((i) => window.TRIP && String(window.TRIP.id) === String(i), id, { timeout: T.app }).then(() => true).catch(() => false);
+// what the page offers after a sync problem: #tripSyncNotice + the kept copies in asa:ams:plan_sync
+const SYNC_UI = (id) => {
+  const n = document.getElementById("tripSyncNotice");
+  let ps = null; try { ps = JSON.parse(localStorage.getItem("asa:ams:plan_sync") || "null"); } catch (e) { ps = "corrupt"; }
+  const its = ps && Array.isArray(ps.items) ? ps.items : [];
+  const mine = its.filter((x) => x && String(x.trip_id) === String(id));
+  return {
+    exists: !!n, vis: !!n && !n.classList.contains("hide") && getComputedStyle(n).display !== "none", role: n ? n.getAttribute("role") : null,
+    reason: n ? n.getAttribute("data-reason") : null, restore: !!document.getElementById("tripSyncRestore"), discard: !!document.getElementById("tripSyncDiscard"),
+    items: its.length, mine: mine.length, first: mine[0] ? { trip_id: mine[0].trip_id, reason: mine[0].reason, dayven: mine[0].dayven || null } : null,
+    status: window.TripSync ? window.TripSync.status : null, focus: document.activeElement ? document.activeElement.id : null,
+  };
+};
+const syncUi = (page, id) => page.evaluate(SYNC_UI, id);
+// remove the first stop of one plan day through the Plan tab UI (day chip -> "Aç / düzenle" -> "Çıkar" -> close)
+async function removeFirstStop(page, day) {
+  await view(page, "cal");
+  await press(page, `#cal button[onclick="selectPlanDay('${day}')"]`);
+  await page.waitForTimeout(250);
+  await press(page, "#dayFlow button", { text: "Aç / düzenle" });
+  await page.waitForFunction(() => !document.getElementById("dayModal").classList.contains("hide"), null, { timeout: T.short });
+  await press(page, '#dayModal button[title="Çıkar"]');
+  await press(page, "#dayModal .dayclose");
+}
+const serverDayIs = (page, id, d, n) => poll(page, async ({ id, d, n }) => { const t = await window.TripStore.get(id); const dv = (t && t.plan && t.plan.dayven) || {}; const got = Array.isArray(dv[d]) ? dv[d].length : 0; return { ok: got === n, got }; }, { id, d, n });
+// POST rpc/trip_save requests of one page: max in flight (the page must never overlap its own saves)
+function trackTripSaves(page) {
+  const t = { max: 0, n: 0 }, live = new Set();
+  const is = (q) => { try { const u = new URL(q.url()); return q.method() === "POST" && u.host === SUPA_HOST && u.pathname === "/rest/v1/rpc/trip_save"; } catch { return false; } };
+  page.on("request", (q) => { if (!is(q)) return; live.add(q); t.n++; t.max = Math.max(t.max, live.size); });
+  const end = (q) => { live.delete(q); };
+  page.on("requestfinished", end); page.on("requestfailed", end);
+  return t;
+}
+const qaTripIds = async (page) => { const r = await read(page, "trips", "id,start_date,archived_at,user_id", [["is", "archived_at", null]]); return r.error ? null : r.rows.filter((t) => String(t.start_date || "").startsWith(QA_YEAR)).map((t) => String(t.id)).sort(); };
+const cloudIds = async (page) => { const r = await read(page, "favorites", "venue_id,user_id"); return r.error ? null : r.rows.map((x) => x.venue_id).sort(); };
+
+// D7 · a browsing reference (List "Neredesin?" neighbourhood) must not rewrite the trip's saved accommodation
+async function syncBrowseRef(wp, mon, memberTrip) {
+  if (!new URL(wp.url()).searchParams.get("trip")) await gotoAms(wp, { qs: `&trip=${memberTrip}`, member: true });
+  await onTrip(wp, memberTrip);
+  await wp.waitForTimeout(1500); // pending autosave / snapshot of the plan step settle first
+  const s0 = await srv(wp, memberTrip), n0 = nSaves(mon);
+  await view(wp, "list");
+  const val = await wp.evaluate(() => [...document.querySelectorAll("#refList option")].map((o) => o.value).find((v) => v && v !== "home" && v !== "gps") || null);
+  if (!val) { rec("sync/browse-ref-keeps-accommodation", false, "no neighbourhood option in #refList"); return; }
+  await wp.selectOption("#refList", val);
+  await wp.waitForTimeout(2500); // > TripSync debounce 1.2 s + save
+  const s1 = await srv(wp, memberTrip), n1 = nSaves(mon);
+  const same = !!s0 && !!s1 && s1.rev === s0.rev && JSON.stringify(s1.acc) === JSON.stringify(s0.acc) && JSON.stringify(s1.ppAcc) === JSON.stringify(s0.ppAcc);
+  rec("sync/browse-ref-keeps-accommodation", same && n1 === n0, `ref=${val} rev ${s0 && s0.rev}->${s1 && s1.rev} accommodation ${JSON.stringify(s0 && s0.acc)}->${JSON.stringify(s1 && s1.acc)} trip_save +${n1 - n0}`);
+  await wp.selectOption("#refList", "home").catch(() => {});
+  await wp.waitForTimeout(400);
+}
+
+// D1 · revision conflict between two devices of the same member: device B saves a newer plan; the stale device W then edits.
+// The newer server plan must survive, W must show the notice and keep its own version, and only an explicit Restore uploads it.
+async function syncConflict(wp, memberTrip) {
+  const [, d2, d3] = QA_TRIP.days;
+  const s0 = await srv(wp, memberTrip);
+  const n2 = cnt(s0 && s0.dayven, d2), n3 = cnt(s0 && s0.dayven, d3);
+  if (!(n2 > 0 && n3 > 0)) { rec("sync/conflict-server-plan-kept", false, `precondition: saved plan has day2=${n2} day3=${n3} stops`); return; }
+  const B = await newCtx("d1366", { preseedFav: true });
+  const b = await openPage(B);
+  let bIn = false;
+  try {
+    await loginHome(b.page, ACC.member); bIn = true;
+    await gotoAms(b.page, { qs: `&trip=${memberTrip}`, member: true });
+    if (!(await onTrip(b.page, memberTrip))) { rec("sync/conflict-server-plan-kept", false, "device B could not open the QA trip"); return; }
+    await removeFirstStop(b.page, d2);
+    const bs = await serverDayIs(b.page, memberTrip, d2, n2 - 1);
+    if (!bs.ok) { rec("sync/conflict-server-plan-kept", false, `device B's edit did not reach the server (day2 ${n2}->${bs.got})`); return; }
+    await wp.bringToFront().catch(() => {});
+    await removeFirstStop(wp, d3);           // W still holds the older revision in memory (no reload)
+    const sawConflict = await wp.waitForFunction(() => window.TripSync && window.TripSync.status === "conflict", null, { timeout: T.server }).then(() => true).catch(() => false);
+    await wp.waitForTimeout(1500);
+    const s1 = await srv(wp, memberTrip);
+    const shown = await wp.evaluate((days) => days.map((d) => ((typeof dayVenues !== "undefined" && dayVenues[d]) || []).join(",")), QA_TRIP.days);
+    const shownEq = !!s1 && JSON.stringify(shown) === JSON.stringify(QA_TRIP.days.map((d) => (s1.dayven[d] || []).join(",")));
+    rec("sync/conflict-server-plan-kept", !!s1 && cnt(s1.dayven, d2) === n2 - 1 && cnt(s1.dayven, d3) === n3 && shownEq,
+      `status=${sawConflict ? "conflict" : "no conflict"} server day2 ${n2}->${s1 && cnt(s1.dayven, d2)} (B removed one) day3 ${n3}->${s1 && cnt(s1.dayven, d3)} (stale W must not win) W shows server plan=${shownEq}`);
+    const u = await syncUi(wp, memberTrip);
+    const keptD3 = u.first && u.first.dayven ? cnt(u.first.dayven, d3) : null;
+    rec("sync/conflict-local-copy-offered", u.vis && u.role === "alert" && u.reason === "conflict" && u.restore && u.discard && !!u.first && u.first.trip_id === String(memberTrip) && keptD3 === n3 - 1,
+      JSON.stringify({ vis: u.vis, role: u.role, reason: u.reason, restore: u.restore, discard: u.discard, kept: u.first ? `trip ${u.first.trip_id} ${u.first.reason} day3=${keptD3}` : null }));
+    if (u.restore && u.first && u.first.dayven) {
+      const want = u.first.dayven;
+      await press(wp, "#tripSyncRestore");
+      const rs = await poll(wp, async ({ id, want }) => { const t = await window.TripStore.get(id); const dv = (t && t.plan && t.plan.dayven) || {}; const nz = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]])); return { ok: nz(dv) === nz(want) }; }, { id: memberTrip, want });
+      const after = await syncUi(wp, memberTrip);
+      rec("sync/conflict-restore-explicit", rs.ok && after.mine === 0 && after.focus === "tripSyncClose", JSON.stringify({ serverEqualsKeptCopy: rs.ok, keptLeft: after.mine, focus: after.focus }));
+      await press(wp, "#tripSyncClose").catch(() => {});
+    } else rec("sync/conflict-restore-explicit", false, "no kept version / no Restore button to press");
+  } finally {
+    if (bIn) await step("sync/conflict-device-b-logout", async () => { await gotoHome(b.page, { member: true }); await logoutHome(b.page); });
+    techChecks("sync-device-b", [b.mon]);
+    await closeCtx(B);
+  }
+}
+
+// D1 (critic 1) · two tabs of ONE browser (shared localStorage): the stale tab must not overwrite the other tab's save
+async function syncTwoTabs(W, wp, memberTrip) {
+  const [d1, d2] = QA_TRIP.days;
+  const s0 = await srv(wp, memberTrip);
+  const n1 = cnt(s0 && s0.dayven, d1), n2 = cnt(s0 && s0.dayven, d2);
+  if (!(n1 > 0 && n2 > 0)) { rec("sync/two-tabs-stale-tab-does-not-overwrite", false, `precondition: day1=${n1} day2=${n2} stops`); return; }
+  const t2 = await openPage(W);
+  try {
+    await gotoAms(t2.page, { qs: `&trip=${memberTrip}`, member: true });
+    if (!(await onTrip(t2.page, memberTrip))) { rec("sync/two-tabs-stale-tab-does-not-overwrite", false, "second tab could not open the QA trip"); return; }
+    await removeFirstStop(t2.page, d1);
+    const ok2 = await serverDayIs(t2.page, memberTrip, d1, n1 - 1);
+    if (!ok2.ok) { rec("sync/two-tabs-stale-tab-does-not-overwrite", false, `second tab's edit did not reach the server (day1 ${n1}->${ok2.got})`); return; }
+    await wp.bringToFront().catch(() => {});
+    await removeFirstStop(wp, d2);           // first tab: stale memory, same device storage
+    await wp.waitForFunction(() => window.TripSync && window.TripSync.status === "conflict", null, { timeout: T.server }).catch(() => {});
+    await wp.waitForTimeout(1500);
+    const s1 = await srv(wp, memberTrip);
+    const u = await syncUi(wp, memberTrip);
+    rec("sync/two-tabs-stale-tab-does-not-overwrite", !!s1 && cnt(s1.dayven, d1) === n1 - 1 && cnt(s1.dayven, d2) === n2 && u.vis && u.reason === "conflict",
+      `server day1 ${n1}->${s1 && cnt(s1.dayven, d1)} (tab 2 removed one) day2 ${n2}->${s1 && cnt(s1.dayven, d2)} (stale tab must not win) notice=${u.vis}/${u.reason} status=${u.status}`);
+    if (u.discard) {
+      const r0 = s1 && s1.rev;
+      await press(wp, "#tripSyncDiscard");
+      await wp.waitForTimeout(2000);
+      const s2 = await srv(wp, memberTrip), a = await syncUi(wp, memberTrip);
+      rec("sync/two-tabs-discard-keeps-server-plan", !!s2 && s2.rev === r0 && a.mine === 0 && a.focus === "tripSyncClose", `rev ${r0}->${s2 && s2.rev} keptLeft=${a.mine} focus=${a.focus}`);
+      await press(wp, "#tripSyncClose").catch(() => {});
+    }
+  } finally {
+    techChecks("sync-second-tab", [t2.mon]);
+    await t2.page.close().catch(() => {});
+  }
+}
+
+// D4 · a new DB trip opened on a device that holds another trip's plan starts empty (local + server)
+async function syncNewTrip(wp, memberTrip) {
+  const r = await createTripUI(wp, QA_TRIP3);
+  if (!r.id) { rec("sync/new-trip-starts-empty", false, `no trip id after Keşfet (${r.info})`); return; }
+  pending.trips.push({ owner: "member", id: r.id });
+  try {
+    if (!(await onTrip(wp, r.id))) { rec("sync/new-trip-starts-empty", false, "new trip not opened"); return; }
+    await wp.waitForTimeout(600);
+    const loc = await wp.evaluate(({ days, mt }) => {
+      const j = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return "corrupt"; } };
+      const dv = j("asa:ams:dayven"), pp = j("asa:ams:plan_prefs"), tr = j("asa:ams:trip"), ps = j("asa:ams:plan_sync");
+      return { dayven: localStorage.getItem("asa:ams:dayven"), qaDays: dv && typeof dv === "object" ? days.filter((d) => d in dv).length : -1, prefsSaved: !!(pp && pp.saved),
+        tripMirror: !!(tr && typeof tr === "object" && "plan_prefs" in tr), keptForQaTrip: ps && Array.isArray(ps.items) ? ps.items.filter((x) => x && String(x.trip_id) === String(mt)).length : 0 };
+    }, { days: QA_TRIP.days, mt: memberTrip });
+    // Plan tab NOT opened. Force the autosave (critic 15) so the server half can fail too.
+    await wp.evaluate(async () => { try { if (window.TripSync && window.TripSync.flush) await window.TripSync.flush(); } catch (e) {} });
+    await wp.waitForTimeout(2500);
+    const s = await srv(wp, r.id);
+    const dvKeys = s && s.plan && s.plan.dayven ? Object.keys(s.plan.dayven).length : 0, ppKeys = s && s.pp ? Object.keys(s.pp).length : 0;
+    rec("sync/new-trip-starts-empty", loc.dayven === "{}" && loc.qaDays === 0 && !loc.prefsSaved && !loc.tripMirror && loc.keptForQaTrip === 0 && !!s && dvKeys === 0 && !s.setup && ppKeys === 0,
+      JSON.stringify({ ...loc, server: s ? { dayvenKeys: dvKeys, setup: s.setup, planPrefsKeys: ppKeys } : null }));
+  } finally {
+    await step("sync/new-trip-archive", async () => {
+      await gotoHome(wp, { member: true });   // "Kayıtlı seyahatlerim" lives in the home account menu
+      const a = await archiveTripUI(wp, r.id);
+      if (a.ok) { drop(pending.trips, (t) => String(t.id) === String(r.id)); cleanup.push({ table: "trips", id: Number(r.id), owner: ACC.member.label, state: "archived_by_ui", note: "WP6 new-trip check (2099-03-10..12); row kept with archived_at" }); }
+      rec("sync/new-trip-archived-via-ui", a.ok, a.okTxt || a.err || a.why);
+    });
+  }
+}
+
+// D3 · guest search overlapping the member's QA trip with OTHER dates, then login on the city page:
+// the DB trip opens with its own dates (user told), nothing is pushed, no duplicate trip; a ?trip= page never imports.
+async function syncGuestImport(wp, memberTrip) {
+  const G = await newCtx("d1366", { preseedFav: true });
+  const g = await openPage(G);
+  let gIn = false;
+  try {
+    const before = await qaTripIds(wp);
+    const s0 = await srv(wp, memberTrip);
+    await gotoHome(g.page, { member: false });
+    await g.page.selectOption("#countrySel", "nl");
+    await g.page.waitForFunction(() => !document.getElementById("citySel").disabled, null, { timeout: T.short });
+    await g.page.selectOption("#citySel", "Amsterdam");
+    await g.page.fill("#dStart", "2099-01-11");
+    await g.page.fill("#dEnd", "2099-01-14");
+    await g.page.waitForFunction(() => !document.getElementById("goBtn").disabled, null, { timeout: T.short });
+    await Promise.all([g.page.waitForURL(/\/amsterdam\//, { timeout: T.nav }), press(g.page, "#goBtn")]);
+    const guestUrl = !new URL(g.page.url()).searchParams.get("trip");
+    await loginCity(g.page, ACC.member); gIn = true;
+    const opened = await onTrip(g.page, memberTrip);
+    await g.page.waitForTimeout(1200);
+    const st = await g.page.evaluate(() => { const t = (window.ASA_ST && ASA_ST.trip()) || {}; return { s: t.start_date, e: t.end_date, notice: (document.getElementById("asaStoreNotice")?.textContent || "").replace(/\s+/g, " ") }; });
+    const savesAtLogin = nSaves(g.mon), inserts = g.mon.writes.filter((x) => x === "POST:trips").length;
+    await g.page.evaluate(async () => { try { if (window.TripSync && window.TripSync.flush) await window.TripSync.flush(); } catch (e) {} });   // critic 15
+    await g.page.waitForTimeout(2500);
+    const s1 = await srv(g.page, memberTrip), after = await qaTripIds(g.page);
+    for (const id of (after || []).filter((x) => !(before || []).includes(x))) pending.trips.push({ owner: "member", id });
+    const datesKept = !!s0 && !!s1 && s1.start === s0.start && s1.end === s0.end;
+    if (s0 && s1 && !datesKept) cleanup.push({ table: "trips", id: Number(memberTrip), owner: ACC.member.label, state: "dates_changed_by_guest_import", note: `${s0.start}..${s0.end} -> ${s1.start}..${s1.end}; the QA trip is archived by this run` });
+    rec("sync/guest-import-adopts-db-trip", guestUrl && opened && st.s === QA_TRIP.start && st.e === QA_TRIP.end && /farklı/.test(st.notice) && /Hesabındaki seyahat açıldı/.test(st.notice) && savesAtLogin === 0 && inserts === 0 && !!before && JSON.stringify(after) === JSON.stringify(before) && datesKept,
+      `guestUrl=${guestUrl} opened=${opened} device=${st.s}..${st.e} notice=${/farklı/.test(st.notice)} trip_save@login=${savesAtLogin} POST:trips=${inserts} qaTrips ${before && before.length}->${after && after.length} server ${s0 && s0.start}..${s0 && s0.end}->${s1 && s1.start}..${s1 && s1.end}`);
+    const p0 = g.mon.writes.filter((x) => x === "POST:trips").length;
+    await g.page.evaluate(() => ASA_ST.set("trip", { city: "Amsterdam", country: "Hollanda", start_date: "2099-03-01", end_date: "2099-03-03" }));
+    await gotoAms(g.page, { qs: `&trip=${memberTrip}`, member: true });
+    const op2 = await onTrip(g.page, memberTrip);
+    await g.page.waitForTimeout(1500);
+    const p1 = g.mon.writes.filter((x) => x === "POST:trips").length, after2 = await qaTripIds(g.page);
+    for (const id of (after2 || []).filter((x) => !(before || []).includes(x) && !pending.trips.some((t) => String(t.id) === x))) pending.trips.push({ owner: "member", id });
+    rec("sync/guest-import-no-duplicate-on-trip-param", op2 && p1 === p0 && !!before && JSON.stringify(after2) === JSON.stringify(before), `opened=${op2} POST:trips +${p1 - p0} qaTrips ${before && before.length}->${after2 && after2.length}`);
+  } finally {
+    if (gIn) await step("sync/guest-device-logout", async () => { await gotoHome(g.page, { member: true }); await logoutHome(g.page); });
+    techChecks("sync-guest-import", [g.mon]);
+    await closeCtx(G);
+  }
+}
+
+// D5 · device storage full while opening the trip: DB plan shown from memory, uploads blocked, user told
+async function syncStorageFull(memberTrip) {
+  const Q = await newCtx("d1366", { preseedFav: true });
+  await Q.addInitScript(() => { try { const s = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (String(k) === "asa:ams:dayven") throw new DOMException("quota (qa)", "QuotaExceededError"); return s.call(this, k, v); }; } catch (e) {} });
+  const q = await openPage(Q);
+  let qIn = false;
+  try {
+    await loginHome(q.page, ACC.member); qIn = true;
+    const r0 = await srv(q.page, memberTrip);
+    await gotoAms(q.page, { qs: `&trip=${memberTrip}`, member: true });
+    const opened = await onTrip(q.page, memberTrip);
+    await q.page.waitForTimeout(800);
+    const st = await q.page.evaluate((days) => {
+      const n = document.getElementById("asaStoreNotice");
+      return { blocked: window.TripSync ? window.TripSync.blocked : undefined, vis: !!n && !n.classList.contains("hide"), notice: n ? n.textContent.replace(/\s+/g, " ") : "", mem: days.map((d) => ((typeof dayVenues !== "undefined" && dayVenues[d]) || []).join(",")) };
+    }, QA_TRIP.days);
+    const srvDays = r0 ? QA_TRIP.days.map((d) => (r0.dayven[d] || []).join(",")) : null;
+    await view(q.page, "cal");
+    await q.page.waitForTimeout(2500);
+    const r1 = await srv(q.page, memberTrip);
+    rec("sync/storage-full-blocks-upload", opened && st.blocked === String(memberTrip) && st.vis && st.notice.includes("Cihaz depolaması dolu: bu seyahatin kayıtlı planı bu cihaza yazılamadı") && JSON.stringify(st.mem) === JSON.stringify(srvDays) && !!r1 && r1.rev === r0.rev && nSaves(q.mon) === 0,
+      `blocked=${st.blocked} notice=${st.vis} memory=server:${JSON.stringify(st.mem) === JSON.stringify(srvDays)} rev ${r0 && r0.rev}->${r1 && r1.rev} trip_save=${nSaves(q.mon)}`);
+  } finally {
+    if (qIn) await step("sync/storage-full-logout", async () => { await gotoHome(q.page, { member: true }); await logoutHome(q.page); });
+    techChecks("sync-storage-full", [q.mon]);
+    await closeCtx(Q);
+  }
+}
+
+// D2 · Plan tab opened BEFORE the ?trip= fetch returns (trips GET delayed): the saved plan and the trip's dates must win
+async function syncPlanTabBeforeTripLoad(memberTrip) {
+  const ctx = await newCtx("d1366", { preseedFav: true });
+  const { page, mon } = await openPage(ctx);
+  const match = (u) => u.hostname === SUPA_HOST && u.pathname === "/rest/v1/trips";
+  const delay = async (r) => { await new Promise((s) => setTimeout(s, 2500)); await r.fallback(); };   // fallback: the dry-run shim's context route still answers
+  let inn = false, routed = false;
+  try {
+    await loginHome(page, ACC.member); inn = true;
+    const s0 = await srv(page, memberTrip);
+    await page.route(match, delay); routed = true;
+    await page.goto(`${BASE}/amsterdam/?city=Amsterdam&trip=${memberTrip}&cb=${Date.now()}`, { waitUntil: "load" });
+    await page.waitForFunction(() => !!(window.ASA_ST && typeof ensurePlan === "function" && document.querySelector('#nav button[data-v="cal"]')), null, { timeout: T.app });
+    await view(page, "cal");
+    const early = await page.evaluate((id) => !(window.TRIP && String(window.TRIP.id) === String(id)), memberTrip);
+    const opened = await onTrip(page, memberTrip);
+    await page.waitForTimeout(800);
+    const ui = await page.evaluate((days) => {
+      const n = document.getElementById("tripSyncNotice"); let items = -1;
+      try { const ps = JSON.parse(localStorage.getItem("asa:ams:plan_sync") || "null"); items = ps && Array.isArray(ps.items) ? ps.items.length : 0; } catch (e) {}
+      let pr = null; try { const g = PSET.getPrefs(); pr = [g.startDate, g.endDate]; } catch (e) {}
+      return { sample: CAL.sample, keys: CAL.days.map((d) => d.key), btns: document.querySelectorAll('#cal button[onclick^="selectPlanDay("]').length,
+        sel: typeof planSelDay !== "undefined" ? planSelDay : null, stops: document.querySelectorAll("#dayFlow .pl-6 > .relative").length,
+        empty: /Bu güne henüz plan yok\./.test(document.getElementById("dayFlow")?.textContent || ""), mem: days.map((d) => ((typeof dayVenues !== "undefined" && dayVenues[d]) || []).join(",")),
+        prefs: pr, noticeHidden: n ? n.classList.contains("hide") : null, items };
+    }, QA_TRIP.days);
+    await page.waitForTimeout(2500);
+    await page.unroute(match, delay).catch(() => {}); routed = false;
+    const s1 = await srv(page, memberTrip);
+    const srvSel = s0 ? cnt(s0.dayven, ui.sel) : -1;
+    const memEq = !!s0 && JSON.stringify(ui.mem) === JSON.stringify(QA_TRIP.days.map((d) => (s0.dayven[d] || []).join(",")));
+    const unchanged = !!s0 && !!s1 && norm(s1.dayven) === norm(s0.dayven) && Object.keys(s1.dayven).every((k) => /^\d{4}-\d\d-\d\d$/.test(k));
+    rec("sync/plan-tab-open-before-trip-load", opened && ui.sample === false && JSON.stringify(ui.keys) === JSON.stringify(QA_TRIP.days) && ui.btns === 3 && ui.stops === srvSel && ui.empty === (srvSel === 0) && memEq &&
+      !!ui.prefs && ui.prefs[0] === QA_TRIP.start && ui.prefs[1] === QA_TRIP.end && ui.noticeHidden === true && ui.items === 0 && unchanged,
+      JSON.stringify({ planTabBeforeTrip: early, sample: ui.sample, days: ui.keys.join(","), chips: ui.btns, shownStops: `${ui.stops}/${srvSel}`, memoryEqualsServer: memEq, prefs: ui.prefs, noticeHidden: ui.noticeHidden, kept: ui.items, serverUnchanged: unchanged }));
+  } finally {
+    if (routed) await page.unroute(match, delay).catch(() => {});
+    if (inn) await step("sync/plan-tab-logout", async () => { await gotoHome(page, { member: true }); await logoutHome(page); });
+    techChecks("sync-plan-tab", [mon]);
+    await closeCtx(ctx);
+  }
+}
+
+// D6 · favourites: unexpected cloud rows created by a regression are removed through the heart UI (else listed in cleanup)
+async function undoExtraFavs(page, owner, ids, P) {
+  for (const id of ids) pending.favs.push({ owner, venue: id });
+  const left = [];
+  for (const id of ids) {
+    try { await gotoAms(page, { member: true }); await view(page, "list"); if ((await favState(page, id)).mem) await heart(page, id); } catch (e) {}
+    if (await waitCloud(page, id, false)) drop(pending.favs, (f) => f.owner === owner && f.venue === id); else left.push(id);
+  }
+  rec(`${P}/unexpected-favourites-removed-via-ui`, left.length === 0, `${ids.length - left.length}/${ids.length} removed${left.length ? "; left: " + left.join(",") : ""}`);
+}
+// D6 flow F: a device WITHOUT preseeded favourites (the page seeds its 7 defaults) logs in as the member, logs out, then logs
+// in as the second member. Seeds must never reach an account; logout must not carry the member's favourites to the next one.
+async function favFlow(wp, secondCloud0, X) {
+  const F = await newCtx("d1366");
+  const f = await openPage(F), fp = f.page;
+  let who = null;
+  const cityLogout = async () => { await view(fp, "member"); await press(fp, "#asaLogout"); await fp.waitForFunction(() => !(window.ASA && window.ASA.session), null, { timeout: T.app }); who = null; };
+  try {
+    await gotoAms(fp, { member: false });
+    const seeds = await fp.evaluate(() => { try { return JSON.parse(localStorage.getItem("asa:ams:fav") || "null"); } catch (e) { return null; } });
+    const memberBefore = await cloudIds(wp);
+    if (!memberBefore) { rec("fav/seed-defaults-not-uploaded", false, "member favourites not readable"); return; }
+    await loginCity(fp, ACC.member); who = "member";
+    await fp.waitForTimeout(2000);
+    const mc = await cloudIds(fp), dev = await fp.evaluate(() => [...favSet].sort());
+    const extraM = mc ? mc.filter((id) => !memberBefore.includes(id)) : [];
+    rec("fav/seed-defaults-not-uploaded", Array.isArray(seeds) && seeds.length > 0 && !!mc && JSON.stringify(mc) === JSON.stringify(memberBefore) && JSON.stringify(dev) === JSON.stringify(mc),
+      `device seeds=${seeds && seeds.length} account ${memberBefore.length}->${mc && mc.length}${extraM.length ? " uploaded: " + extraM.join(",") : ""} device=${dev.length}`);
+    if (extraM.length) await undoExtraFavs(fp, "member", extraM, "fav/member");
+    await cityLogout();
+    await fp.waitForTimeout(600);
+    const lo = await fp.evaluate(() => { let fs = null; try { fs = JSON.parse(localStorage.getItem("asa:ams:fav_sync") || "null"); } catch (e) {} return { fav: localStorage.getItem("asa:ams:fav"), mem: [...favSet].length, syncUid: fs ? fs.uid : "absent" }; });
+    rec("fav/logout-clears-account-favourites", lo.fav === "[]" && lo.mem === 0 && lo.syncUid === null, JSON.stringify(lo));
+    await loginCity(fp, ACC.second); who = "second";
+    await fp.waitForTimeout(2000);
+    const sc = await cloudIds(fp), base = [...(secondCloud0 || [])].sort();
+    const extraS = sc ? sc.filter((id) => !base.includes(id)) : [];
+    rec("fav/not-carried-to-other-account", !!secondCloud0 && !!sc && JSON.stringify(sc) === JSON.stringify(base) && !sc.includes(X), `second account ${base.length}->${sc && sc.length}${extraS.length ? " carried: " + extraS.join(",") : ""}`);
+    if (extraS.length) await undoExtraFavs(fp, "second", extraS, "fav/second");
+  } finally {
+    if (who) await step("fav/flow-logout", cityLogout);
+    techChecks("fav-flow", [f.mon]);
+    await closeCtx(F);
+  }
+}
+
 // ================================================================================================ WRITES + ISOLATION + PERSISTENCE
 async function writeScenario() {
   const W = await newCtx("d1366", { preseedFav: true });
   const S = await newCtx("d1366", { preseedFav: true });
   const w = await openPage(W), s = await openPage(S);
   const wp = w.page, sp = s.page;
-  let memberTrip = null, secondTrip = null, X = null, Y = null, wIn = false, sIn = false;
+  let memberTrip = null, secondTrip = null, X = null, Y = null, wIn = false, sIn = false, secondCloud0 = null;
+  const saveTrack = trackTripSaves(wp);   // WP6/D1: this page must never overlap its own trip_save requests
   try {
     // ---------------- baselines + leftovers from aborted runs
     const ok0 = await step("write/setup", async () => {
@@ -712,6 +1070,7 @@ async function writeScenario() {
       const ms = await sp.evaluate(() => ({ fav: [...favSet] }));
       const cw = await read(wp, "favorites", "venue_id,user_id"); const cs = await read(sp, "favorites", "venue_id,user_id");
       if (cw.error || cs.error) throw new Error(`favorites read failed: ${cw.error || cs.error}`);
+      secondCloud0 = cs.rows.map((r) => r.venue_id);
       const taken = new Set([...mw.fav, ...ms.fav, ...cw.rows.map((r) => r.venue_id), ...cs.rows.map((r) => r.venue_id)]);
       const free = mw.cat.filter((id) => !taken.has(id));
       X = free[0] || null; Y = free[1] || null; facts.X = X;
@@ -782,6 +1141,20 @@ async function writeScenario() {
       rec("write/plan/edit-day-remove-stop-saved", before.length > 0 && ed.ok, `day1 ${before.length}->${ed.server}`);
       if (snp) { cleanup.push({ table: "trip_plan_versions", trip_id: Number(memberTrip), owner: ACC.member.label, state: "created_by_plan_snapshot", note: "no UI delete; remove with the archived QA trip" }); sideEffects.add("trip_plan_versions snapshot row(s) on the QA trip (listed in cleanup)"); }
     });
+
+    // ---------------- WP6 sync integrity on the QA trip (D7 browsing reference, D1 conflicts, D4 new trip, D3 guest import, D5 quota)
+    if (memberTrip) await step("sync/browse-ref", () => syncBrowseRef(wp, w.mon, memberTrip));
+    if (memberTrip && pending.plans.length) {
+      sideEffects.add("WP6 sync checks: a deliberate two-device and two-tab plan conflict on the QA trip, one explicit restore (the plan is cleared by the undo step)");
+      await step("sync/conflict", () => syncConflict(wp, memberTrip));
+      await step("sync/two-tabs", () => syncTwoTabs(W, wp, memberTrip));
+    }
+    if (memberTrip) {
+      sideEffects.add("WP6 sync checks: an extra QA trip 2099-03-10..12 created via the search form and archived via the UI");
+      await step("sync/new-trip", () => syncNewTrip(wp, memberTrip));
+      await step("sync/guest-import", () => syncGuestImport(wp, memberTrip));
+    }
+    if (memberTrip && pending.plans.length) await step("sync/storage-full", () => syncStorageFull(memberTrip));
 
     // ---------------- isolation: second member vs the member's trip + favourite (both exist now)
     await step("iso/second-cannot-see-member-data", async () => {
@@ -861,6 +1234,9 @@ async function writeScenario() {
       rec("iso/second-logout-via-city-page", !an.member && (an.catalog.length <= 10 || an.cards.length === 10) && (await sp.evaluate(() => Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k)).length)) === 0, `cards=${an.cards.length}`);
     });
 
+    // ---------------- WP6/D6 favourites: seeds never uploaded, logout clears the account's copy, nothing carried to the next account
+    if (X) await step("fav/flow", () => favFlow(wp, secondCloud0, X));
+
     // ---------------- e-mail preference round trip (only on a boolean start state)
     await step("write/prefs", async () => {
       await gotoHome(wp, { member: true });
@@ -899,6 +1275,7 @@ async function writeScenario() {
       const an = await snap(wp);
       rec("persist/after-logout-city-page-is-anonymous", !an.member && (an.catalog.length <= 10 || an.cards.length === 10), `member=${an.member} cards=${an.cards.length}`);
     });
+    rec("sync/trip-save-never-overlaps", saveTrack.max <= 1, `trip_save requests=${saveTrack.n} max in flight=${saveTrack.max}`);
   } finally {
     techChecks("write-member", [w.mon]);
     techChecks("write-second", [s.mon]);
@@ -911,6 +1288,8 @@ async function writeScenario() {
 
 async function persistAndUndo() {
   const { memberTrip, X } = facts;
+  // WP6/D2: own fresh device, Plan tab opened before the ?trip= fetch returns
+  if (memberTrip && pending.plans.length) await step("sync/plan-tab", () => syncPlanTabBeforeTripLoad(memberTrip));
   // fresh context = a second device: everything below must come from the server
   const ctx = await newCtx("d1366", { preseedFav: true });
   const { page, mon } = await openPage(ctx);
@@ -953,7 +1332,28 @@ async function persistAndUndo() {
         rec("persist/saved-plan-not-overwritten-by-plan-tab", JSON.stringify(after) === JSON.stringify(srv), JSON.stringify(after) === JSON.stringify(srv) ? "server plan unchanged" : `server plan changed ${cnt(srv)} -> ${cnt(after)} (regenerated plan autosaved over the saved one)`);
       }
     });
+    // WP6/D6: an older device that still holds favourite X must not bring it back after X is removed on this device
+    let OLD = null, old = null, oldIn = false, xBefore = null;
+    if (inn && X && pending.favs.some((f) => f.owner === "member" && f.venue === X)) await step("fav/deleted-elsewhere-setup", async () => {
+      OLD = await newCtx("d1366", { preseedFav: true }); old = await openPage(OLD);
+      await loginHome(old.page, ACC.member); oldIn = true;
+      await gotoAms(old.page, { member: true }); await view(old.page, "list");
+      xBefore = await favState(old.page, X);
+    });
     if (inn) await undoAll(page, "member");
+    if (OLD) {
+      await step("fav/deleted-elsewhere", async () => {
+        if (!oldIn) return;
+        await gotoAms(old.page, { member: true }); await view(old.page, "list");
+        await old.page.waitForTimeout(2000);
+        const back = await cloudHas(old.page, X), st = await favState(old.page, X);
+        rec("fav/deleted-elsewhere-stays-deleted", !!xBefore && xBefore.mem === true && back === false && st.mem === false && st.local === false, `before=${JSON.stringify(xBefore)} cloudAfterReload=${back} device=${JSON.stringify(st)}`);
+        if (back !== false) await undoExtraFavs(old.page, "member", [X], "fav/deleted-elsewhere");
+      });
+      if (oldIn) await step("fav/old-device-logout", async () => { await gotoHome(old.page, { member: true }); await logoutHome(old.page); });
+      techChecks("fav-old-device", [old.mon]);
+      await closeCtx(OLD);
+    }
     if (inn) await step("persist/logout-end", async () => { await gotoHome(page, { member: true }); const o = await logoutHome(page); inn = false; rec("persist/logout-end", o.asaSession === null && o.sbKeys === 0, JSON.stringify(o)); });
   } finally { techChecks("persist-undo", [mon]); await closeCtx(ctx); }
 }

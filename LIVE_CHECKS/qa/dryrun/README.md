@@ -48,18 +48,41 @@ What the shim stubs:
 | `fonts.googleapis.com` Material Symbols | A CSS rule that emulates the icon font's 1em glyph boxes. Without it, ligature words such as `arrow_back` render as wide text and cause a false horizontal overflow at 360/390/768. |
 | images, fonts, other CSS and JS | Empty responses. |
 
-## Expected result on origin/main (cfdf79e)
+## Expected result
 
-`pass=158 fail=2 skip=2`, with every write undone (`cleanup/all-writes-undone-via-ui` PASS). The only items left in
-`cleanup` are the informational `archived_by_ui` trips and the `trip_plan_versions` snapshot row.
+### With the WP6 sync-integrity fix (branch `wp6-plan-hydrate-fix`)
 
-- **2 FAIL: a real product defect, not a stub artifact.** `persist/plan-tab-shows-saved-plan-on-new-device` and
-  `persist/saved-plan-not-overwritten-by-plan-tab`. When a trip with a saved plan is opened on another device,
-  `TripSync.hydrate` copies the plan into `asa:ams:dayven`. The page's in-memory `dayVenues` was already loaded at
-  script start, so the Plan tab auto-generates a new plan and TripSync autosaves it over the user's saved plan. Live
-  should reproduce this. If the operator accepts it for now, pass
-  `WP6_XFAIL=persist/plan-tab-shows-saved-plan-on-new-device,persist/saved-plan-not-overwritten-by-plan-tab`.
-- **2 SKIP:** `member-ro/*/wp5-name-completion`, because `window.ASA_NAME` is absent until WP5 ships.
+`verdict PASS`, `fail=0`, every write undone (`cleanup/all-writes-undone-via-ui` PASS). `cleanup` holds only the
+informational `archived_by_ui` trips (the QA trip, the second member's trip and the WP6 new-trip check trip
+2099-03-10..12), the `trip_plan_versions` snapshot row and the WP5 `names_set_by_wp6` note.
+
+The WP6 checks (all PASS after the fix; see the matrix in `wp6_live.mjs`):
+
+| Check | What it proves |
+|---|---|
+| `sync/browse-ref-keeps-accommodation` | A List "Neredesin?" neighbourhood does not rewrite the trip's accommodation (no `trip_save`). |
+| `sync/conflict-server-plan-kept`, `sync/conflict-local-copy-offered`, `sync/conflict-restore-explicit` | Device B saves; the stale device's later edit gets a revision conflict. The newer server plan stays, `#tripSyncNotice` (role=alert, `data-reason=conflict`) offers the stale device's version (kept in `asa:ams:plan_sync`), and only "Bu cihazdaki sürümü geri yükle" uploads it. |
+| `sync/two-tabs-stale-tab-does-not-overwrite`, `sync/two-tabs-discard-keeps-server-plan` | The same between two tabs of one browser (shared storage); "Sunucudaki planla devam et" writes nothing. |
+| `sync/trip-save-never-overlaps` | The member's main page never has two `trip_save` requests in flight (weak in the dry run: no latency). |
+| `sync/new-trip-starts-empty`, `sync/new-trip-archived-via-ui` | A new trip opened on the device of the QA trip starts empty locally and on the server (forced flush), then is archived. |
+| `sync/guest-import-adopts-db-trip`, `sync/guest-import-no-duplicate-on-trip-param` | A guest search overlapping the QA trip with other dates + city login opens the DB trip with its own dates (user told, nothing pushed, no new trip); a `?trip=` page never runs the guest import. |
+| `sync/storage-full-blocks-upload` | `asa:ams:dayven` writes throw QuotaExceededError: the DB plan is shown from memory, uploads are blocked, the user is told. |
+| `sync/plan-tab-open-before-trip-load` | Plan tab opened while the `?trip=` fetch is delayed 2.5 s (`page.route` + `route.fallback()`, so the shim still answers): trip days, saved plan, dates; no kept copy, no upload. |
+| `fav/seed-defaults-not-uploaded`, `fav/logout-clears-account-favourites`, `fav/not-carried-to-other-account` | Flow F on a device WITHOUT preseeded favourites: the 7 seeds never reach an account, logout clears the account's favourites on the device, the next account gets nothing. |
+| `fav/deleted-elsewhere-stays-deleted` | Favourite X removed on one device does not come back when an older device that held X reloads. |
+
+On the code before the fix (`e1bfd04` + `d5ebcfd`) the dry run reproduces every defect: all of the above FAIL except
+`sync/trip-save-never-overlaps`, and the cascade also fails `persist/plan-restored-from-trip-to-device`,
+`persist/plan-tab-shows-saved-plan-on-new-device` and `persist/saved-plan-not-overwritten-by-plan-tab` (the guest
+import rewrote the QA trip's dates). Regressions that write are undone in-run through the UI (`fav/*/unexpected-
+favourites-removed-via-ui`, the 2099 trip sweep), so `cleanup/all-writes-undone-via-ui` still PASSes; a QA trip whose
+dates a regression rewrote is listed as `dates_changed_by_guest_import`.
+
+### Before WP6 (origin/main cfdf79e, historical)
+
+`pass=158 fail=2 skip=2`. The 2 FAILs (`persist/plan-tab-shows-saved-plan-on-new-device`,
+`persist/saved-plan-not-overwritten-by-plan-tab`) were the plan-hydration defect fixed by `d5ebcfd`; the 2 SKIPs were
+`member-ro/*/wp5-name-completion` before WP5 shipped.
 
 ## Stub limitations (things only the live run can tell)
 
