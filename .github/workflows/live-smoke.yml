@@ -10,6 +10,7 @@ on:
     paths:
       - "LIVE_CHECKS/**"
       - ".github/workflows/live-smoke.yml"
+      - "qa_signals/smoke/**"
 permissions:
   contents: read
 concurrency:
