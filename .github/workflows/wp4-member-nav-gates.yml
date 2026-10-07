@@ -1,0 +1,61 @@
+name: WP4 member navigation gates
+# İŞ PAKETİ 4 — üye hesabı ve profil navigasyonu (ana sayfa Hesabım menüsü, Profilim, E-posta tercihlerim,
+# Kayıtlı seyahatlerim, erişilebilir dialoglar). WP4 statik sözleşme + Playwright (yerel python http.server;
+# tüm dış istekler route() stub'ı; Tailwind sayfanın kendi config'i ile yerelde derlenir; masaüstü + 390px)
+# + WP3 regresyon kapıları + WSE statik tripwire + secret scan → "WP4_GATES_PASS" şart. Exit 4 (bağımlılık/geçmiş yok →
+# INCOMPLETE) KIRMIZIDIR. Deploy etmez; Supabase'e ve canlı siteye bağlanmaz; secret kullanmaz.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "index.html"
+      - "amsterdam/index.html"
+      - "kopenhag/index.html"
+      - "lib/**"
+      - "scripts/ux_sprint1_trust_check.mjs"
+      - "SHA256SUMS"
+      - "WP3_package/**"
+      - "WP4_package/**"
+      - "WSE_DEFAULT_package/gates/wse_static_check.mjs"
+      - "WSE_DEFAULT_package/SHA256SUMS"
+      - ".github/workflows/wp4-member-nav-gates.yml"
+permissions:
+  contents: read
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # WP4_BASE_REF (7a548e9) + WP4_PARENT_REF (7801394) karşılaştırmaları için gerekli
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Bağımlılıklar (sabit sürümler, checkout DIŞINA) + Chromium
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wp4deps" && cd "$RUNNER_TEMP/wp4deps"
+          npm init -y >/dev/null 2>&1
+          npm i --no-audit --no-fund playwright@1.56.1 jsdom@24.1.3 tailwindcss@3.4.17 @tailwindcss/forms@0.5.10 @tailwindcss/container-queries@0.1.1
+          npx playwright install --with-deps chromium
+
+      - name: WP4 gates (unit + e2e desktop/390px + WP3 regression + WSE tripwire + secret scan)
+        env:
+          # Tek seferlik WP4 kapsam kontrolleri ("yalnız şu satırlar değişti", "WP5 yok") yalnız WP4 branch'inin kendi
+          # PR'ında/dispatch'inde koşar; sonraki PR'lar (WP5 ad alanları vb.) kalıcı sözleşme kontrollerini koşar.
+          WP4_SCOPE_CHECKS: ${{ (github.head_ref || github.ref_name) == 'wp4-member-nav' && '1' || '0' }}
+          # Kapsam kontrolleri PR head commit'ini okur (merge ref değil): main'deki daha yeni değişiklikler WP4'e sayılmaz.
+          WP4_HEAD_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          NODE_PATH="$RUNNER_TEMP/wp4deps/node_modules" bash WP4_package/tests/run_all.sh 2>&1 | tee "$RUNNER_TEMP/wp4_gate.log"
+          grep -qx 'WP4_GATES_PASS' "$RUNNER_TEMP/wp4_gate.log" || { echo "GATE_FAILED:wp4"; exit 1; }
+
+      - name: Secret scan (gate logu)
+        if: always()
+        run: |
+          set -uo pipefail
+          if [ -f "$RUNNER_TEMP/wp4_gate.log" ]; then bash CDP3C_package/gates/secret_scan.sh "$RUNNER_TEMP/wp4_gate.log" || exit 1; fi

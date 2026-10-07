@@ -195,7 +195,7 @@
     <span class="font-label-md text-label-md text-on-surface-variant italic">as a local · yerel gibi</span>
   </div>
   <div class="flex items-center gap-4">
-    <button id="acctBtn" class="font-label-lg text-label-lg text-on-surface-variant hover:text-primary transition-colors duration-300 border border-primary/30 rounded-full px-5 py-2">Giriş</button>
+    <button id="acctBtn" type="button" aria-label="Giriş yap / üye ol" class="font-label-lg text-label-lg text-on-surface-variant hover:text-primary transition-colors duration-300 border border-primary/30 rounded-full px-5 py-2 max-w-[11rem] sm:max-w-[16rem] truncate">Giriş</button>
   </div>
 </header>
 <main class="flex-grow flex flex-col w-full max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop pb-24">
@@ -214,8 +214,10 @@
   <!-- ASA_BUILD_20260814_A7A8 : Aktif Seyahat kartı + Seyahatlerim -->
   <div id="tripHub" class="w-full mb-12"></div>
   <div id="tripsModal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/40 p-4" style="display:none">
-    <div class="bg-surface max-w-lg w-full max-h-[80vh] overflow-auto p-6 border border-primary/20">
-      <div class="flex justify-between items-center mb-4"><h3 class="font-headline-lg text-headline-lg text-primary">Seyahatlerim</h3><button onclick="closeTripsModal()" class="text-on-surface-variant hover:text-primary text-2xl leading-none">✕</button></div>
+    <div role="dialog" aria-modal="true" aria-labelledby="tripsTitle" class="bg-surface max-w-lg w-full max-h-[80vh] overflow-auto p-6 border border-primary/20">
+      <div class="flex justify-between items-center gap-4 mb-4"><h3 id="tripsTitle" class="font-headline-lg text-headline-lg text-primary">Kayıtlı seyahatlerim</h3><button type="button" onclick="closeTripsModal()" aria-label="Kapat" class="text-on-surface-variant hover:text-primary text-2xl leading-none">✕</button></div>
+      <div id="tripsErr" role="alert" class="text-secondary font-label-md mb-2 empty:mb-0"></div>
+      <div id="tripsOk" role="status" aria-live="polite" class="text-primary font-label-md mb-2 empty:mb-0"></div>
       <div id="tripsList"></div>
     </div>
   </div>
@@ -280,10 +282,42 @@
 </footer>
 
 <div id="authModal" class="hidden fixed inset-0 bg-primary/40 backdrop-blur-sm items-center justify-center z-[100] p-4" style="display:none">
-  <div class="bg-surface-container-lowest border border-primary/10 w-full max-w-md p-8 relative">
+  <div role="dialog" aria-modal="true" aria-labelledby="authTitle" class="bg-surface-container-lowest border border-primary/10 w-full max-w-md max-h-[90vh] overflow-auto p-8 relative">
     <div class="absolute top-0 left-0 w-full h-[2px] bg-secondary"></div>
-    <button id="authX" class="absolute top-4 right-5 text-on-surface-variant text-xl">✕</button>
+    <button id="authX" type="button" aria-label="Kapat" class="absolute top-4 right-5 text-on-surface-variant text-xl">✕</button>
     <div id="authBody"></div>
+  </div>
+</div>
+
+<!-- WP4 · Hesabım menüsü (yalnız giriş yapmış üye; anon kullanıcıya hiç açılmaz) -->
+<div id="acctMenu" class="hidden fixed inset-0 bg-primary/30 justify-end z-[90]" style="display:none">
+  <div role="dialog" aria-modal="true" aria-labelledby="acctMenuTitle" class="bg-surface-container-lowest border-l border-primary/10 w-full max-w-xs h-full overflow-y-auto p-6 pt-8 relative flex flex-col">
+    <div class="absolute top-0 left-0 w-full h-[2px] bg-secondary"></div>
+    <button id="acctMenuX" type="button" aria-label="Kapat" class="absolute top-4 right-5 text-on-surface-variant text-xl">✕</button>
+    <h3 id="acctMenuTitle" class="font-headline-md text-headline-md text-primary pr-8">Hesabım</h3>
+    <p id="acctMenuWho" class="font-label-md text-label-md text-on-surface-variant mt-1 mb-6 break-words"></p>
+    <nav aria-label="Hesap menüsü">
+      <ul class="flex flex-col border-t border-primary/10">
+        <li><button type="button" data-acct="profile" data-autofocus class="w-full text-left py-4 border-b border-primary/10 font-label-lg text-label-lg text-primary hover:text-secondary transition-colors">Profilim</button></li>
+        <li><button type="button" data-acct="prefs" class="w-full text-left py-4 border-b border-primary/10 font-label-lg text-label-lg text-primary hover:text-secondary transition-colors">E-posta tercihlerim</button></li>
+        <li><button type="button" data-acct="trips" class="w-full text-left py-4 border-b border-primary/10 font-label-lg text-label-lg text-primary hover:text-secondary transition-colors">Kayıtlı seyahatlerim</button></li>
+        <li><button type="button" data-acct="newtrip" class="w-full text-left py-4 border-b border-primary/10 font-label-lg text-label-lg text-primary hover:text-secondary transition-colors">Yeni seyahat oluştur</button></li>
+        <li><button type="button" data-acct="logout" class="w-full text-left py-4 font-label-lg text-label-lg text-on-surface-variant hover:text-secondary transition-colors">Çıkış yap</button></li>
+      </ul>
+    </nav>
+  </div>
+</div>
+
+<!-- WP4 · E-posta tercihlerim (CDP-3C sözleşmesi: consent_get_my_state + service_pref_set; yalnız servis e-postaları) -->
+<div id="prefsModal" class="hidden fixed inset-0 bg-primary/40 backdrop-blur-sm items-center justify-center z-[100] p-4" style="display:none">
+  <div role="dialog" aria-modal="true" aria-labelledby="prefsTitle" class="bg-surface-container-lowest border border-primary/10 w-full max-w-md max-h-[90vh] overflow-auto p-6 md:p-8 relative">
+    <div class="absolute top-0 left-0 w-full h-[2px] bg-secondary"></div>
+    <button id="prefsX" type="button" aria-label="Kapat" class="absolute top-4 right-5 text-on-surface-variant text-xl">✕</button>
+    <h3 id="prefsTitle" class="font-headline-lg text-headline-lg text-primary mb-2 pr-8">E-posta tercihlerim</h3>
+    <p class="font-body-md text-on-surface-variant mb-4">Sana gönderilen servis (işlemsel) e-postalarını buradan yönetebilirsin. Pazarlama e-postaları bu üründe henüz kullanımda değildir.</p>
+    <div id="prefsErr" role="alert" class="text-secondary font-label-md min-h-[18px] mb-2"></div>
+    <div id="prefsOk" role="status" aria-live="polite" class="text-primary font-label-md mb-2"></div>
+    <div id="prefsBody"></div>
   </div>
 </div>
 
@@ -351,6 +385,56 @@ const CITYIMG={
 };
 const TYPES=["Gastronomi","Kültür ve sanat","Gece hayatı","Doğa ve yürüyüş","Alışveriş","Rahat ve dinlence","Romantik","Aile"];
 const DURMAP={"2–3 gün":3,"4–6 gün":5,"1 hafta":7,"2 hafta+":14};
+/* ===== WP4 · erişilebilir dialog yardımcısı (authModal, tripsModal, acctMenu, prefsModal) =====
+   role="dialog" + aria-modal + aria-labelledby HTML'dedir. Burada: açılışta ilk kontrole (varsa [data-autofocus]) odak,
+   Tab/Shift+Tab tuzağı, ESC ve dış tıklama ile kapatma, kapanınca odağı açan öğeye geri verme. Yığın: en üstteki dialog. */
+const ASA_DLG=(function(){
+  const FOC='a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+  const stack=[];
+  const panel=ov=>ov.querySelector('[role="dialog"]')||ov;
+  const shown=el=>!!(el.offsetWidth||el.offsetHeight||el.getClientRects().length);
+  const items=ov=>Array.prototype.filter.call(panel(ov).querySelectorAll(FOC),shown);
+  const isOpen=ov=>!!ov&&stack.indexOf(ov)>-1;
+  const top=()=>stack[stack.length-1]||null;
+  function focusFirst(ov){
+    if(!ov)return; const p=panel(ov); const pref=p.querySelector("[data-autofocus]");
+    const f=(pref&&shown(pref)&&!pref.disabled)?pref:items(ov)[0];
+    if(f){ f.focus(); return; }
+    if(!p.hasAttribute("tabindex"))p.setAttribute("tabindex","-1"); p.focus();
+  }
+  function open(ov,opts){
+    if(!ov)return; opts=opts||{};
+    if(!isOpen(ov)){ const a=document.activeElement; ov.__asaRet=opts.returnFocus||((a&&a!==document.body)?a:null); ov.__asaOnClose=opts.onClose||null; stack.push(ov); }
+    ov.style.display="flex"; ov.classList.remove("hidden"); focusFirst(ov);
+  }
+  function close(ov,opts){
+    if(!isOpen(ov))return; opts=opts||{};
+    stack.splice(stack.indexOf(ov),1); ov.style.display="none"; ov.classList.add("hidden");
+    const cb=ov.__asaOnClose, ret=opts.returnFocus||ov.__asaRet; ov.__asaOnClose=null; ov.__asaRet=null;
+    if(cb){ try{cb();}catch(e){} }
+    if(opts.restore===false)return;
+    if(ret&&document.contains(ret)&&typeof ret.focus==="function") ret.focus();
+  }
+  // dış tıklama: basış ve bırakış ikisi de arka plan katmanındaysa kapat (panel içinden sürükleyip dışarıda bırakmak kapatmaz)
+  function bind(ov,closer){
+    if(!ov)return; let down=null;
+    ov.addEventListener("mousedown",e=>{ down=e.target; });
+    ov.addEventListener("click",e=>{ const d=down; down=null; if(e.target===ov&&(d===null||d===ov)) (closer||(()=>close(ov)))(); });
+  }
+  document.addEventListener("keydown",function(e){
+    const ov=top(); if(!ov)return;
+    if(e.key==="Escape"||e.key==="Esc"){ e.preventDefault(); e.stopPropagation(); const c=ov.__asaCloser; if(c)c(); else close(ov); return; }
+    if(e.key!=="Tab")return;
+    const f=items(ov); if(!f.length){ e.preventDefault(); focusFirst(ov); return; }
+    const first=f[0], last=f[f.length-1], a=document.activeElement, p=panel(ov), inside=p.contains(a)&&a!==p;
+    if(e.shiftKey){ if(!inside||a===first){ e.preventDefault(); last.focus(); } }
+    else if(!inside||a===last){ e.preventDefault(); first.focus(); }
+  },true);
+  document.addEventListener("focusin",function(e){ const ov=top(); if(ov&&!panel(ov).contains(e.target)) focusFirst(ov); });
+  // closer: ESC/dış tıklamada sayfanın kendi kapatma fonksiyonu (ör. closeAuth) kullanılsın
+  function register(ov,closer){ if(!ov)return; ov.__asaCloser=closer||null; bind(ov,closer); }
+  return {open:open,close:close,isOpen:isOpen,focusFirst:focusFirst,register:register,top:top};
+})();
 let db=null, session=null;
 let sel={country:null,city:null,active:false,duration:null,durationDays:null,startDate:null,endDate:null,approx:null,types:new Set()};
 try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
@@ -474,81 +558,244 @@ function wire(){
     }
   };
 }
-function renderAcct(){ const b=$("acctBtn"); if(session){ b.textContent="👤 "+((session.display_name)||session.email.split("@")[0]); b.classList.add("bg-secondary","text-on-secondary","border-secondary"); } else { b.textContent="Giriş"; b.classList.remove("bg-secondary","text-on-secondary","border-secondary"); } }
+function acctName(){ return session?String((session.display_name)||(session.email||"").split("@")[0]||""):""; }
+// WP4: anon → "Giriş yap / üye ol" (giriş dialogu); girişli → "Hesabım: <ad>" + aria-haspopup/aria-expanded (Hesabım menüsü)
+function renderAcct(){ const b=$("acctBtn"); if(session){ const nm=acctName(); b.textContent="👤 "+nm; b.classList.add("bg-secondary","text-on-secondary","border-secondary"); b.setAttribute("aria-label","Hesabım: "+nm); b.setAttribute("aria-haspopup","dialog"); b.setAttribute("aria-controls","acctMenu"); b.setAttribute("aria-expanded",ASA_DLG.isOpen($("acctMenu"))?"true":"false"); } else { b.textContent="Giriş"; b.classList.remove("bg-secondary","text-on-secondary","border-secondary"); b.setAttribute("aria-label","Giriş yap / üye ol"); b.removeAttribute("aria-haspopup"); b.removeAttribute("aria-controls"); b.removeAttribute("aria-expanded"); } }
 /* ===== A7/A8: Aktif Seyahat kartı + Seyahatlerim (build ASA_BUILD_20260814_A7A8) ===== */
 window.__ASA_HOME_BUILD="ASA_BUILD_20260814_A7A8";
 function asaEsc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function asaFmtDates(sd,ed){ try{ const MO=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"]; const s=new Date(sd+"T00:00:00"),e=new Date(ed+"T00:00:00"); if(isNaN(s)||isNaN(e))return ""; return s.getDate()+" "+MO[s.getMonth()]+"–"+e.getDate()+" "+MO[e.getMonth()]; }catch(e){return "";} }
 function openTrip(id,city){ location.href=asaCityPath(city)+"?trip="+id+"&city="+encodeURIComponent(city); }
 const LC_STYLE={active:["Aktif Seyahat","bg-secondary text-on-secondary"],upcoming:["Yaklaşan","bg-primary text-on-primary"],draft:["Taslak","bg-surface-container text-on-surface-variant"],past:["Geçmiş","bg-surface-container text-on-surface-variant"]};
+// WP4: yalnız oturumdaki üyenin seyahatleri (asıl koruma sunucuda RLS auth.uid()=user_id; bu süzgeç ek savunma)
+function ownTrips(list){ const uid=session&&session.uid; return uid?(list||[]).filter(t=>t&&t.user_id===uid):[]; }
 async function renderTripHub(){
   const hub=$("tripHub"); if(!hub)return;
   if(!session||!window.TripStore){ hub.innerHTML=""; return; }
-  let trips=[]; try{ trips=await window.TripStore.list(); }catch(e){}
-  if(!trips.length){ hub.innerHTML=""; return; }
+  let trips=[]; try{ trips=ownTrips(await window.TripStore.list()); }catch(e){}
+  if(!session||!trips.length){ hub.innerHTML=""; return; }
   let feat=null; try{ feat=await window.TripStore.activeOrUpcoming(); }catch(e){}
+  if(feat&&ownTrips([feat]).length===0) feat=null;
+  if(!session){ hub.innerHTML=""; return; }
   let h="";
+  // WP4: seyahat verisi (şehir) yalnız kaçışlı metin/veri özniteliği olarak; satır içi onclick'e veri gömülmez
   if(feat){
     const lc=window.TripStore.lifecycle(feat); const st=LC_STYLE[lc]||LC_STYLE.upcoming;
     h+='<div class="border border-secondary/40 bg-surface-container-low p-5 md:p-6 relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">'
       +'<div class="absolute top-0 left-0 w-full h-[2px] bg-secondary"></div>'
-      +'<div><span class="inline-block '+st[1]+' text-label-md font-label-md px-2.5 py-1 rounded-full mb-2">'+st[0]+'</span>'
-      +'<div class="font-headline-lg text-headline-lg text-primary">'+asaEsc(feat.city)+'</div>'
+      +'<div class="min-w-0"><span class="inline-block '+st[1]+' text-label-md font-label-md px-2.5 py-1 rounded-full mb-2">'+st[0]+'</span>'
+      +'<div class="font-headline-lg text-headline-lg text-primary break-words">'+asaEsc(feat.city)+'</div>'
       +'<div class="text-on-surface-variant font-body-md">'+asaFmtDates(feat.start_date,feat.end_date)+'</div></div>'
-      +'<div class="flex flex-wrap gap-2"><button onclick="openTrip('+feat.id+',\''+asaEsc(feat.city)+'\')" class="bg-secondary text-on-secondary font-label-lg py-3 px-6 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors">Devam et</button>'
-      +'<button onclick="openTripsModal()" class="border border-primary/30 text-on-surface font-label-lg py-3 px-5 rounded hover:bg-surface-container transition-colors">🧳 Seyahatlerim ('+trips.length+')</button></div>'
+      +'<div class="flex flex-wrap gap-2"><button type="button" data-trip-act="open" data-trip-id="'+asaEsc(String(feat.id))+'" data-trip-city="'+asaEsc(feat.city)+'" class="bg-secondary text-on-secondary font-label-lg py-3 px-6 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors">Devam et</button>'
+      +'<button type="button" data-hub-trips onclick="openTripsModal()" class="border border-primary/30 text-on-surface font-label-lg py-3 px-5 rounded hover:bg-surface-container transition-colors">🧳 Seyahatlerim ('+trips.length+')</button></div>'
       +'</div>';
   } else {
-    h+='<div class="flex justify-end"><button onclick="openTripsModal()" class="border border-primary/30 text-on-surface font-label-lg py-2.5 px-5 rounded hover:bg-surface-container transition-colors">🧳 Seyahatlerim ('+trips.length+')</button></div>';
+    h+='<div class="flex justify-end"><button type="button" data-hub-trips onclick="openTripsModal()" class="border border-primary/30 text-on-surface font-label-lg py-2.5 px-5 rounded hover:bg-surface-container transition-colors">🧳 Seyahatlerim ('+trips.length+')</button></div>';
   }
   hub.innerHTML=h;
 }
-async function openTripsModal(){ const m=$("tripsModal"); if(!m)return; m.style.display="flex"; m.classList.remove("hidden"); await renderTripsList(); }
-function closeTripsModal(){ const m=$("tripsModal"); if(!m)return; m.style.display="none"; m.classList.add("hidden"); }
+// WP4: yalnız girişli üye açar; anon çağrı giriş dialoguna yönlenir (özel alan gösterilmez)
+async function openTripsModal(ret){ const m=$("tripsModal"); if(!m)return; if(!session){ openAuth(ret); return; } ["tripsErr","tripsOk"].forEach(id=>{ const el=$(id); if(el) el.textContent=""; }); ASA_DLG.open(m,{returnFocus:(ret&&ret.nodeType===1)?ret:null}); await renderTripsList(); }
+function closeTripsModal(opts){ const m=$("tripsModal"); if(!m)return; let r=m.__asaRet; if(!r||!document.contains(r)) r=document.querySelector("#tripHub [data-hub-trips]")||$("acctBtn"); ASA_DLG.close(m,Object.assign({returnFocus:r},opts||{})); }
+// WP4: arama formuna odak (Yeni seyahat oluştur). Seyahat kaydı yalnız gidiş+dönüş tarihi seçilince oluşur (saveTrip), bunu söyle.
+function focusTripSearch(){ const s=$("countrySel"); if(!s)return; const i=$("dInfo"); if(i&&!(sel.startDate&&sel.endDate)) i.textContent="Seyahatin kaydedilmesi için gidiş ve dönüş tarihlerini seç."; try{ s.scrollIntoView({block:"center",behavior:"smooth"}); }catch(e){} try{ s.focus({preventScroll:true}); }catch(e){ s.focus(); } }
+// WP4: liste sorgusu TripStore.list ile aynıdır, ancak hata sessizce "seyahat yok" sayılmaz
+async function loadOwnTrips(){ if(!db||!session) return []; const r=await db.from('trips').select('*').is('archived_at',null).order('start_date',{ascending:true}); if(r&&r.error) throw r.error; return ownTrips((r&&r.data)||[]); }
 async function renderTripsList(){
-  const box=$("tripsList"); if(!box)return; box.innerHTML='<div class="text-on-surface-variant">Yükleniyor…</div>';
-  let trips=[]; try{ trips=await window.TripStore.list(); }catch(e){}
-  if(!trips.length){ box.innerHTML='<div class="text-on-surface-variant">Henüz seyahatin yok. Yukarıdan tarih seçip “Keşfet” ile başla.</div>'; return; }
+  const box=$("tripsList"); if(!box)return;
+  if(!session){ box.innerHTML=""; return; }
+  box.innerHTML='<div class="text-on-surface-variant">Yükleniyor…</div>';
+  let trips=[];
+  try{ trips=await loadOwnTrips(); }
+  catch(e){ box.innerHTML='<div role="alert" class="text-secondary font-label-md">Seyahatlerin yüklenemedi. Biraz sonra tekrar dene.</div>'; return; }
+  if(!session){ box.innerHTML=""; return; }
+  if(!trips.length){
+    box.innerHTML='<div class="flex flex-col items-start gap-4"><p class="text-on-surface-variant font-body-md">Henüz kayıtlı seyahatin yok. Ülke, şehir ve gidiş–dönüş tarihlerini seçip keşfet düğmesiyle ilk seyahatini oluştur.</p>'
+      +'<button type="button" id="tripsEmptyNew" class="bg-secondary text-on-secondary font-label-lg py-3 px-6 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors">Yeni seyahat oluştur</button></div>';
+    $("tripsEmptyNew").onclick=()=>{ closeTripsModal({restore:false}); focusTripSearch(); };
+    return;
+  }
   const rank={active:0,upcoming:1,draft:2,past:3};
   trips.sort((a,b)=>{ const d=rank[window.TripStore.lifecycle(a)]-rank[window.TripStore.lifecycle(b)]; return d!==0?d:(a.start_date<b.start_date?-1:1); });
   box.innerHTML=trips.map(t=>{ const lc=window.TripStore.lifecycle(t); const st=LC_STYLE[lc]||LC_STYLE.draft;
-    return '<div class="flex items-center justify-between gap-3 border-b border-primary/10 py-3">'
-      +'<div><span class="inline-block '+st[1]+' text-label-md font-label-md px-2 py-0.5 rounded-full mr-2">'+st[0]+'</span><b>'+asaEsc(t.city)+'</b> <span class="text-on-surface-variant text-body-sm">'+asaFmtDates(t.start_date,t.end_date)+'</span></div>'
-      +'<div class="flex gap-3 shrink-0"><button onclick="openTrip('+t.id+',\''+asaEsc(t.city)+'\')" class="text-secondary font-label-md hover:underline">Aç</button>'
-      +'<button onclick="archiveTrip('+t.id+','+t.revision+')" class="text-on-surface-variant font-label-md hover:text-secondary">Arşivle</button></div>'
+    return '<div class="flex items-center justify-between gap-3 border-b border-primary/10 py-3" data-trip-row="'+asaEsc(String(t.id))+'">'
+      +'<div class="min-w-0"><span class="inline-block '+st[1]+' text-label-md font-label-md px-2 py-0.5 rounded-full mr-2">'+st[0]+'</span><b class="break-words">'+asaEsc(t.city)+'</b> <span class="text-on-surface-variant text-body-sm">'+asaFmtDates(t.start_date,t.end_date)+'</span></div>'
+      +'<div class="flex gap-3 shrink-0"><button type="button" data-trip-act="open" data-trip-id="'+asaEsc(String(t.id))+'" data-trip-city="'+asaEsc(t.city)+'" class="text-secondary font-label-md hover:underline">Aç</button>'
+      +'<button type="button" data-trip-act="archive" data-trip-id="'+asaEsc(String(t.id))+'" data-trip-rev="'+asaEsc(String(t.revision))+'" class="text-on-surface-variant font-label-md hover:text-secondary">Arşivle</button></div>'
       +'</div>';
   }).join("");
 }
-async function archiveTrip(id,rev){ if(!window.TripStore)return; try{ const res=await window.TripStore.archive(id,rev); if(res&&res.ok){ await renderTripsList(); await renderTripHub(); } else if(res&&res.reason==='conflict'&&res.server){ await window.TripStore.archive(id,res.server.revision); await renderTripsList(); await renderTripHub(); } }catch(e){} }
-function openAuth(){ const m=$("authModal"); m.style.display="flex"; m.classList.remove("hidden"); renderAuthBody(); }
-function closeAuth(){ const m=$("authModal"); m.style.display="none"; m.classList.add("hidden"); }
+// WP4: seyahat düğmeleri için tek dinleyici (veri, satır içi JS yerine data-* özniteliklerinden okunur)
+document.addEventListener("click",function(e){
+  const b=e.target&&e.target.closest?e.target.closest("[data-trip-act]"):null; if(!b||!session)return;
+  const id=Number(b.getAttribute("data-trip-id")); if(!Number.isFinite(id))return;
+  const act=b.getAttribute("data-trip-act");
+  if(act==="open") openTrip(id,b.getAttribute("data-trip-city")||"");
+  else if(act==="archive"){ const rv=Number(b.getAttribute("data-trip-rev")); archiveTrip(id,Number.isFinite(rv)?rv:null); }
+});
+// WP4: arşivleme aynı çağrılarla (archive → çakışmada sunucu revizyonuyla bir kez daha); liste yeniden çizilince odak dialogda kalır
+// (aynı sıradaki satırın "Arşivle"si, liste boşsa "Yeni seyahat oluştur", yoksa ✕). Sonuç role=status / role=alert ile; hatada başarı denmez.
+let archBusy=false;
+async function archiveTrip(id,rev){ if(!window.TripStore||archBusy)return; archBusy=true;
+  const okEl=$("tripsOk"), er=$("tripsErr"); if(okEl) okEl.textContent=""; if(er) er.textContent="";
+  const idx=Array.prototype.findIndex.call(document.querySelectorAll("#tripsList [data-trip-row]"),r=>r.getAttribute("data-trip-row")===String(id));
+  let ok=false, ran=false;
+  try{ const res=await window.TripStore.archive(id,rev); if(res&&res.ok){ ok=true; ran=true; } else if(res&&res.reason==='conflict'&&res.server){ const r2=await window.TripStore.archive(id,res.server.revision); ok=!!(r2&&r2.ok); ran=true; } if(ran){ await renderTripsList(); await renderTripHub(); } }catch(e){}
+  archBusy=false;
+  if(!session) return;
+  if(ok){ if(okEl) okEl.textContent="Seyahat arşivlendi."; } else if(er) er.textContent="Seyahat arşivlenemedi. Tekrar dene.";
+  tripsRefocus(idx);
+}
+function tripsRefocus(idx){
+  const m=$("tripsModal"); if(!m||!ASA_DLG.isOpen(m)) return;
+  const p=m.querySelector('[role="dialog"]'), a=document.activeElement; if(p&&p.contains(a)&&a!==p) return;
+  const bs=$("tripsList").querySelectorAll('button[data-trip-act="archive"]');
+  const n=(bs.length?bs[Math.max(0,Math.min(idx,bs.length-1))]:null)||$("tripsEmptyNew")||m.querySelector('button[aria-label="Kapat"]');
+  if(n) n.focus();
+}
+function openAuth(ret){ const m=$("authModal"); renderAuthBody(); ASA_DLG.open(m,{returnFocus:(ret&&ret.nodeType===1)?ret:null}); }
+function closeAuth(){ ASA_DLG.close($("authModal")); }
 let authMode="login";
-function amInp(id,type,ph){ return '<input id="'+id+'" type="'+type+'" placeholder="'+ph+'" class="w-full border-0 border-b border-primary/30 bg-transparent p-2 mb-3 font-body-md focus:ring-0 focus:border-secondary"/>'; }
+// WP4: her alanın görünür etiketi var (yalnız placeholder değil); autocomplete ipucu
+function amInp(id,type,ph,lbl,ac){ return '<label for="'+id+'" class="block font-label-lg text-label-md text-on-surface-variant uppercase tracking-widest mt-1">'+lbl+'</label><input id="'+id+'" type="'+type+'" placeholder="'+ph+'"'+(ac?' autocomplete="'+ac+'"':'')+' class="w-full border-0 border-b border-primary/30 bg-transparent p-2 mb-3 font-body-md focus:ring-0 focus:border-secondary"/>'; }
 function renderAuthBody(){
   const box=$("authBody");
+  // WP4: yeniden çizimde odak kaybolmasın (sekme düğmesi aynı id ile geri gelir; yoksa dialogun ilk kontrolü)
+  const act=document.activeElement, keepId=(act&&box.contains(act)&&act.id)?act.id:null;
   if(!session){
     const su=(authMode==="signup");
-    let h='<h3 class="font-headline-lg text-headline-lg text-primary mb-1">asalocal üyeliği</h3>'
-      +'<div class="flex gap-2 my-4"><button id="atLogin" class="flex-1 py-2 rounded font-label-lg text-label-lg '+(su?"border border-primary/30 text-on-surface-variant":"bg-primary text-on-primary")+'">Giriş yap</button><button id="atSignup" class="flex-1 py-2 rounded font-label-lg text-label-lg '+(su?"bg-primary text-on-primary":"border border-primary/30 text-on-surface-variant")+'">Kayıt ol</button></div>'
-      +amInp("amEmail","email","E-posta adresin")
-      +amInp("amPw","password",su?"Şifre belirle (en az 6 karakter)":"Şifren");
+    let h='<h3 id="authTitle" class="font-headline-lg text-headline-lg text-primary mb-1 pr-8">asalocal üyeliği</h3>'
+      +'<div class="flex gap-2 my-4"><button type="button" id="atLogin" aria-pressed="'+(su?"false":"true")+'" class="flex-1 py-2 rounded font-label-lg text-label-lg '+(su?"border border-primary/30 text-on-surface-variant":"bg-primary text-on-primary")+'">Giriş yap</button><button type="button" id="atSignup" aria-pressed="'+(su?"true":"false")+'" class="flex-1 py-2 rounded font-label-lg text-label-lg '+(su?"bg-primary text-on-primary":"border border-primary/30 text-on-surface-variant")+'">Kayıt ol</button></div>'
+      +amInp("amEmail","email","E-posta adresin","E-posta","email")
+      +amInp("amPw","password",su?"Şifre belirle (en az 6 karakter)":"Şifren","Şifre",su?"new-password":"current-password");
     if(su){
-      h+='<select id="amGender" class="w-full border-0 border-b border-primary/30 bg-transparent p-2 mb-3 font-body-md focus:ring-0 focus:border-secondary"><option value="">Cinsiyet seç (zorunlu)…</option><option>Kadın</option><option>Erkek</option><option>Belirtmek istemiyorum</option></select>'
-        +amInp("amCity","text","Yaşadığın şehir (zorunlu)");
+      h+='<label for="amGender" class="block font-label-lg text-label-md text-on-surface-variant uppercase tracking-widest mt-1">Cinsiyet</label><select id="amGender" class="w-full border-0 border-b border-primary/30 bg-transparent p-2 mb-3 font-body-md focus:ring-0 focus:border-secondary"><option value="">Cinsiyet seç (zorunlu)…</option><option>Kadın</option><option>Erkek</option><option>Belirtmek istemiyorum</option></select>'
+        +amInp("amCity","text","Yaşadığın şehir (zorunlu)","Yaşadığın şehir","address-level2");
     }
-    h+='<div id="amErr" class="text-secondary font-label-md min-h-[18px] mb-2"></div>'
-      +'<button id="amAuth" class="w-full bg-secondary text-on-secondary font-label-lg py-3 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors">'+(su?"Kayıt ol":"Giriş yap")+'</button>';
+    h+='<div id="amErr" role="alert" class="text-secondary font-label-md min-h-[18px] mb-2"></div>'
+      +'<button type="button" id="amAuth" class="w-full bg-secondary text-on-secondary font-label-lg py-3 rounded hover:bg-secondary-container hover:text-on-secondary-container transition-colors">'+(su?"Kayıt ol":"Giriş yap")+'</button>';
     box.innerHTML=h;
+    $("amEmail").setAttribute("data-autofocus","");
     $("atLogin").onclick=()=>{authMode="login";renderAuthBody();};
     $("atSignup").onclick=()=>{authMode="signup";renderAuthBody();};
     $("amAuth").onclick=doAuth;
     const p=$("amPw"); if(p)p.onkeydown=e=>{if(e.key==="Enter")doAuth();};
   } else {
-    box.innerHTML='<div class="flex items-center gap-4 mb-4"><div class="w-14 h-14 rounded-full bg-secondary text-on-secondary flex items-center justify-center text-2xl">🧭</div><div><div class="font-headline-sm text-headline-sm text-primary">'+((session.display_name)||session.email.split("@")[0])+'</div><div class="font-label-md text-label-md text-on-surface-variant">'+session.email+'</div><div id="amTier" class="font-label-md text-label-md text-secondary mt-1">Üye</div></div></div>'
-      +'<button id="amLogout" class="w-full border border-primary/30 text-primary font-label-lg py-3 rounded hover:bg-surface-container">Çıkış yap</button>';
-    $("amLogout").onclick=async()=>{ try{ if(db)await db.auth.signOut(); }catch(e){} session=null; try{localStorage.removeItem("asa_session");}catch(e){} renderAcct(); renderAuthBody(); try{renderTripHub();}catch(e){} };
+    // WP4 · Profilim (seyahat ya da şehir sayfası gerekmez). Ad/e-posta YALNIZ textContent ile yazılır (XSS yok).
+    box.innerHTML='<h3 id="authTitle" class="font-headline-lg text-headline-lg text-primary mb-4 pr-8">Profilim</h3>'
+      +'<div class="flex items-center gap-4 mb-4"><div aria-hidden="true" class="w-14 h-14 shrink-0 rounded-full bg-secondary text-on-secondary flex items-center justify-center text-2xl">🧭</div><div class="min-w-0"><div id="amName" class="font-headline-sm text-headline-sm text-primary break-words"></div><div class="font-label-md text-label-md text-on-surface-variant break-all"><span class="sr-only">E-posta: </span><span id="amEmailRo"></span></div><div id="amTier" class="font-label-md text-label-md text-secondary mt-1">Üye</div></div></div>'
+      // WP5_SLOT (İŞ PAKETİ 5): ad-soyad alanları ve "Profilini tamamla" buraya gelecek. Bu pakette isim düzenleme ve DB yazma YOK.
+      +'<div id="amWp5Slot" data-wp5-slot="profile-name" hidden></div>'
+      +'<button type="button" id="amLogout" class="w-full border border-primary/30 text-primary font-label-lg py-3 rounded hover:bg-surface-container">Çıkış yap</button>';
+    $("amName").textContent=acctName();
+    $("amEmailRo").textContent=session.email||"";
+    $("amLogout").onclick=()=>doLogout();
     if(db){ db.from("members").select("tier,points").eq("user_id",session.uid).maybeSingle().then(({data})=>{ if(data&&$("amTier"))$("amTier").textContent=(tierFor(data.points||0).emoji)+" "+(data.tier||"Kaşif")+" · "+(data.points||0)+" puan"; }).catch(()=>{}); }
   }
+  const m=$("authModal");
+  if(ASA_DLG.isOpen(m)&&!box.contains(document.activeElement)){ const k=keepId&&$(keepId); if(k&&box.contains(k)) k.focus(); else ASA_DLG.focusFirst(m); }
+}
+/* ===== WP4 · Hesabım menüsü (Profilim · E-posta tercihlerim · Kayıtlı seyahatlerim · Yeni seyahat oluştur · Çıkış yap) ===== */
+function onAcctBtn(){ if(session) openAcctMenu(); else openAuth(); }
+function openAcctMenu(){
+  const m=$("acctMenu"), b=$("acctBtn"); if(!m||!session) return;
+  $("acctMenuWho").textContent=acctName();
+  ASA_DLG.open(m,{returnFocus:b,onClose:()=>{ if(b.hasAttribute("aria-expanded")) b.setAttribute("aria-expanded","false"); }});
+  b.setAttribute("aria-expanded","true");
+}
+function closeAcctMenu(opts){ ASA_DLG.close($("acctMenu"),opts); }
+function acctAction(k){
+  const b=$("acctBtn");
+  if(!session){ closeAcctMenu({restore:false}); openAuth(b); return; }
+  if(k==="logout"){ doLogout(); return; }
+  closeAcctMenu({restore:false});
+  if(k==="profile") openAuth(b);
+  else if(k==="prefs") openPrefs(b);
+  else if(k==="trips") openTripsModal(b);
+  else if(k==="newtrip") focusTripSearch();
+}
+// WP4: çıkış — mevcut anlam (signOut + asa_session silme) korunur; tüm hesap dialogları kapanır, özel içerik temizlenir, odak #acctBtn
+let loggingOut=false;
+async function doLogout(){
+  if(loggingOut)return; loggingOut=true;   // çift tıklama: tek signOut
+  try{ if(db)await db.auth.signOut(); }catch(e){}
+  session=null; try{localStorage.removeItem("asa_session");}catch(e){}
+  ["acctMenu","prefsModal","tripsModal","authModal"].forEach(id=>{ const m=$(id); if(m) ASA_DLG.close(m,{restore:false}); });
+  const tl=$("tripsList"); if(tl) tl.innerHTML="";
+  const pb=$("prefsBody"); if(pb) pb.innerHTML="";
+  ["prefsErr","prefsOk","tripsErr","tripsOk","acctMenuWho"].forEach(id=>{ const el=$(id); if(el) el.textContent=""; });
+  renderAcct(); renderAuthBody(); try{renderTripHub();}catch(e){}
+  loggingOut=false;
+  const b=$("acctBtn"); if(b) b.focus();
+}
+/* ===== WP4 · E-posta tercihlerim (ana sayfa) =====
+   Sözleşme city sayfasıyla aynı (CDP-3C): okuma consent_get_my_state, yazma service_pref_set
+   {p_key, p_enabled, p_request_id, p_idem(uuid)}; auth.uid() sunucuda. Yalnız SERVİS e-postaları; pazarlama yüzeyi yok.
+   'not_configured' (eski adı 'config_pending') = "Varsayılan belirlenmedi" — asla "Kapalı" diye gösterilmez.
+   İyimser gösterim yok: satır yalnız sunucunun {ok:true} yanıtıyla güncellenir; hata role="alert" ile, başarı iddiası olmadan. */
+const PREF_ORDER=["welcome_service_email","trip_created_confirmation","trip_updated_confirmation","trip_start_minus_7_days","trip_start_minus_1_day","plan_saved_confirmation","plan_reminder"];
+const PREF_LABELS={ trip_created_confirmation:"Seyahat oluşturuldu bilgisi", trip_updated_confirmation:"Seyahat güncellendi bilgisi",
+  trip_start_minus_7_days:"Seyahate 7 gün kala hatırlatma", trip_start_minus_1_day:"Seyahate 1 gün kala hatırlatma",
+  plan_saved_confirmation:"Plan kaydedildi bilgisi", plan_reminder:"Plan hatırlatma", welcome_service_email:"Hoş geldin e-postası" };
+const PREF_STATE_TXT={on:"Açık",off:"Kapalı",unset:"Varsayılan belirlenmedi",unknown:"Durum bilinmiyor"};
+function prefState(v){ if(v===true)return "on"; if(v===false)return "off"; if(v==="not_configured"||v==="config_pending")return "unset"; return "unknown"; }
+let homePrefs=null, prefsBusy=false;
+function asaUuid(){
+  try{ if(window.crypto&&typeof crypto.randomUUID==="function") return crypto.randomUUID(); }catch(e){}
+  try{ const b=crypto.getRandomValues(new Uint8Array(16)); b[6]=(b[6]&15)|64; b[8]=(b[8]&63)|128; const h=Array.prototype.map.call(b,x=>(x<16?"0":"")+x.toString(16)).join(""); return h.slice(0,8)+"-"+h.slice(8,12)+"-"+h.slice(12,16)+"-"+h.slice(16,20)+"-"+h.slice(20); }catch(e){}
+  return null;
+}
+function openPrefs(ret){
+  const m=$("prefsModal"); if(!m)return;
+  if(!session||!db){ openAuth(ret); return; }
+  $("prefsErr").textContent=""; $("prefsOk").textContent="";
+  ASA_DLG.open(m,{returnFocus:(ret&&ret.nodeType===1)?ret:null});
+  loadHomePrefs();
+}
+function closePrefs(){ ASA_DLG.close($("prefsModal")); }
+async function loadHomePrefs(){
+  const wrap=$("prefsBody"), er=$("prefsErr"); if(!wrap)return false;
+  if(!session||!db){ wrap.innerHTML=""; return false; }
+  homePrefs=null; wrap.setAttribute("aria-busy","true"); wrap.innerHTML='<p class="text-on-surface-variant font-body-md">Yükleniyor…</p>';
+  let st=null;
+  try{ const {data,error}=await db.rpc("consent_get_my_state"); if(error) throw error; st=data||{}; }
+  catch(e){ wrap.removeAttribute("aria-busy"); wrap.innerHTML=""; if(er) er.textContent="Tercihler yüklenemedi. Biraz sonra tekrar dene."; return false; }
+  wrap.removeAttribute("aria-busy");
+  if(!session){ wrap.innerHTML=""; return false; }
+  homePrefs=Object.assign({},(st&&st.service_prefs)||{});
+  renderHomePrefs();
+  return true;
+}
+function renderHomePrefs(focusKey){
+  const wrap=$("prefsBody"); if(!wrap||!homePrefs)return;
+  const keys=PREF_ORDER.filter(k=>Object.prototype.hasOwnProperty.call(homePrefs,k)).concat(Object.keys(homePrefs).filter(k=>PREF_ORDER.indexOf(k)<0));
+  if(!keys.length){ wrap.innerHTML='<p class="text-on-surface-variant font-body-md">Gösterilecek servis tercihi yok.</p>'; return; }
+  wrap.innerHTML='<ul class="border-t border-primary/10">'+keys.map(k=>{
+    const s=prefState(homePrefs[k]); const label=PREF_LABELS[k]||k; const next=(s!=="on"); const bl=next?"Aç":"Kapat";
+    return '<li class="flex items-center justify-between gap-3 py-3 border-b border-primary/10" data-pref-row="'+asaEsc(k)+'">'
+      +'<div class="min-w-0"><div class="font-body-md text-on-surface break-words">'+asaEsc(label)+'</div>'
+      +'<div class="font-label-md text-label-md mt-0.5 '+(s==="on"?"text-primary":"text-on-surface-variant")+'" data-pref-state="'+s+'">'+PREF_STATE_TXT[s]+'</div></div>'
+      +'<button type="button" data-prefkey="'+asaEsc(k)+'" data-enable="'+(next?"1":"0")+'" aria-label="'+bl+': '+asaEsc(label)+'" class="shrink-0 rounded-full border border-primary/30 text-primary font-label-lg text-label-md px-4 py-1.5 hover:bg-surface-container transition-colors disabled:opacity-50">'+bl+'</button></li>';
+  }).join("")+'</ul>';
+  wrap.querySelectorAll("button[data-prefkey]").forEach(btn=>btn.addEventListener("click",function(){ setHomePref(this.getAttribute("data-prefkey"),this.getAttribute("data-enable")==="1",this); }));
+  if(focusKey){ const f=wrap.querySelector('button[data-prefkey="'+focusKey.replace(/[^a-z0-9_]/gi,"")+'"]'); if(f) f.focus(); }
+}
+async function setHomePref(key,enabled,btn){
+  if(!session||!db||prefsBusy||!homePrefs)return;
+  const er=$("prefsErr"), okEl=$("prefsOk"); er.textContent=""; okEl.textContent="";
+  const idem=asaUuid(); if(!idem){ er.textContent="İşlem tamamlanamadı. Tekrar dene."; return; }
+  const all=$("prefsBody").querySelectorAll("button[data-prefkey]");
+  prefsBusy=true; all.forEach(x=>{ x.disabled=true; }); const prev=btn.textContent; btn.textContent="…"; btn.setAttribute("aria-busy","true");
+  let res=null, ok=false;
+  try{ const {data,error}=await db.rpc("service_pref_set",{ p_key:key, p_enabled:(enabled===true), p_request_id:"pc-home-"+Date.now(), p_idem:idem }); res=data; ok=!error&&!!data&&data.ok===true; }
+  catch(e){ ok=false; }
+  prefsBusy=false;
+  if(!session){ return; }
+  if(!ok){ all.forEach(x=>{ x.disabled=false; }); btn.textContent=prev; btn.removeAttribute("aria-busy"); er.textContent="İşlem tamamlanamadı. Tekrar dene."; try{btn.focus();}catch(e){} return; }
+  // sunucunun onayladığı değer (yanıttaki enabled) gösterilir
+  homePrefs[key]=(typeof res.enabled==="boolean")?res.enabled:(enabled===true);
+  renderHomePrefs(key);
+  okEl.textContent=(PREF_LABELS[key]||key)+": "+(homePrefs[key]?"açık":"kapalı")+" olarak kaydedildi.";
 }
 function amAuthErr(e){ const m=((e&&e.message)||"").toLowerCase(); if(m.indexOf("invalid login")>-1||m.indexOf("invalid credentials")>-1)return "E-posta veya şifre hatalı."; if(m.indexOf("already")>-1)return "Bu e-posta zaten kayıtlı. ‘Giriş yap’ ile devam et."; if(m.indexOf("password")>-1)return "Şifre en az 6 karakter olmalı."; return (e&&e.message)||"Bir hata oluştu."; }
 async function doAuth(){
@@ -582,7 +829,11 @@ async function doAuth(){
   }catch(e){ err.textContent="Sunucu hatası, tekrar dene."; b.disabled=false;b.textContent=orig; }
 }
 renderCountries(); renderCities(); renderTypes(); renderDests(); renderAcct(); wire(); updateGo(); try{renderTripHub();}catch(e){}
-$("acctBtn").onclick=openAuth; $("authX").onclick=closeAuth; $("authModal").onclick=e=>{ if(e.target===$("authModal"))closeAuth(); };
+$("acctBtn").onclick=onAcctBtn; $("authX").onclick=closeAuth;
+// WP4: ESC + dış tıklama her dialogda o dialogun kendi kapatma fonksiyonuyla (odak açan öğeye döner)
+ASA_DLG.register($("authModal"),closeAuth); ASA_DLG.register($("tripsModal"),()=>closeTripsModal()); ASA_DLG.register($("acctMenu"),()=>closeAcctMenu()); ASA_DLG.register($("prefsModal"),closePrefs);
+$("acctMenuX").onclick=()=>closeAcctMenu(); $("prefsX").onclick=closePrefs;
+document.querySelectorAll("#acctMenu [data-acct]").forEach(b=>{ b.onclick=()=>acctAction(b.getAttribute("data-acct")); });
 (async function loadAds(){
   if(!db) return; let ads=[];
   try{ const {data}=await db.from("ads").select("*"); ads=data||[]; }catch(e){}
