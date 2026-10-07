@@ -1,7 +1,7 @@
 # ASALOCAL — 12 Aşamalı Program · Yürütme Sonucu (STOP raporu)
 
-**Belge türü:** PRD §7 kapanış raporu + §2.2 kanıtlı STOP raporu
-**Son güncelleme:** 2026-10-07 — Mete onayıyla `admin-api` v18 deploy edildi (B1 düzeltmesi); canlı runtime kabulü B2 nedeniyle bekliyor
+**Belge türü:** PRD §7 kapanış raporu (yürütme devam ediyor)
+**Son güncelleme:** 2026-10-07 — İP1–İP4 canlı PASS; İP5 incelemesinde bulunan kritik açık (yazılabilir `member_public` view) SEC-VIEWS hotfix'i ile kapatıldı
 **Kaynak PRD:** `ASALOCAL_12_ASAMALI_URUNLESTIRME_PRD.md`
 **Rapor tarihi:** 2026-10-07 (UTC)
 **Yürüten:** Claude Code (bulut oturumu), repo `metebagci88/amsterdam`, Supabase projesi `asa-local` (`tosqsabuaomgqjtogdrn`)
@@ -11,8 +11,8 @@
 ## ASALOCAL_12_STAGE_PROGRAM_RESULT
 
 ```text
-Overall: PARTIAL_BLOCKED   (İş Paketi 1 başlamadan durduruldu; tek production değişikliği: Mete onaylı admin-api v18 deploy'u)
-Main final SHA: 8acfb0ef81a35118e6802b221c2fe488b0e7e199   (PR #13 WP3 merge; önceki 7a548e9)
+Overall: PARTIAL   (İP1–İP4 canlı PASS; İP5 sürüyor; SEC-VIEWS güvenlik hotfix'i uygulandı)
+Main final SHA: cfdf79eabfa5b47621a19d14bfbe6c7c992e0217   (PR #14 WP4 merge; önceki 8acfb0e ← 7a548e9)
 Production URLs: https://www.asalocal.club  (/, /amsterdam/, /kopenhag/, /admin → 302 /CDP3B/admin.html)
                  — canlı girişsiz smoke GitHub Actions + Playwright ile: 50/50 PASS (bkz. §2.1)
 Production Edge versions (salt-okunur, değişmedi):
@@ -23,11 +23,12 @@ Production Edge versions (salt-okunur, değişmedi):
   admin-delete-user v5 verify_jwt=true
   adim2-dispatch-once v6 verify_jwt=true (410 gone stub)
 Migration ledger additions: sec_media_close_anon_write (2026-10-07, İP2 v2)
+                            sec_public_views_readonly  (2026-10-07, SEC-VIEWS hotfix — §5.8)
 
 Stage 01: PASS        — SEC_MEDIA_UPLOAD_ACCEPTANCE_PASS (canlı, QA run 37629590923): gerçek admin upload Edge yolu, 17/17 negatif, residue=0 (§5.4)
 Stage 02: PASS        — SEC_MEDIA_STORAGE_CLOSED: v2 (ALTER POLICY TO service_role, Mete onaylı) uygulandı; prod_assert 19/19, zero-footprint PASS, canlı HTTP 15/15, residue 0 (§5.5)
 Stage 03: PASS        — PR #13 merge 8acfb0e; Cloudflare preview 55/55 + production live 55/55 + live smoke PASS (§5.6)
-Stage 04: NOT STARTED — sıra kuralı
+Stage 04: PASS        — PR #14 merge cfdf79e; preview QA üye 37/37 + production QA üye 37/37 + live smoke 50/50 + WP3 live 55/55 (§5.7)
 Stage 05: NOT STARTED — sıra kuralı
 Stage 06: NOT STARTED — sıra kuralı
 Stage 07: NOT STARTED — sıra kuralı
@@ -41,7 +42,8 @@ Security:
 - anon media write: KAPALI — üç yazma policy'si roles={service_role} (etkisiz, BYPASSRLS); public/anon/authenticated için yazma policy'si 0; canlı HTTP ile kanıtlandı
 - public media read: AÇIK (beklenen) — "media anon read" + bucket media public=true
 - secret scan: yeni eklenen dosyalarda çalıştırıldı (bkz. §5)
-- RLS/policy regressions: YOK (hiçbir DDL/policy değişikliği yapılmadı)
+- public views: SALT-OKUNUR — member_public/comments_public/comment_reaction_counts üzerinde anon/authenticated yalnız SELECT (önce anon DELETE ile members satırı silinebiliyordu; §5.8)
+- RLS/policy regressions: YOK (prod assert'ler: İP2 19/19, SEC-VIEWS 9/9; diğer policy/ACL md5'leri PRE ile aynı)
 
 Product:
 - Amsterdam TR V1: değişmedi (canlı doğrulama yapılamadı)
@@ -303,6 +305,35 @@ Rollback: `S2_down_INSECURE.sql`. Bu dosya güvenliği gevşetir, arming GUC'u i
 Açık ürün kararı (owner delegasyonuyla verildi):
 - `plan_prefs` için seçenek (c) korundu: kütüphane sözleşmesi değişmedi, kullanıcıya "Amsterdam planına aktar" seçeneği sunuluyor.
 - `ams_calphoto` yalnız kota hatasında, yazma anında ve bu sekmenin okuduğu baytlar aynıysa güvenli taşıma ile emekliye ayrılıyor.
+
+### 5.7 İş Paketi 4 — CANLI: üye hesabı ve profil navigasyonu (2026-10-07)
+
+| Adım | Sonuç |
+|---|---|
+| Yerel | unit 15/15; WP4 e2e 346/0 (masaüstü + 390 px); WP3 e2e 454/0 (regresyon); WSE static + UX trust PASS; mutasyon 20/20 yakalandı |
+| PR | [#14](https://github.com/metebagci88/amsterdam/pull/14) — CI 6/6 ✅ (WP4 gates, WP3 gates, CDP3C gates/edge, Cloudflare Pages); review thread yok |
+| Preview kabul (gerçek Supabase, adanmış QA üye) | `https://wp4-member-nav.amsterdam-zhw.pages.dev` → QA run [37661710483](https://github.com/metebagci88/amsterdam/actions/runs/37661710483) **37/37 PASS** (masaüstü + 390 px): anon etiket/giriş dialogu/ESC odak dönüşü; UI'dan gerçek login; menü tam 5 PRD öğesi; aria-expanded; Tab tuzağı; Profilim seyahatsiz 2 etkileşim; e-posta salt-okunur; tercihler "Varsayılan belirlenmedi"; seyahat boş durumu + CTA odak; çıkış (asa_session temizlenir, odak hesap düğmesi); taşma yok; console error 0 |
+| İlk deneme | QA run 37660852697 WP4 adımı başlamadan düştü (runner `playwright` modülünü çözemedi — test aracı hatası, site değil). Düzeltme `31e6106` (createRequire(QA_DEPS) + `set +e`), stub'lı yerel kuru çalıştırma 37/37, sonra tekrar |
+| Merge | normal merge commit `cfdf79e` (squash/rebase yok); önceki main `8acfb0e` |
+| Production | Cloudflare deploy ✅. QA run [37662143135](https://github.com/metebagci88/amsterdam/actions/runs/37662143135) www.asalocal.club **37/37 PASS**; live smoke [37662143231](https://github.com/metebagci88/amsterdam/actions/runs/37662143231) 50/50 (sayfa SHA = main) + WP3 live 55/55 |
+| Test verisi | QA hesapları her koşudan sonra kilitlendi (`encrypted_password=''`). QA üyenin normal login akışının oluşturduğu satırlar (members 1, member_service_pref_current 1, member_service_pref_events 1) etiketli test hesabına ait; İP5/İP6 testlerinde kullanılacak, program sonunda temizlenecek. email_outbox'a QA üye için kayıt düşmedi |
+
+### 5.8 SEC-VIEWS hotfix — CANLI: public view'lar salt-okunur (2026-10-07)
+
+**Nasıl bulundu:** İP5 DB paketinin adversarial incelemesi. PRD §2.2 güvenlik açığı → İP5'e geçmeden önce kapatıldı.
+
+| Adım | Sonuç |
+|---|---|
+| Açık | `public.member_public` otomatik güncellenebilir (bits 28), `security_invoker=false`, sahibi `postgres` (BYPASSRLS) → yazmada members RLS uygulanmıyor; anon/authenticated `arwdDxtm`; members guard trigger'ı DELETE'i görmüyor. Herkes anon anahtarıyla `DELETE /rest/v1/member_public?…` ile üye satırı silebilirdi; giriş yapan herkes başkasının display_name'ini değiştirebilirdi |
+| PRE kanıt (prod, zero-footprint) | `SV_ZF_VERDICT=VULNERABLE`, opens=6 (anon + authenticated DELETE/UPDATE/INSERT izinli; `WHERE false` + REPORT rollback → 0 satır) |
+| Paket | `SEC_VIEWS_package/` — `REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN` (3 view, anon + authenticated), SELECT korunur; PRE guard (tanım md5, sahip, reloptions, ACL), POST guard, idempotent, armed rollback; metinde `drop` yok |
+| Kapılar | PGlite PG17 26/26 + PG18 26/26 (açık gerçek satırla üretildi → düzeltme sonrası 42501); mutasyon 3/3; CI `sec-views-gates` ✅ |
+| Uygulama | `apply_migration sec_public_views_readonly` ✅ |
+| POST (prod) | `SEC_VIEWS_PROD_ASSERT_PASS` 0 FAIL / 9 (diğer 54 public ilişkinin ACL md5'i PRE ile aynı); zero-footprint `SV_ZF_VERDICT=PASS` |
+| Canlı HTTP | live smoke [37663924663](https://github.com/metebagci88/amsterdam/actions/runs/37663924663) **56/56**: anon GET 3 view → 200; anon DELETE/PATCH/POST member_public → 401 `42501`; tüm sayfalar console error 0 (yorumlar okunuyor) |
+| Rollback | `SEC_VIEWS_down_INSECURE.sql` (açığı geri açar; `sec_views.rollback_armed` GUC'u olmadan çalışmaz) |
+
+Kalan kök neden (kapsam dışı, öneri): Supabase varsayılan yetkileri `public` şemadaki yeni view'lara anon/authenticated için tüm yetkileri veriyor. Live smoke'taki view probları ve prod assert satır 5 regresyonu yakalar.
 
 ## 6. Yeniden başlamak için gereken tek karar
 
