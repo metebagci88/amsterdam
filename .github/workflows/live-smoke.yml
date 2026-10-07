@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: 22
       - name: Selftest (no network)
-        run: node LIVE_CHECKS/live_smoke.mjs --selftest
+        run: node LIVE_CHECKS/live_smoke.mjs --selftest && node LIVE_CHECKS/wp7_live.mjs --selftest
       - name: Install Playwright Chromium
         run: |
           set -euo pipefail
@@ -38,6 +38,18 @@ jobs:
         run: node LIVE_CHECKS/live_smoke.mjs
       - name: WP3 live storage checks (SKIP until main ships WP3)
         run: node LIVE_CHECKS/wp3_live.mjs
+      - name: WP7 launch checks (only when qa_signals/smoke/wp7.json asks for them)
+        run: |
+          set -euo pipefail
+          f=qa_signals/smoke/wp7.json
+          if [ ! -f "$f" ]; then echo "no WP7 request"; exit 0; fi
+          url=$(node -e 'const j=require("./"+process.argv[1]);process.stdout.write(String(j.url||""))' "$f")
+          ref=$(node -e 'const j=require("./"+process.argv[1]);process.stdout.write(String(j.ref||"main"))' "$f")
+          [[ "$url" =~ ^https://[A-Za-z0-9.-]+(\.asalocal\.club|\.amsterdam-zhw\.pages\.dev)$ ]] || { echo "bad url"; exit 1; }
+          [[ "$ref" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "bad ref"; exit 1; }
+          git fetch --depth=1 origin "$ref:refs/remotes/origin/$ref"
+          echo "MX asalocal.club: $(dig +short MX asalocal.club | sort | tr '\n' ' ')"
+          WP7_BASE="$url" WP7_REF="origin/$ref" node LIVE_CHECKS/wp7_live.mjs
       - name: Screenshots
         if: always()
         uses: actions/upload-artifact@v4
