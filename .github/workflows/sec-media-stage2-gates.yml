@@ -1,0 +1,151 @@
+name: SEC-MEDIA Stage 2 gates (PGlite + psql + ephemeral Supabase — production'a DOKUNMAZ)
+# İŞ PAKETİ 2 (media anonim yazma kapatma) HAZIRLIK paketi kapıları.
+# Hiçbir job production'a bağlanmaz, migration uygulamaz, Edge deploy etmez, ücretli kaynak açmaz.
+#   local-gates : SHA256SUMS + secret scan + client direct-write scan + PGlite (PG17) gate + psql (PG16) gate
+#   storage-api : GEÇİCİ `supabase start` üzerinde gerçek storage şeması + Storage API HTTP testi.
+#                 !!! s2_storage_api_gate.sh paket hazırlanırken yerelde ÇALIŞTIRILAMADI (Docker yok);
+#                 ilk CI koşusu bu job'ın ilk doğrulamasıdır. Teardown her durumda, kalıntı!=0 -> KIRMIZI.
+#                 CLI PIN: 2.118.0 -> supabase/storage-api:v1.77.0 -> storage.migrations 73 satır, son
+#                 'drop-bucketid-objname-index', count:md5 == production (2026-10-07 read-only). Sürüm,
+#                 storage imajı ve storage.migrations paritesi job içinde doğrulanır; farklıysa KIRMIZI.
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [cdp3b-asset-preview-2y4qmd]
+    paths: ["SEC_MEDIA_package/stage2/**", ".github/workflows/sec-media-stage2-gates.yml"]
+  pull_request:
+    paths:
+      - "SEC_MEDIA_package/stage2/**"
+      - ".github/workflows/sec-media-stage2-gates.yml"
+permissions:
+  contents: read
+jobs:
+  local-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: SHA256SUMS (paket bütünlüğü)
+        working-directory: SEC_MEDIA_package/stage2
+        run: sha256sum -c SHA256SUMS
+
+      - name: Secret scan (stage2 paketi + bu workflow)
+        run: bash CDP3C_package/gates/secret_scan.sh SEC_MEDIA_package/stage2 .github/workflows/sec-media-stage2-gates.yml
+
+      - name: Client direct Storage write scan (tüm repo, servis edilen HTML/JS)
+        run: |
+          set -euo pipefail
+          bash SEC_MEDIA_package/stage2/gates/s2_client_write_scan.sh "$GITHUB_WORKSPACE" | tee "$RUNNER_TEMP/s2_client_scan.log"
+          grep -q '^S2_CLIENT_WRITE_SCAN_CLEAN$' "$RUNNER_TEMP/s2_client_scan.log" || { echo "GATE_FAILED:client_scan"; exit 1; }
+
+      - name: PGlite kur (sabit 0.3.16 = PostgreSQL 17; checkout dışına)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pglite" && cd "$RUNNER_TEMP/pglite"
+          npm init -y >/dev/null 2>&1
+          npm i --no-audit --no-fund @electric-sql/pglite@0.3.16 >/dev/null 2>&1
+          echo "pglite kuruldu"
+
+      - name: PGlite gate (S2 up/down/idempotency/drift/zero-footprint)
+        run: |
+          set -euo pipefail
+          PGLITE_DIR="$RUNNER_TEMP/pglite" node SEC_MEDIA_package/stage2/gates/s2_pglite_gate.mjs | tee "$RUNNER_TEMP/s2_pglite.log"
+          grep -q '^S2_LOCAL_PGLITE_GATE_PASS$' "$RUNNER_TEMP/s2_pglite.log" || { echo "GATE_FAILED:pglite"; exit 1; }
+
+      - name: Yerel Postgres 16 (geçici)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql postgresql-contrib
+          sudo pg_ctlcluster 16 main start
+
+      - name: psql gate (psql -1 + arming kalıbı, gerçek sunucu)
+        run: |
+          set -euo pipefail
+          bash SEC_MEDIA_package/stage2/gates/s2_psql_gate.sh | tee "$RUNNER_TEMP/s2_psql.log"
+          grep -q '^S2_PSQL_GATE_PASS$' "$RUNNER_TEMP/s2_psql.log" || { echo "GATE_FAILED:psql"; exit 1; }
+
+  storage-api:
+    needs: local-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          # PIN (zorunlu): 'latest' YASAK. 2.118.0 = production storage şemasıyla birebir storage-api v1.77.0.
+          # 1.226.4 KULLANILMAZ (storage-api v1.11.13: protect_objects_delete/versioning yok).
+          version: 2.118.0
+
+      - name: Supabase start (ephemeral, checkout dışında)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/s2stack" && cd "$RUNNER_TEMP/s2stack"
+          cli_version="$(supabase --version 2>&1 | head -1)"
+          echo "supabase_cli_version=$cli_version"
+          case "$cli_version" in *2.118.0*) ;; *) echo "GATE_FAILED:cli_version_not_pinned"; exit 1;; esac
+          supabase init --force >/dev/null 2>&1 || true
+          supabase start 2>&1 | sed -E 's#eyJ[A-Za-z0-9_.-]+#[REDACTED_JWT]#g; s#sb_(secret|publishable)_[A-Za-z0-9_-]+#[REDACTED_KEY]#g; s#://[^:/@[:space:]]+:[^@/[:space:]]+@#://[REDACTED]@#g'
+          storage_image="$(docker ps --filter 'name=supabase_storage' --format '{{.Image}}' | head -1)"
+          echo "storage_image=$storage_image"
+          case "$storage_image" in *storage*:v1.77.0) ;; *) echo "GATE_FAILED:storage_image_not_v1.77.0"; exit 1;; esac
+
+      - name: Stack env (maskeli; değerler loglanmaz)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/s2stack"
+          ST="$(supabase status -o json)"
+          A="$(jq -r '.ANON_KEY // empty' <<<"$ST")"
+          S="$(jq -r '.SERVICE_ROLE_KEY // empty' <<<"$ST")"
+          U="$(jq -r '.API_URL // empty' <<<"$ST")"
+          D="$(jq -r '.DB_URL // empty' <<<"$ST")"
+          for v in A S U D; do [ -n "${!v}" ] || { echo "GATE_FAILED:status_env_$v"; exit 1; }; done
+          echo "::add-mask::$A"
+          echo "::add-mask::$S"
+          umask 077
+          {
+            printf 'API_URL=%s\n' "$U"
+            printf 'DB_URL=%s\n' "$D"
+            printf 'ANON_KEY=%s\n' "$A"
+            printf 'SERVICE_KEY=%s\n' "$S"
+          } > "$RUNNER_TEMP/s2stack.env"
+          echo "stack env hazır (dosya artifact'a dahil değil)"
+
+      - name: Storage API + gerçek storage şeması gate'i
+        run: |
+          set -euo pipefail
+          set -a; . "$RUNNER_TEMP/s2stack.env"; set +a
+          bash SEC_MEDIA_package/stage2/gates/s2_storage_api_gate.sh 2>&1 | tee "$RUNNER_TEMP/s2_storage_api.log"
+          grep -q '^S2_STORAGE_API_GATE_PASS$' "$RUNNER_TEMP/s2_storage_api.log" || { echo "GATE_FAILED:storage_api"; exit 1; }
+
+      - name: Log secret taraması (anahtar değeri logda = FAIL)
+        if: always()
+        run: |
+          set -uo pipefail
+          [ -f "$RUNNER_TEMP/s2stack.env" ] || { echo "env yok (erken hata) — tarama atlandı"; exit 0; }
+          set -a; . "$RUNNER_TEMP/s2stack.env"; set +a
+          leak=0
+          for s in "${ANON_KEY:-}" "${SERVICE_KEY:-}"; do
+            [ -n "$s" ] || continue
+            [ -f "$RUNNER_TEMP/s2_storage_api.log" ] && grep -F -q -- "$s" "$RUNNER_TEMP/s2_storage_api.log" && leak=1
+          done
+          [ "$leak" = "0" ] || { echo "GATE_FAILED:secret_leak_in_log"; exit 1; }
+          bash CDP3C_package/gates/secret_scan.sh "$RUNNER_TEMP/s2_storage_api.log" || exit 1
+          echo "log secret taraması temiz"
+
+      - name: Teardown (fail-closed) + kalıntı kontrolü
+        if: always()
+        run: |
+          set -uo pipefail
+          rm -f "$RUNNER_TEMP/s2stack.env"
+          cd "$RUNNER_TEMP/s2stack" 2>/dev/null || { echo "stack dizini yok"; exit 0; }
+          if ! supabase stop --no-backup >/dev/null 2>&1; then echo "GATE_FAILED:teardown_stop"; exit 1; fi
+          c="$(docker ps -aq --filter 'name=supabase_' | wc -l | tr -d ' ')"
+          v="$(docker volume ls -q --filter 'name=supabase_' | wc -l | tr -d ' ')"
+          echo "container_count=$c volume_count=$v"
+          if [ "$c" != "0" ] || [ "$v" != "0" ]; then echo "GATE_FAILED:teardown_residue"; exit 1; fi
+          echo "residue=zero"

@@ -1,0 +1,19 @@
+{
+  "name": "sec-media-stage1-acceptance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SEC-MEDIA Stage 1 (IS PAKETI 1) live acceptance harness: admin UI media_upload, negative tests, PRE/POST snapshot diff. See S1_ACCEPTANCE.md.",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "selftest": "bash gates/run_selftests.sh",
+    "preflight": "node gates/s1_admin_upload_acceptance.mjs --preflight",
+    "negative": "node gates/s1_negative.mjs",
+    "accept": "node gates/s1_admin_upload_acceptance.mjs",
+    "verify-gone": "node gates/s1_admin_upload_acceptance.mjs --verify-gone"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.2",
+    "playwright": "1.56.1"
+  }
+}

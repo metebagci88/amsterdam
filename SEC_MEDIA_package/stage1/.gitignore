@@ -1,0 +1,4 @@
+# SEC-MEDIA stage1: local installs and run outputs are never committed.
+node_modules/
+package-lock.json
+out/

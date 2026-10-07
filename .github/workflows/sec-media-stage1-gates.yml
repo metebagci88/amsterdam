@@ -1,0 +1,70 @@
+name: SEC-MEDIA Stage 1 gates (offline rehearsal — production'a DOKUNMAZ)
+# İŞ PAKETİ 1 (güvenli medya yükleme kabul testi) harness'ının OFFLINE kapısı.
+#   node --check + 3 selftest + offline rehearsal (GERÇEK CDP3B/admin.html + GERÇEK admin-api handler'ı,
+#   Chromium içinde, tüm dış ağ abort) + iki secret scan + SHA256SUMS  →  "S1_OFFLINE_GATE_PASS" şart.
+# Exit 4 (bağımlılık yok → rehearsal SKIPPED / INCOMPLETE) KIRMIZIDIR.
+# Hiçbir adım www.asalocal.club veya *.supabase.co'ya bağlanmaz; secret kullanmaz; ücretli kaynak açmaz.
+# CDP3B/admin.html veya admin-api kaynağındaki bir değişiklik harness'ın statik kontrollerini (S01–S13)
+# ya da beklenen durum kodlarını bozarsa bu workflow kırmızıya döner.
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [cdp3b-asset-preview-2y4qmd]
+    paths: ["SEC_MEDIA_package/stage1/**", ".github/workflows/sec-media-stage1-gates.yml"]
+  pull_request:
+    paths:
+      - "SEC_MEDIA_package/stage1/**"
+      - "CDP3B/admin.html"
+      - "CDP3B/edge/admin-api/**"
+      - "decision_contract.js"
+      - "CDP3C_package/gates/secret_scan.sh"
+      - "CDP3D_package/gates/cdp3d_secret_scan.sh"
+      - ".github/workflows/sec-media-stage1-gates.yml"
+permissions:
+  contents: read
+jobs:
+  offline-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Node sürümü (>= 22.18 — .ts type stripping)
+        run: |
+          set -euo pipefail
+          node -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a<22||(a===22&&b<18)){console.log("GATE_FAILED:node_version "+process.versions.node);process.exit(1)} console.log("node "+process.versions.node)'
+
+      - name: Bağımlılıklar (sabit sürümler, checkout DIŞINA) + Chromium
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/s1deps" && cd "$RUNNER_TEMP/s1deps"
+          npm init -y >/dev/null 2>&1
+          npm i --no-audit --no-fund playwright@1.56.1 @supabase/supabase-js@2.117.2
+          npx playwright install --with-deps chromium
+          node -p '"playwright " + require("playwright/package.json").version + " · supabase-js " + require("@supabase/supabase-js/package.json").version'
+
+      - name: Stage 1 offline gate (selftest + rehearsal + secret scan + SHA256SUMS)
+        run: |
+          set -euo pipefail
+          S1_NODE_MODULES="$RUNNER_TEMP/s1deps/node_modules" bash SEC_MEDIA_package/stage1/gates/run_selftests.sh 2>&1 | tee "$RUNNER_TEMP/s1_gate.log"
+          grep -qx 'S1_OFFLINE_GATE_PASS' "$RUNNER_TEMP/s1_gate.log" || { echo "GATE_FAILED:s1_offline_gate"; exit 1; }
+
+      - name: Secret scan (bu workflow + gate logu)
+        if: always()
+        run: |
+          set -uo pipefail
+          bash CDP3C_package/gates/secret_scan.sh .github/workflows/sec-media-stage1-gates.yml || exit 1
+          bash CDP3D_package/gates/cdp3d_secret_scan.sh .github/workflows/sec-media-stage1-gates.yml || exit 1
+          if [ -f "$RUNNER_TEMP/s1_gate.log" ]; then
+            bash CDP3C_package/gates/secret_scan.sh "$RUNNER_TEMP/s1_gate.log" || exit 1
+          fi
+          echo "workflow + log secret taraması temiz"
+
+      - name: Nihai sentinel
+        if: success()
+        run: echo "SEC_MEDIA_STAGE1_CI_GATES_PASS"
+# NOT: Canlı kabul (S1-00b runtime, S1-04 negatif, S1-06 tek upload) bu workflow'da KOŞMAZ;
+# SEC_MEDIA_package/stage1/S1_ACCEPTANCE.md §6'ya göre canlıya erişen bir ortamda, insan onayıyla yapılır.
