@@ -321,12 +321,22 @@ sc("unknown-city trip (Paris) migrated by policy A is refused on Amsterdam", asy
   t("banner hidden + sample calendar", await page.evaluate(() => document.getElementById("tripBanner").classList.contains("hide") && CAL.sample === true));
 });
 
-sc("?city=Kopenhag on the Amsterdam page: storage locked, nothing read or written", async ({ page, origin, t }) => {
+// WP7 beta: ?city=Kopenhag no longer renders a Kopenhag view on the Amsterdam page; it goes to the honest stub.
+sc("?city=Kopenhag on the Amsterdam page → /kopenhag/ stub (WP7), storage unchanged", async ({ page, origin, t }) => {
   await seedStorage(page, origin, Object.assign({}, LEGACY_SEED, { "asa:cph:fav": JSON.stringify(["cph-x"]) }));
   const before = await dump(page);
-  await openCity(page, origin, "?city=Kopenhag");
+  await Promise.all([page.waitForURL(/\/kopenhag\/$/, { timeout: 10000 }), page.goto(origin + "/amsterdam/?city=Kopenhag", { waitUntil: "commit" })]);
+  t("redirected to the stub", new URL(page.url()).pathname === "/kopenhag/", page.url());
+  t("storage unchanged (no migration, no writes)", JSON.stringify(await dump(page)) === JSON.stringify(before));
+});
+
+// The storage lock for a foreign ?city= label still holds for any other (unopened) city.
+sc("?city=Paris on the Amsterdam page: storage locked, nothing read or written", async ({ page, origin, t }) => {
+  await seedStorage(page, origin, Object.assign({}, LEGACY_SEED, { "asa:cph:fav": JSON.stringify(["cph-x"]) }));
+  const before = await dump(page);
+  await openCity(page, origin, "?city=Paris");
   const n = await notice(page);
-  t("locked notice", n.visible && /Amsterdam rehberidir/.test(n.text) && /Kopenhag/.test(n.text));
+  t("locked notice", n.visible && /Amsterdam rehberidir/.test(n.text) && /Paris/.test(n.text));
   t("Amsterdam favorites not shown", !(await page.evaluate(() => isFav("barpif"))));
   await page.evaluate(() => toggleFav("barpif"));
   const after = await dump(page);

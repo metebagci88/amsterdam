@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="asa-city-code" content="nl-ams" />
 <title>Amsterdam · Lokal Yaşam Rehberi</title>
+<link rel="canonical" href="https://www.asalocal.club/amsterdam/"/>
+<meta property="og:url" content="https://www.asalocal.club/amsterdam/"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,0,700;9..144,1,400;9..144,1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
@@ -129,7 +131,8 @@ select.asasel:focus{outline:none;border-color:#131908;box-shadow:0 0 0 2px rgba(
 .cnote b{color:var(--ink)}
 .badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 .badge{font-size:10.5px;padding:3px 8px;border-radius:999px;background:var(--bg2);color:var(--ink2);font-weight:600}
-.badge.src-user{background:#e7eef4;color:#3f6383}
+.badge.src-user,.badge.src-editor{background:#e7eef4;color:#3f6383}
+.badge.src-poi{background:#efe7f4;color:#6f5390}
 .badge.src-deck{background:#e3f0ee;color:#3c7670}
 .badge.src-extra{background:#eaf1e1;color:#5a7a36}
 .badge.src-audio{background:#efe7f4;color:#6f5390}
@@ -441,7 +444,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
       <button class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" onclick="goBack()" title="Geri"><span class="msym text-[20px]">arrow_back</span></button>
       <a href="/" class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" title="Ana sayfa"><span class="msym text-[20px]">home</span></a>
       <div class="min-w-0 ml-1 leading-tight">
-        <div class="font-headline-lg text-[19px] text-primary whitespace-nowrap">AsaLocal Club</div>
+        <div class="font-headline-lg text-[19px] text-primary whitespace-nowrap">AsaLocal Club <span id="betaBadge" class="align-middle text-[10px] tracking-[0.08em] uppercase border border-secondary/40 text-secondary rounded-full px-1.5 py-[1px]" title="Amsterdam Türkçe rehberi beta sürümünde">Beta</span></div>
         <div id="hdrSub" class="text-[9.5px] tracking-[0.14em] uppercase text-on-surface-variant">Amsterdam · yerel gibi gez</div>
       </div>
     </div>
@@ -489,10 +492,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
       <select class="asasel" id="mapCat"><option value="">Tüm kategoriler</option></select>
       <select class="asasel" id="mapSrc">
         <option value="">Tüm kaynaklar</option>
-        <option value="user">Benim listem</option>
-        <option value="deck">Önceki araştırmam</option>
-        <option value="extra">Ek araştırma</option>
-        <option value="audio">Ses kaydı</option>
+        <option value="editor">Editör seçimi</option>
         <option value="poi">Gezilecek yer</option>
       </select>
     </div>
@@ -503,9 +503,8 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     </div>
     <div class="legend">
       <span><i class="dot" style="background:var(--fav)"></i>Favori</span>
-      <span><i class="dot" style="background:var(--blue)"></i>Benim listem</span>
-      <span><i class="dot" style="background:var(--teal)"></i>Önceki araştırmam</span>
-      <span><i class="dot" style="background:var(--green)"></i>Ek araştırma</span>
+      <span><i class="dot" style="background:var(--blue)"></i>Editör seçimi</span>
+      <span><i class="dot" style="background:var(--purple)"></i>Gezilecek yer</span>
       <span><i class="dot" style="background:var(--gold)"></i>Sen (★)</span>
     </div>
     <div id="mapWrap">
@@ -528,10 +527,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
         <select class="asasel" id="fArea"><option value="">Tüm bölgeler</option></select>
         <select class="asasel" id="fSrc">
           <option value="">Tüm kaynaklar</option>
-          <option value="user">Benim listem</option>
-          <option value="deck">Önceki araştırmam</option>
-          <option value="extra">Ek araştırma</option>
-          <option value="audio">Ses kaydı önerileri</option>
+          <option value="editor">Editör seçimi</option>
           <option value="poi">Gezilecek yer</option>
         </select>
         <select class="asasel" id="fSort">
@@ -676,6 +672,8 @@ window.__snapshotPlan=async function(){
 <script>
 /* ===== referans noktaları ===== */
 const CITY=(()=>{try{var p=new URLSearchParams(location.search).get('city');if(p)return p;var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';}catch(e){}return 'Amsterdam';})();
+// WP7 beta: Kopenhag henüz açık değil — bu sayfada Kopenhag görünümü açılmaz, dürüst tanıtım sayfasına gidilir.
+try{ if(/^(kopenhag|copenhagen|københavn|kobenhavn)$/i.test(String(CITY||'').trim()) && /^\/amsterdam\//.test(location.pathname)) location.replace('/kopenhag/'); }catch(e){}
 const CITYCONF={
  "Amsterdam":{home:{lat:52.370,lng:4.895,name:"Merkez"},view:[52.370,4.895,12],sub:"Amsterdam \u00b7 yerel gibi gez",blurb:"Klasik turist de\u011fil, lokal ya\u015fam modundas\u0131n: iyi kahve, g\u00fczel \u00f6\u011fle yeme\u011fi, bisikletle ke\u015fif, ak\u015fam \u015farab\u0131."},
  "Kopenhag":{home:{lat:55.6805,lng:12.5615,name:"Indre By (merkez)"},view:[55.6805,12.5615,13],sub:"Kopenhag \u00b7 yerel gibi gez",blurb:"\u0130skandinav tasar\u0131m\u0131, \u00fc\u00e7\u00fcnc\u00fc dalga kahve, efsane f\u0131r\u0131nlar ve liman kenar\u0131: Kopenhag'\u0131 turist de\u011fil, yerel gibi ke\u015ffet."}
@@ -979,8 +977,21 @@ function gmaps(v){const q=encodeURIComponent(v.name+" "+(v.area||"")+" "+(v.city
  return"https://www.google.com/maps/search/?api=1&query="+q;}
 function gmapsRoute(list){const pts=list.map(v=>encodeURIComponent(v.name+" "+(v.city||"Amsterdam"))).join("/");
  return"https://www.google.com/maps/dir/"+pts;}
-const RESV={req:{t:"Rezervasyon gerekli",c:"req"},rec:{t:"Rezervasyon önerilir",c:"rec"},no:{t:"Walk-in / rezervasyon yok",c:"no"},unknown:{t:"Rezervasyon: kontrol et",c:"rec"}};
-const SRCLBL={user:"Benim listem",deck:"Önceki araştırmam",extra:"Ek araştırma",audio:"Ses kaydı",poi:"Gezilecek yer"};
+const RESV={req:{t:"Rezervasyon gerekli",c:"req"},rec:{t:"Rezervasyon önerilir",c:"rec"},no:{t:"Walk-in / rezervasyon yok",c:"no"},unknown:{t:"Rezervasyon bilgisi yok",c:"rec"}};
+const SRCLBL={user:"Editör seçimi",deck:"Editör seçimi",extra:"Editör seçimi",audio:"Editör seçimi",poi:"Gezilecek yer"};
+// WP7: kaynak grupları kamuya açık iki ada indirgenir (editoryal liste / gezilecek yer).
+function srcGroup(s){ return s==="poi"?"poi":"editor"; }
+// WP7: mekân notları sahibin kişisel araştırma dilinden okur diline çevrilir (içerik uydurulmaz, yalnız ifade).
+function publicNote(t){
+ let x=String(t==null?"":t);
+ x=x.replace(/<b>\s*Senin notun:\s*<\/b>\s*/gi,"<b>Editör notu:</b> ").replace(/Senin notun:\s*/gi,"Editör notu: ");
+ x=x.replace(/❤️\s*Öncelikli favori\./g,"❤️ Editörün favorisi.").replace(/❤️\s*Favori\./g,"❤️ Editörün favorisi.");
+ x=x.replace(/(<b>)?\s*Araştırma ile eklendi\s*(<\/b>)?\s*\(senin verdiğin isimden\)\.?\s*/gi,"").replace(/^\s*(<b>)?\s*Ek araştırma\.?\s*(<\/b>)?\s*/i,"");
+ x=x.replace(/\(Araştırmada bazı kaynaklar/g,"(Bazı kaynaklar").replace(/\(Araştırma:\s*/g,"(Bazı kaynaklara göre: ");
+ x=x.replace(/[Aa]dres\/IG kontrol edilmeli\./g,"Adres ve Instagram bilgisi henüz doğrulanmadı.").replace(/[Aa]dres kontrol edilmeli\./g,"Adres bilgisi henüz doğrulanmadı.");
+ x=x.replace(/kontrol edilmeli/gi,"henüz doğrulanmadı").replace(/kontrol et\b/gi,"teyit et");
+ return x.replace(/\s{2,}/g," ").trim();
+}
 function byId(id){return V.find(v=>v.id===id);}
 function winopen(u){if(!u)return;try{const w=window.open(u,"_blank","noopener");if(!w)location.href=u;}catch(e){location.href=u;}}
 
@@ -1235,7 +1246,7 @@ function currentList(){
  let list=V.filter(v=>{
    if(v.city!==CITY)return false;
    if(area&&v.area!==area)return false;
-   if(src&&v.src!==src)return false;
+   if(src&&srcGroup(v.src)!==src)return false;
    if(q){const blob=(v.name+" "+v.area+" "+v.cats.join(" ")+" "+v.best.join(" ")+" "+v.desc).toLowerCase();if(!blob.includes(q))return false;}
    for(const k of activeChips){if(!matchChip(v,k))return false;}
    return true;
@@ -1246,43 +1257,31 @@ function currentList(){
  else list.sort((a,b)=>{const s=x=>(isFav(x.id)?-4:0)+(x.src==="user"?-2:0)+(x.conf==="high"?-1:0);return s(a)-s(b);});
  return list;
 }
-const CATIMG={
- coffee:"https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=520&q=65&auto=format&fit=crop",
- food:"https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=520&q=65&auto=format&fit=crop",
- wine:"https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=520&q=65&auto=format&fit=crop",
- brunch:"https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=520&q=65&auto=format&fit=crop",
- bar:"https://images.unsplash.com/photo-1436076863939-06870fe779c2?w=520&q=65&auto=format&fit=crop",
- park:"https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=520&q=65&auto=format&fit=crop",
- culture:"https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=520&q=65&auto=format&fit=crop",
- shop:"https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=520&q=65&auto=format&fit=crop"
-};
 function venueImg(v){
  const real=(v.photo_url||v.photo||v.img||"").trim();
  if(real)return real;
- const t=((v.tags||[]).join(" ")+" "+(v.cats||[]).join(" ")+" "+(v.type||"")).toLowerCase();
- if(/kahve|coffee|kafe|kavurucu/.test(t))return CATIMG.coffee;
- if(/şarap|sarap|wine|natürel|naturel/.test(t))return CATIMG.wine;
- if(/kahvaltı|kahvalti|brunch/.test(t))return CATIMG.brunch;
- if(/bira|bar|kokteyl|cocktail/.test(t))return CATIMG.bar;
- if(/park|doğa|doga|yürüyüş|yuruyus/.test(t))return CATIMG.park;
- if(/müze|muze|kültür|kultur|sanat|galeri/.test(t))return CATIMG.culture;
- if(/mağaza|magaza|alışveriş|alisveris|konsept|dükkan|dukkan/.test(t))return CATIMG.shop;
- return CATIMG.food;
+ return "";   // WP7 (§2.6): Unsplash kategori görseli mekân görseli olarak kullanılmaz; kart nötr yer tutucu gösterir
+}
+// WP7: mekânın kendi fotoğrafı varsa <img>, yoksa nötr yer tutucu (uydurma/kategori görseli yok)
+function venueMedia(v,cls){
+ const u=venueImg(v);
+ if(u) return '<img class="'+cls+'" src="'+esc(u)+'" loading="lazy" alt="">';
+ return '<div class="w-full h-full flex items-center justify-center" style="background:linear-gradient(135deg,#efe8da,#e3d8c2)" role="img" aria-label="Fotoğraf yok"><span class="msym text-[40px] text-on-surface-variant/60">storefront</span></div>';
 }
 function cardHtml(v){
  const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
  const badges=[];
- badges.push('<span class="badge src-'+v.src+'">'+SRCLBL[v.src]+'</span>');
+ badges.push('<span class="badge src-'+srcGroup(v.src)+'">'+(SRCLBL[v.src]||SRCLBL.user)+'</span>');
  if(isWork(v))badges.push('<span class="badge work">💻 Çalışma</span>');
- if(v.conf==="low")badges.push('<span class="badge warn">kontrol et</span>');
+ if(v.conf==="low")badges.push('<span class="badge warn">bilgi doğrulanmadı</span>');
  (v.tags||v.best||[]).slice(0,3).forEach(b=>badges.push('<span class="badge">'+b+'</span>'));
  const kick=(v.type||'').toUpperCase();
  const distTxt=(km<100)?('≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk'):'';
- const noteTxt=v.tip||v.note||'';
+ const noteTxt=publicNote(v.tip||v.note||'');
  const abtn='rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors';
  return '<div class="flex flex-col group" data-venue-id="'+v.id+'">'+
    '<div class="relative aspect-[16/10] rounded-lg overflow-hidden bg-surface-container mb-4 shadow-sm cursor-pointer" onclick="openVenue(\''+v.id+'\')">'+
-     '<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" src="'+venueImg(v)+'" loading="lazy">'+
+     venueMedia(v,"w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]")+
      '<button class="absolute top-3 right-3 w-10 h-10 rounded-full bg-surface/95 backdrop-blur flex items-center justify-center shadow-md active:scale-90 transition" onclick="event.stopPropagation();toggleFav(\''+v.id+'\')"><span class="msym text-[22px] text-secondary">'+(isFav(v.id)?"favorite":"favorite_border")+'</span></button>'+
    '</div>'+
    '<div class="font-kicker text-kicker text-on-surface-variant uppercase mb-1.5">'+kick+'</div>'+
@@ -1337,7 +1336,7 @@ function applyFilters(){renderCards();}
 /* ===== LEAFLET / OpenStreetMap MAP ===== */
 const CITY_VIEW={Amsterdam:[52.370,4.895,12]};if(!CITY_VIEW[CITY])CITY_VIEW[CITY]=CC.view;
 const MAP={city:CITY,map:null,layer:null,userMarker:null,ready:false,pickMode:false};
-function hexColor(v){if(isFav(v.id))return"#c25a52";return v.src==="user"?"#5b7a96":v.src==="deck"?"#5a9a93":v.src==="extra"?"#7d9a5a":"#8a6fa3";}
+function hexColor(v){if(isFav(v.id))return"#c25a52";return srcGroup(v.src)==="editor"?"#5b7a96":"#8a6fa3";}
 function initMap(){
  if(typeof L==="undefined"){setTimeout(initMap,250);return;}
  if(!MAP.ready){
@@ -1361,7 +1360,7 @@ function popupHtml(v){const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv
  return '<div style="min-width:190px"><b style="font-size:14px">'+v.name+(isFav(v.id)?" ❤️":"")+'</b><br>'+
   '<span style="color:#666;font-size:11.5px">📍 '+v.area+(c.approx?" · ~konum":"")+' · ≈'+km.toFixed(1)+' km · 🚲 '+bikeMin(km)+' dk</span><br>'+
   '<span style="font-size:11.5px">🏷️ '+(v.type||v.cats.join(", "))+' · '+r.t+'</span>'+
-  (v.tip?'<div style="font-size:11px;color:#5a6b3f;margin-top:3px">💡 '+v.tip+'</div>':'')+
+  (v.tip?'<div style="font-size:11px;color:#5a6b3f;margin-top:3px">💡 '+publicNote(v.tip)+'</div>':'')+
   '<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">'+
    '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button>'+
    '<button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button>'+
@@ -1381,7 +1380,7 @@ function drawMarkers(){
      if(allow&&!allow.has(v.id))return;
      if(!member&&favOnly&&!isFav(v.id))return;
      if(cat&&!(v.cats||[]).includes(cat))return;
-     if(src&&v.src!==src)return;
+     if(src&&srcGroup(v.src)!==src)return;
      const c=coordsOf(v);const fav=isFav(v.id);
      const m=L.circleMarker([c.lat,c.lng],{radius:fav?9:6.5,color:"#fff",weight:2,fillColor:hexColor(v),fillOpacity:.95});
      m.asaVenueId=v.id;
@@ -2647,8 +2646,8 @@ const VEN=(function(){
 
   function renderHead(v){
     const s=sess();
-    const km=distKm(v);const noteTxt=v.tip||v.note||'';
-    let h='<div class="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-surface-container mb-5"><img class="w-full h-full object-cover" src="'+venueImg(v)+'"></div>'
+    const km=distKm(v);const noteTxt=publicNote(v.tip||v.note||'');
+    let h='<div class="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-surface-container mb-5">'+venueMedia(v,"w-full h-full object-cover")+'</div>'
       +'<div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">'+esc((v.type||'').toUpperCase())+'</div>'
       +'<h3 class="font-headline-lg text-[28px] leading-tight text-primary mb-2">'+esc(v.name)+'</h3>'
       +(v.desc?'<p class="font-body-lg text-body-lg text-on-surface/90 mb-4">'+esc(v.desc)+'</p>':'')
