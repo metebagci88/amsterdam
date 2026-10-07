@@ -1,0 +1,34 @@
+name: SEC-VIEWS gates (PGlite PG17 + PG18 — production'a DOKUNMAZ)
+# public view'ları salt-okunur yapan hotfix paketinin kapıları. Production'a bağlanmaz, secret kullanmaz.
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [cdp3b-asset-preview-2y4qmd]
+    paths: ["SEC_VIEWS_package/**", ".github/workflows/sec-views-gates.yml"]
+permissions:
+  contents: read
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: SHA256SUMS
+        working-directory: SEC_VIEWS_package
+        run: sha256sum -c SHA256SUMS
+      - name: Secret scan
+        run: bash CDP3C_package/gates/secret_scan.sh SEC_VIEWS_package .github/workflows/sec-views-gates.yml
+      - name: MCP token scan
+        run: bash SEC_VIEWS_package/gates/sec_views_token_scan.sh
+      - name: PGlite gate (PG17 = pglite 0.3.16, PG18 = pglite 0.5.8)
+        run: |
+          set -euo pipefail
+          for v in 0.3.16 0.5.8; do
+            d="$RUNNER_TEMP/pglite-$v"; mkdir -p "$d"; (cd "$d" && npm init -y >/dev/null 2>&1 && npm i --no-audit --no-fund "@electric-sql/pglite@$v" >/dev/null 2>&1)
+            PGLITE_DIR="$d" node SEC_VIEWS_package/gates/sec_views_pglite_gate.mjs | tee "$RUNNER_TEMP/sv_$v.log"
+            grep -q '^SEC_VIEWS_PGLITE_GATE_PASS$' "$RUNNER_TEMP/sv_$v.log" || { echo "GATE_FAILED:pglite $v"; exit 1; }
+          done
+          grep -q '^-- engine: PostgreSQL 17' "$RUNNER_TEMP/sv_0.3.16.log" && grep -q '^-- engine: PostgreSQL 18' "$RUNNER_TEMP/sv_0.5.8.log"

@@ -1,0 +1,7 @@
+# SEC-VIEWS · PRE (before fix) · production tosqsabuaomgqjtogdrn · 2026-10-07 · execute_sql (zero footprint, ended with REPORT)
+REPORT:anon:WRITE_ALLOWED[delete from public.member_public];anon:WRITE_ALLOWED[update public.member_public set display_name = display_name];anon:WRITE_ALLOWED[insert into public.member_public (display_name) select 'x'];anon:other_55000;anon:other_55000;anon:read_ok;authenticated:WRITE_ALLOWED[delete from public.member_public];authenticated:WRITE_ALLOWED[update public.member_public set display_name = display_name];authenticated:WRITE_ALLOWED[insert into public.member_public (display_name) select 'x'];authenticated:other_55000;authenticated:other_55000;authenticated:read_ok; opens=6 fails=0 SV_ZF_VERDICT=VULNERABLE
+# Catalog (read-only): member_public upd_bits=28, owner=postgres (rolbypassrls=true), reloptions security_invoker=false,security_barrier=true,
+#   ACL {postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres};
+#   members triggers: members_admin_guard tgtype 23 (BEFORE INSERT/UPDATE, no DELETE), members FORCE RLS = false.
+#   comments_public / comment_reaction_counts: upd_bits=0 (55000 "cannot delete from view"), same ACL.
+#   Repo references (origin/main): only SELECT on comments_public / comment_reaction_counts; member_public unused by the site.
