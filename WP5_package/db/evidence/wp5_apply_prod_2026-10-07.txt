@@ -1,0 +1,21 @@
+# WP5 DB · APPLY + POST · production tosqsabuaomgqjtogdrn · 2026-10-07
+Prerequisites (read-only, before apply):
+  - wp5_pre_assert.sql (revised): WP5_PRE_ASSERT_PASS 0 FAIL / 24 counted (evidence/wp5_pre_assert_prod_after_secviews_2026-10-07.json)
+  - pg_extension: pg_stat_statements, pgcrypto, plpgsql, supabase_vault, uuid-ossp (no pg_graphql)
+  - CI: wp5-db-gates run 37668223987 success on bf46db0 (PGlite PG17 114/114, PG18 114/114)
+Apply:
+  apply_migration(name => 'wp5_member_private_name', query => WP5_DB_up.sql sha256 a7bca40328f2d09b849a8df6b693dac4baf701749d3fa82a2f23aed1293fc791)
+  -> success (PRE guard state=baseline, POST guard passed: CHECK md5 7614490e…/afdc557b…, guard ef160b23…, member_set_name 993b6a35… identical to PGlite)
+POST (read-only) gates/wp5_prod_assert.sql:
+  WP5_PROD_ASSERT_PASS  0 FAIL / 27 counted   (INFO: named rows 0, members 3)
+Behaviour (zero footprint, ends with REPORT -> full rollback) gates/wp5_zero_footprint_test.sql:
+  WP5_ZF_VERDICT=PASS fails=0
+  - member_set_name: ok for '  Ayşe  '/'Yılmaz' (normalized); 23 reject vectors -> bad_first/bad_last
+    (<script>, empty, 51 chars, control, {, ", digit, ZWSP, U+3164 (x1/x3), U+115F, U+1160, U+17B4, a+U+180B,
+     a+U+034F, a+49xU+0591, 20xU+064E, U+2800, 3xU+0640)
+  - direct PATCH of first_name with 20 invalid values -> 23514 (CHECK) every time
+  - e-mail lock: PATCH to another address pinned; sync to own JWT claim allowed; spoofed INSERT email -> JWT email
+  - A cannot update B (rows=0), B untouched; writes through member_public -> 42501 (A and anon)
+  - anon: member_set_name 42501, members 42501, views expose no first_name/last_name
+  - no sub -> no_auth; no member row -> no_member_row; service_role email update allowed
+Residue after test: zz-wp5-zf auth.users 0, members 0; named members 0; members total 3 (unchanged)
