@@ -13,8 +13,8 @@
 ```text
 Overall: PARTIAL_BLOCKED   (İş Paketi 1 başlamadan durduruldu; tek production değişikliği: Mete onaylı admin-api v18 deploy'u)
 Main final SHA: 7a548e979b7b72556622edc6a8d52391a5874b7e   (değişmedi; PR #12 merge commit'i)
-Production URLs: https://www.asalocal.club  (/, /amsterdam/, /kopenhag/, /admin → /CDP3B/admin.html)
-                 — bu yürütme ortamından ERİŞİLEMEDİ, canlı smoke YAPILAMADI
+Production URLs: https://www.asalocal.club  (/, /amsterdam/, /kopenhag/, /admin → 302 /CDP3B/admin.html)
+                 — canlı girişsiz smoke GitHub Actions + Playwright ile: 50/50 PASS (bkz. §2.1)
 Production Edge versions (salt-okunur, değişmedi):
   admin-api v18 verify_jwt=true   ← 2026-10-07 Mete onayıyla deploy (repo main kaynağı); v17 KIRIKTI (bkz. B1)
   email-api v9 verify_jwt=true
@@ -24,7 +24,7 @@ Production Edge versions (salt-okunur, değişmedi):
   adim2-dispatch-once v6 verify_jwt=true (410 gone stub)
 Migration ledger additions: YOK (son kayıt: 20260930202808 admin_rate_check_media_upload_token)
 
-Stage 01: BLOCKED     — B1 (admin-api v17 PLACEHOLDER_INDEX) v18 ile düzeltildi, runtime kabulü bekliyor; B2: canlı site + admin oturumu erişimi yok
+Stage 01: BLOCKED     — B1 (admin-api v17 PLACEHOLDER_INDEX) v18 ile düzeltildi + canlı girişsiz kabul PASS; B2: admin/üye test oturumu yok
 Stage 02: NOT STARTED — önkoşul (Stage 01 PASS) yok. Migration paketi HAZIRLANDI, UYGULANMADI
 Stage 03: NOT STARTED — sıra kuralı (PRD §4)
 Stage 04: NOT STARTED — sıra kuralı
@@ -56,7 +56,7 @@ Costs:
 - paid resource created: NO
 - card/plan upgrade: NO
 
-Remaining blockers: B2 (canlı erişim/oturum yok); B1 deploy edildi ama canlı HTTP kabulü B2'ye bağlı — bkz. §3
+Remaining blockers: B2 — admin ve normal üye test oturumu yok (İP1 gerçek admin upload'ı ve 403 testi için şart) — bkz. §3
 Known non-goals: bkz. §7
 Rollback references: main 7a548e9; admin-api v18 ezbr 96bd5e04… (önceki v17 ezbr d4ea5db5… — kırık, geri dönülmez); migration ledger son kayıt 20260930202808
 ```
@@ -95,6 +95,19 @@ Yapılanlar:
 | WSE `welcome_service_email.v1` future-only aktif | default_enabled=true, effective_from set, policy_version=`welcome_service_email.v1`; diğer 6 service pref NULL | `service_pref_defaults` | ✅ |
 | Browser storage kütüphanesi main'de, canlıya bağlı değil | `lib/asa-storage/` var; `index.html`, `amsterdam/index.html`, `kopenhag/index.html`, `CDP3B/admin.html` içinde referans yok | grep | ✅ |
 | `admin_rate_events` media_upload sayısı (PRE) | 0 | SQL | kayıt |
+
+### 2.1 Canlı girişsiz smoke (GitHub Actions + gerçek Chromium) — 50/50 PASS
+
+Bu bulut ortamının proxy'si `www.asalocal.club` ve `*.supabase.co` bağlantılarını reddediyor (`CONNECT 403`). Canlı doğrulama bu yüzden repo'nun kendi GitHub Actions'ında yapıldı: ücretsiz kota, kimlik bilgisi yok, yazma yok. Kullanılan araçlar `LIVE_CHECKS/live_smoke.mjs` ve `.github/workflows/live-smoke.yml`. Koşu: [37618612459](https://github.com/metebagci88/amsterdam/actions/runs/37618612459).
+
+| Alan | Sonuç |
+|---|---|
+| Canlı sayfa byte eşitliği (SHA-256 canlı = repo) | `/` `25b70807…`, `/amsterdam/` `0195b7a8…`, `/kopenhag/` `8428c222…`, `/CDP3B/admin.html` `b9fb1610…` → 4/4 PASS; başlıklar doğru |
+| Redirect sözleşmesi | `/admin`, `/admin.html` → 302 `/CDP3B/admin.html`; `/copenhagen`, `/kopenhag.html` → 302 `/kopenhag/`; apex → 301 `https://www.asalocal.club/` |
+| admin-api v18 reddetme yolları | 8/8 PASS (bkz. §3 B1) |
+| Chromium mobil 390 px + masaüstü 1366 px, 4 sayfa | console error 0, 4xx/5xx yanıt 0, yatay taşma yok → 24/24 PASS |
+
+Not: Bu smoke girişsiz yüzeyi kapsar. Üye ve admin oturumu gerektiren yollar (İP1 upload, 403 testi, profil vb.) B2 nedeniyle test edilemedi.
 
 **Güvenlik advisor baseline'ı (değişiklik öncesi, bilgi amaçlı):** 41 INFO `rls_enabled_no_policy` (deny-all tablolar, kasıtlı), 3 ERROR `security_definer_view` (`member_public`, `comments_public`, `comment_reaction_counts`), 2 WARN mutable search_path (`_email_status_rank`, `_email_can_set_delivery`), 23 WARN authenticated tarafından çağrılabilen SECURITY DEFINER fonksiyon, 1 WARN leaked password protection kapalı. Bunlar **önceden var olan** durumlardır, bu programın kapsamında değildir ve dokunulmadı (bkz. §7).
 
@@ -151,7 +164,9 @@ event loop error: ReferenceError: PLACEHOLDER_INDEX is not defined
 | `deploy_edge_function admin-api`, dosyalar `index.ts` + `inert/media_upload.ts`, `verify_jwt=true` | v18 ACTIVE, ezbr `96bd5e041aab6886…` (bundle derlendi) |
 | Geri okuma + bağımsız byte karşılaştırması (ayrı ajan, `get_edge_function` → dosya → `sha256sum` + `diff`) | `index.ts` `7dce8225a16f53d2…` = repo; `inert/media_upload.ts` `4a77daf0bf682543…` = repo; diff boş → **IDENTICAL** |
 | verify_jwt | true (değişmedi) |
-| Runtime kabul (OPTIONS 200 / no-JWT 401 / üye 403 / admin `counts` 200) | **BEKLİYOR**. Bu ortamdan `*.supabase.co` HTTP erişimi yok (B2). Deploy sonrası fonksiyona henüz istek gelmediği için boot logu da yok. |
+| Runtime kabul — girişsiz yollar (GitHub Actions [Live smoke run 37618612459](https://github.com/metebagci88/amsterdam/actions/runs/37618612459), 2026-10-07 12:06Z) | **PASS**:<br>• OPTIONS izinli origin → 200 + ACAO=`https://www.asalocal.club`<br>• yabancı origin → 403<br>• JWT yok → 401<br>• anon JWT + JSON `media_upload` → **415 `unsupported_media_type` (fonksiyon kodu çalışıyor)**<br>• text/plain → 415<br>• anon rol `counts` → 401 `invalid_token`<br>• bozuk multipart → 401<br>• bilinmeyen action → 400<br>• yanıtlarda stack/secret yok |
+| Sunucu logu (function_logs, 12:06Z sonrası) | Yalnız `booted (24–33ms)` kayıtları var; `ReferenceError` ve 5xx yok |
+| Runtime kabul — girişli yollar (üye 403 / admin `counts` 200 / `media_upload`) | **BEKLİYOR**: test hesabı yok (B2) |
 
 Not: Her iki dosyanın başlık yorumunda hâlâ "NOT deployed" yazıyor (`index.ts:8`, `inert/media_upload.ts:3-4`). Bu yorumlar artık eskidi. Deploy edilen baytlarla repo'nun eşit kalması için bu turda değiştirilmedi. Bir sonraki admin-api değişikliğinde yorumla birlikte güncellenmeli.
 
