@@ -1,0 +1,1 @@
+{"at_utc":"2026-10-07T16:14:13Z","media_objects":0,"rate_media_upload_total":2,"residue":0,"policies":"media anon delete:{service_role},media anon insert:{service_role},media anon read:{public},media anon update:{service_role}"}
