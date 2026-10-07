@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 const BASE = (process.env.ASALOCAL_BASE_URL || "https://www.asalocal.club").replace(/\/+$/, "");
 const ORIGIN = "https://www.asalocal.club";
 const FN = "https://tosqsabuaomgqjtogdrn.supabase.co/functions/v1/admin-api";
+const REST = "https://tosqsabuaomgqjtogdrn.supabase.co/rest/v1";
 const results = [];
 const rec = (id, pass, detail) => results.push({ id, result: pass === null ? "SKIP" : pass ? "PASS" : "FAIL", detail });
 const sha = (buf) => createHash("sha256").update(buf).digest("hex");
@@ -122,6 +123,28 @@ async function checkAdminApi(anon) {
   rec("admin-api:unknown action -> 400 unknown_action", r.status === 400 && /unknown_action/.test(t), `http=${r.status} body=${t.slice(0, 80)}`);
 }
 
+// SEC-VIEWS (sec_public_views_readonly): public views are read-only for anon. Write probes use a filter that can
+// never match (random display_name), so even a regression would touch 0 rows; the expected answer is 401 / 42501.
+async function checkPublicViews(anon) {
+  if (!anon) { rec("public views: anon key available", false, "no anon key"); return; }
+  const H = { apikey: anon, Authorization: `Bearer ${anon}`, Accept: "application/json" };
+  for (const v of ["member_public?select=tier&limit=1", "comments_public?select=id&limit=1", "comment_reaction_counts?select=n&limit=1"]) {
+    const r = await fetch(`${REST}/${v}`, { headers: H });
+    rec(`public views: anon GET ${v.split("?")[0]} -> 200`, r.status === 200, `http=${r.status}`);
+  }
+  const nomatch = `display_name=eq.zz-sec-views-${crypto.randomUUID()}`;
+  for (const [m, body] of [["DELETE", undefined], ["PATCH", JSON.stringify({ tier: "zz" })]]) {
+    const r = await fetch(`${REST}/member_public?${nomatch}`, { method: m, headers: { ...H, "Content-Type": "application/json", Prefer: "return=minimal" }, body });
+    const t = await r.text();
+    let code = ""; try { code = JSON.parse(t).code || ""; } catch {}
+    rec(`public views: anon ${m} member_public -> 401 permission denied (42501)`, r.status === 401 && code === "42501", `http=${r.status} code=${code || "-"}`);
+  }
+  const r = await fetch(`${REST}/member_public`, { method: "POST", headers: { ...H, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify({ display_name: null }) });
+  const t = await r.text();
+  let code = ""; try { code = JSON.parse(t).code || ""; } catch {}
+  rec("public views: anon POST member_public -> 401 permission denied (42501)", r.status === 401 && code === "42501", `http=${r.status} code=${code || "-"}`);
+}
+
 async function checkBrowser() {
   let pw;
   try { pw = await import("playwright"); } catch { rec("browser", null, "playwright not installed"); return; }
@@ -172,7 +195,7 @@ else {
   const anon = extractAnonKey(home);
   if (anon && process.env.GITHUB_ACTIONS) console.log(`::add-mask::${anon}`);
   rec("anon key found on live page (role=anon)", anon ? jwtRole(anon) === "anon" : false, `key=${maskKey(anon)} role=${anon ? jwtRole(anon) : "-"}`);
-  for (const step of [checkPages, checkRedirects, () => checkAdminApi(anon), checkBrowser]) {
+  for (const step of [checkPages, checkRedirects, () => checkAdminApi(anon), () => checkPublicViews(anon), checkBrowser]) {
     try { await step(); } catch (e) { rec(`step-error:${step.name || "anon"}`, false, String(e && e.message).slice(0, 200)); }
   }
   const fail = results.filter((r) => r.result === "FAIL").length;

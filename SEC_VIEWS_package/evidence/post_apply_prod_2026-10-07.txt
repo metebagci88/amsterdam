@@ -1,0 +1,14 @@
+# SEC-VIEWS · POST (after apply_migration sec_public_views_readonly, success) · production tosqsabuaomgqjtogdrn · 2026-10-07
+## gates/sec_views_prod_assert.sql (read-only)
+1 view ACLs (anon/authenticated SELECT only) .......... PASS  (all three = {postgres=arwdDxtm/postgres,anon=r/postgres,authenticated=r/postgres,service_role=arwdDxtm/postgres})
+2 all 3 views share the target ACL .................... PASS  1
+3 view definitions unchanged (md5) .................... PASS
+4 view owner + reloptions unchanged ................... PASS  3
+5 writable views/matviews in public for anon/auth ..... PASS  0
+6 SELECT kept for anon+authenticated on the 3 views ... PASS  6
+7 ledger: sec_public_views_readonly recorded .......... PASS  1
+8 members RLS on, FORCE RLS unchanged ................. PASS  true|false
+9 other public relations ACL count:md5 == PRE ......... PASS  54:17159771c03ad0a8b0c2b00510a7cb9b
+OVERALL 0 FAIL / 9 counted -> SEC_VIEWS_PROD_ASSERT_PASS
+## gates/sec_views_zero_footprint_test.sql (zero footprint, ended with REPORT)
+REPORT:anon:denied;anon:denied;anon:denied;anon:other_55000;anon:other_55000;anon:read_ok;authenticated:denied;authenticated:denied;authenticated:denied;authenticated:other_55000;authenticated:other_55000;authenticated:read_ok; opens=0 fails=0 SV_ZF_VERDICT=PASS
