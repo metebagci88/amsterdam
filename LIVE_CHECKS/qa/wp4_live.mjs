@@ -9,6 +9,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 
 const BASE = (process.env.ASALOCAL_BASE_URL || "https://www.asalocal.club").replace(/\/+$/, "");
 const SECRETS = join(process.env.RUNNER_TEMP || "/tmp", "qa_secrets.env");
@@ -21,7 +22,8 @@ function secrets() {
   return o;
 }
 
-const { chromium } = await import("playwright");
+// playwright lives in $QA_DEPS (installed outside the checkout), same as qa_runner.mjs
+const { chromium } = createRequire(join(process.env.QA_DEPS || process.cwd(), "noop.js"))("playwright");
 const browser = await chromium.launch();
 const s = secrets();
 const EMAIL = process.env.ASALOCAL_MEMBER_EMAIL;

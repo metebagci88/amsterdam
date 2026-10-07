@@ -68,7 +68,7 @@ jobs:
       - name: "S1: preflight + runtime + negative tests (no upload)"
         if: contains(env.QA_PHASES, ',s1,')
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           set -a; . "$RUNNER_TEMP/qa_secrets.env"; set +a
           cd SEC_MEDIA_package/stage1
           node gates/s1_admin_upload_acceptance.mjs --preflight; e1=$?
@@ -85,7 +85,7 @@ jobs:
       - name: "S1: the single real admin upload"
         if: contains(env.QA_PHASES, ',s1,')
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           set -a; . "$RUNNER_TEMP/qa_secrets.env"; set +a
           cd SEC_MEDIA_package/stage1
           S1_CONFIRM_UPLOAD=YES node gates/s1_admin_upload_acceptance.mjs; e=$?
@@ -99,7 +99,7 @@ jobs:
       - name: "S1: cleanup via temporary qa-media-cleanup + verify gone"
         if: contains(env.QA_PHASES, ',s1,')
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           set -a; . "$RUNNER_TEMP/qa_secrets.env"; set +a
           node LIVE_CHECKS/qa/qa_runner.mjs cleanup "$S1_OUT_DIR/s1_object_ref.local.json"; e1=$?
           (cd SEC_MEDIA_package/stage1 && node gates/s1_admin_upload_acceptance.mjs --verify-gone); e2=$?
@@ -113,7 +113,7 @@ jobs:
       - name: "S2: production HTTP acceptance"
         if: contains(env.QA_PHASES, ',s2,')
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           set -a; . "$RUNNER_TEMP/qa_secrets.env"; set +a
           node LIVE_CHECKS/qa/qa_runner.mjs s2-http; e=$?
           echo "{\"s2_http\":$e}" > "$S1_OUT_DIR/exit_d.json"; cat "$S1_OUT_DIR/exit_d.json"
@@ -123,7 +123,7 @@ jobs:
       - name: "WP4: logged-in member account menu (read/navigate only)"
         if: contains(env.QA_PHASES, ',wp4,')
         run: |
-          set -uo pipefail
+          set +e -uo pipefail
           node LIVE_CHECKS/qa/wp4_live.mjs; e=$?
           echo "{\"wp4_live\":$e}" > "$S1_OUT_DIR/exit_wp4.json"; cat "$S1_OUT_DIR/exit_wp4.json"
       - name: Publish WP4 result
