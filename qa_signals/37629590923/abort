@@ -1,0 +1,1 @@
+{"abort":true,"by":"operator","reason":"Stage 1 PASS complete; Stage 2 apply blocked by MCP destructive-statement confirmation; S2 package reworked to ALTER POLICY variant; new run will follow","at":"2026-10-07T14:11:15Z"}
