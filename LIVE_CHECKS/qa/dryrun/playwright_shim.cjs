@@ -5,6 +5,7 @@
 //   *.supabase.co /auth /rest      -> in-memory backend (one store for ALL contexts: RLS by user_id, deterministic uid per e-mail)
 //   cdn.tailwindcss.com            -> the page's own tailwind.config compiled locally (WP4_package/tests/tailwind_css.mjs)
 //   unpkg leaflet                  -> WP3_package/tests/stubs/leaflet_stub.js + layer tracking (getLayers) for map==list checks
+//   fonts.googleapis Material Symbols -> CSS emulating the icon font's 1em glyph boxes (no fake overflow)
 //   images / fonts / css / other   -> empty
 // Env: DRY_ROOT (served checkout, origin/main), DRY_STUB_DIR (this dir), ASALOCAL_BASE_URL (http://127.0.0.1:<port>),
 //      PW_REAL (real playwright, default /opt/node-tools/node_modules/playwright), DRY_STATE_OUT (optional: dump final store).
@@ -187,6 +188,9 @@ async function route(r) {
   if (u.host === "unpkg.com" && u.pathname.includes("leaflet")) return u.pathname.endsWith(".css") ? r.fulfill({ status: 200, contentType: "text/css", body: "" }) : r.fulfill({ status: 200, contentType: "application/javascript", body: LEAF });
   if (u.host === "cdn.jsdelivr.net" && u.pathname.includes("supabase-js")) return r.fulfill({ status: 200, contentType: "application/javascript", body: STUB });
   const rt = req.resourceType();
+  // Material Symbols: the real icon font renders every ligature ("arrow_back", "favorite") as ONE 1em glyph. Without the
+  // font the words would render as wide text and fake a horizontal overflow, so emulate the glyph box (text unchanged).
+  if (u.host === "fonts.googleapis.com" && /Material\+Symbols|Material%20Symbols/.test(u.search)) return r.fulfill({ status: 200, contentType: "text/css", body: ".msym,.material-symbols-outlined{width:1em!important;max-width:1em!important;overflow:hidden!important;vertical-align:middle}" });
   if (rt === "stylesheet") return r.fulfill({ status: 200, contentType: "text/css", body: "" });
   if (rt === "script") return r.fulfill({ status: 200, contentType: "application/javascript", body: "" });
   if (rt === "image") return r.fulfill({ status: 200, contentType: "image/gif", body: GIF });

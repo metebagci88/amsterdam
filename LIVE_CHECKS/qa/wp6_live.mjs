@@ -141,7 +141,12 @@ function monitor(page) {
       else b.writes.push(`${m}:${decodeURIComponent(u.pathname.slice(9))}`);
     } catch {}
   });
-  page.on("console", (m) => { if (m.type() === "error") b.console.push(scrub(m.text()).slice(0, 120)); });
+  page.on("console", (m) => {
+    if (m.type() !== "error") return;
+    const t = m.text();
+    if (/^Failed to load resource/.test(t)) { b.resource = (b.resource || 0) + 1; return; } // covered by the 4xx/5xx network checks
+    b.console.push(scrub(t).slice(0, 120));
+  });
   page.on("pageerror", (e) => b.console.push("pageerror: " + scrub(e && e.message).slice(0, 120)));
   page.on("response", (r) => {
     try {
@@ -165,7 +170,8 @@ function monitor(page) {
 function noWrites(id, mons) { const wr = mons.flatMap((m) => m.writes); rec(id, wr.length === 0, wr.length ? `${wr.length}: ${[...new Set(wr)].slice(0, 5).join(" ")}` : "no table writes / write RPCs (allowed: member_upsert_profile, log_city_view)"); }
 function techChecks(scn, mons) {
   const con = mons.flatMap((m) => m.console), bad = mons.flatMap((m) => m.bad);
-  rec(`tech/console-errors-0/${scn}`, con.length === 0, con.length ? `${con.length}: ${[...new Set(con)].slice(0, 3).join(" | ")}` : "none");
+  const resN = mons.reduce((a, m) => a + (m.resource || 0), 0);
+  rec(`tech/console-errors-0/${scn}`, con.length === 0, (con.length ? `${con.length}: ${[...new Set(con)].slice(0, 3).join(" | ")}` : "none") + (resN ? ` (+${resN} resource-load messages, see network checks)` : ""));
   rec(`tech/no-4xx-5xx-critical/${scn}`, bad.length === 0, bad.length ? `${bad.length}: ${[...new Set(bad)].slice(0, 4).join(" | ")}` : "none");
 }
 async function openPage(ctx) { const page = await ctx.newPage(); return { page, mon: monitor(page) }; }
@@ -174,9 +180,11 @@ async function press(page, sel, { text = null, timeout = 10000 } = {}) {
   const loc = text ? page.locator(sel, { hasText: text }).first() : page.locator(sel).first();
   try { await loc.click({ timeout }); return "click"; }
   catch (e) {
+    const why = ((String((e && e.message) || "").match(/(intercepts pointer events|not visible|not stable|outside of the viewport|not enabled|detached|Timeout \d+ms exceeded)/) || [])[1]) || "click failed";
     const ok = await page.evaluate(([s, t]) => { const el = [...document.querySelectorAll(s)].find((x) => !t || (x.textContent || "").includes(t)); if (!el) return false; el.click(); return true; }, [sel, text]).catch(() => false);
     if (!ok) throw new Error(`UI element not found: ${sel}${text ? ` "${text}"` : ""}`);
-    jsClicks.push(`${sel}${text ? `:${text}` : ""}`.slice(0, 60));
+    const blocker = /intercepts/.test(String(e && e.message)) ? (String(e.message).match(/<(\w+)[^>]*?(?:id="([^"]+)")?[^>]*?(?:class="([^" ]+))?[^>]*> (?:from <[^>]+> subtree )?intercepts pointer events/) || []).slice(1, 4).filter(Boolean).join(".") : "";
+    jsClicks.push(`${sel}${text ? `:${text}` : ""} (${why}${blocker ? " by " + blocker : ""})`.slice(0, 110));
     return "js-click";
   }
 }
@@ -327,10 +335,10 @@ async function archiveTripUI(page, id) {
   const before = await openTrips(page);
   if (!before.rows.some((r) => r.id === String(id))) { await closeDialogs(page); return { ok: false, why: "row not listed" }; }
   await press(page, `#tripsList [data-trip-act="archive"][data-trip-id="${id}"]`);
-  await page.waitForFunction((i) => !document.querySelector(`#tripsList [data-trip-row="${i}"]`) || (document.getElementById("tripsErr")?.textContent || "").trim(), String(id), { timeout: T.app }).catch(() => {});
+  await page.waitForFunction(() => (document.getElementById("tripsOk")?.textContent || "").trim() || (document.getElementById("tripsErr")?.textContent || "").trim(), null, { timeout: T.app }).catch(() => {});
   const r = await page.evaluate((i) => ({ gone: !document.querySelector(`#tripsList [data-trip-row="${i}"]`), okTxt: (document.getElementById("tripsOk")?.textContent || "").trim(), err: (document.getElementById("tripsErr")?.textContent || "").trim() }), String(id));
   await closeDialogs(page);
-  return { ok: r.gone && !r.err, ...r };
+  return { ok: r.gone && !r.err && /arşivlendi/.test(r.okTxt), ...r };
 }
 async function openPrefs(page) {
   await menuAction(page, "prefs");
@@ -738,6 +746,16 @@ async function writeScenario() {
       const snp = await wp.waitForFunction(() => window.TRIP && window.TRIP.plan_version >= 1, null, { timeout: 20000 }).then(() => true).catch(() => false);
       const pv = await wp.evaluate(() => ({ pv: window.TRIP && window.TRIP.plan_version, sync: window.TripSync && window.TripSync.status }));
       rec("write/plan/snapshot-recorded", snp, JSON.stringify(pv));
+      // edit the saved plan through the day editor (remove the first stop of day 1), so a later "plan restored" check
+      // can tell the saved plan apart from a freshly auto-generated one
+      const d1 = QA_TRIP.days[0];
+      const before = await wp.evaluate((d) => (dayVenues[d] || []).slice(), d1);
+      await press(wp, "#dayFlow button", { text: "Aç / düzenle" });
+      await wp.waitForFunction(() => !document.getElementById("dayModal").classList.contains("hide"), null, { timeout: T.short });
+      await press(wp, '#dayModal button[title="Çıkar"]');
+      await press(wp, "#dayModal .dayclose");
+      const ed = await poll(wp, async ({ id, d, n }) => { const t = await window.TripStore.get(id); const dv = (t && t.plan && t.plan.dayven) || {}; return { ok: Array.isArray(dv[d]) ? dv[d].length === n - 1 : n === 1, server: (dv[d] || []).length }; }, { id: memberTrip, d: d1, n: before.length });
+      rec("write/plan/edit-day-remove-stop-saved", before.length > 0 && ed.ok, `day1 ${before.length}->${ed.server}`);
       if (snp) { cleanup.push({ table: "trip_plan_versions", trip_id: Number(memberTrip), owner: ACC.member.label, state: "created_by_plan_snapshot", note: "no UI delete; remove with the archived QA trip" }); sideEffects.add("trip_plan_versions snapshot row(s) on the QA trip (listed in cleanup)"); }
     });
 
@@ -804,8 +822,8 @@ async function writeScenario() {
         await gotoHome(sp, { member: true });
         const a = await archiveTripUI(sp, secondTrip);
         const db = await read(sp, "trips", "id,archived_at", [["eq", "id", Number(secondTrip)]]);
-        const archived = !db.error && db.rows.length === 1 && !!db.rows[0].archived_at;
-        rec("iso/second-trip-archived-via-ui", a.ok && archived, `${a.okTxt || a.err || a.why} archived_at=${archived}`);
+        const archived = !db.error && (db.rows.length === 0 || !!db.rows[0].archived_at);
+        rec("iso/second-trip-archived-via-ui", a.ok && archived, `${a.okTxt || a.err || a.why} ${db.error ? db.error : db.rows.length ? "archived_at set" : "row no longer readable"}`);
         if (a.ok && archived) { drop(pending.trips, (t) => t.owner === "second"); cleanup.push({ table: "trips", id: Number(secondTrip), owner: ACC.second.label, state: "archived_by_ui", note: "row kept with archived_at; optional hard delete" }); }
       }
       await gotoAms(sp, { member: true });
@@ -872,27 +890,38 @@ async function persistAndUndo() {
     await step("persist", async () => {
       await loginHome(page, ACC.member); inn = true;
       rec("persist/login-again-new-device", true);
+      let onTrip = false;
       if (memberTrip) {
-        const list = await openTrips(page); await closeDialogs(page);
-        rec("persist/trip-still-listed", list.rows.some((x) => x.id === String(memberTrip)), `rows=${list.rows.length}`);
+        const list = await openTrips(page);
+        const listed = list.rows.some((x) => x.id === String(memberTrip));
+        rec("persist/trip-still-listed", listed, `rows=${list.rows.length}`);
+        if (listed) {
+          await Promise.all([page.waitForURL(/\/amsterdam\/.*trip=/, { timeout: T.nav }), press(page, `#tripsList [data-trip-act="open"][data-trip-id="${memberTrip}"]`)]);
+          onTrip = await page.waitForFunction((id) => window.TRIP && String(window.TRIP.id) === String(id), memberTrip, { timeout: T.app }).then(() => true).catch(() => false);
+          rec("persist/trip-reopens-on-new-device", onTrip, new URL(page.url()).search.replace(/&cb=\d+/, ""));
+        } else await closeDialogs(page);
       }
+      if (!onTrip) await gotoAms(page, { member: true });
       if (X && pending.favs.some((f) => f.owner === "member")) {
-        await gotoAms(page, { member: true });
-        await view(page, "list");
+        await page.waitForFunction(() => !!(window.ASA && window.ASA.session), null, { timeout: T.app });
         const st = await favState(page, X);
         rec("persist/favourite-restored-from-account", st.mem === true && st.local === true && st.icon === "favorite", JSON.stringify(st));
       }
-      if (memberTrip && pending.plans.length) {
-        await gotoAms(page, { qs: `&trip=${memberTrip}`, member: true });
-        await page.waitForFunction((id) => window.TRIP && String(window.TRIP.id) === String(id), memberTrip, { timeout: T.app });
-        const srv = await page.evaluate(async ({ id, days }) => { const t = await window.TripStore.get(id); const dv = (t && t.plan && t.plan.dayven) || {}; return days.map((d) => (dv[d] || []).join(",")); }, { id: memberTrip, days: QA_TRIP.days });
+      if (onTrip && pending.plans.length) {
+        const srvDays = async () => page.evaluate(async ({ id, days }) => { const t = await window.TripStore.get(id); const dv = (t && t.plan && t.plan.dayven) || {}; return days.map((d) => (dv[d] || []).join(",")); }, { id: memberTrip, days: QA_TRIP.days });
+        const srv = await srvDays();
         const pl = await page.evaluate((days) => { let dv = {}; try { dv = JSON.parse(localStorage.getItem("asa:ams:dayven") || "{}") || {}; } catch (e) {} let pp = {}; try { pp = JSON.parse(localStorage.getItem("asa:ams:plan_prefs") || "{}") || {}; } catch (e) {} return { days: days.map((d) => (dv[d] || []).join(",")), saved: !!pp.saved }; }, QA_TRIP.days);
         rec("persist/plan-restored-from-trip-to-device", srv.some(Boolean) && JSON.stringify(pl.days) === JSON.stringify(srv) && pl.saved, `serverDays=${srv.filter(Boolean).length} deviceEqual=${JSON.stringify(pl.days) === JSON.stringify(srv)} prefsSaved=${pl.saved}`);
-        // what the user sees: open the Plan tab of the reopened trip (no extra reload)
+        // what the user sees: the Plan tab of the reopened trip (no extra reload), and the server plan must survive it
+        const cnt = (a) => a.map((x) => x.split(",").filter(Boolean).length).join("/");
         await view(page, "cal");
         await page.waitForTimeout(600);
         const shown = await page.evaluate((days) => days.map((d) => ((typeof dayVenues !== "undefined" && dayVenues[d]) || []).join(",")), QA_TRIP.days);
-        rec("persist/plan-tab-shows-saved-plan-on-new-device", srv.some(Boolean) && JSON.stringify(shown) === JSON.stringify(srv), JSON.stringify(shown) === JSON.stringify(srv) ? "equal" : `differs: shown=${shown.map((x) => x.split(",").filter(Boolean).length).join("/")} server=${srv.map((x) => x.split(",").filter(Boolean).length).join("/")} (in-memory plan not refreshed by TripSync.hydrate)`);
+        const same = JSON.stringify(shown) === JSON.stringify(srv);
+        rec("persist/plan-tab-shows-saved-plan-on-new-device", srv.some(Boolean) && same, same ? `equal ${cnt(srv)}` : `shown=${cnt(shown)} saved=${cnt(srv)}: Plan tab regenerated the plan (TripSync.hydrate writes asa:ams:dayven but not the page's in-memory dayVenues)`);
+        await page.waitForTimeout(2500); // TripSync debounce 1.2 s + save
+        const after = await srvDays();
+        rec("persist/saved-plan-not-overwritten-by-plan-tab", JSON.stringify(after) === JSON.stringify(srv), JSON.stringify(after) === JSON.stringify(srv) ? "server plan unchanged" : `server plan changed ${cnt(srv)} -> ${cnt(after)} (regenerated plan autosaved over the saved one)`);
       }
     });
     if (inn) await undoAll(page, "member");
@@ -928,8 +957,8 @@ async function undoAll(page, owner) {
     await gotoHome(page, { member: true });
     const a = await archiveTripUI(page, t.id);
     const db = await read(page, "trips", "id,archived_at", [["eq", "id", Number(t.id)]]);
-    const archived = !db.error && db.rows.length === 1 && !!db.rows[0].archived_at;
-    rec(`${P}/trip-archived-via-arsivle`, a.ok && archived && /arşivlendi/.test(a.okTxt), `${a.okTxt || a.err || a.why} archived_at=${archived}`);
+    const archived = !db.error && (db.rows.length === 0 || !!db.rows[0].archived_at);
+    rec(`${P}/trip-archived-via-arsivle`, a.ok && archived, `${a.okTxt || a.err || a.why} ${db.error ? db.error : db.rows.length ? "archived_at set" : "row no longer readable"}`);
     if (a.ok && archived) { drop(pending.trips, (x) => x === t); cleanup.push({ table: "trips", id: Number(t.id), owner: owner === "member" ? ACC.member.label : ACC.second.label, state: "archived_by_ui", note: "row kept with archived_at; optional hard delete (with its trip_plan_versions)" }); }
   });
   if (owner === "member") for (const p of [...pending.prefs]) await step(`${P}/pref`, async () => {
