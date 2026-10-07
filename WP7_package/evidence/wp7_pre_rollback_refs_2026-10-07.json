@@ -1,0 +1,16 @@
+{
+  "captured_utc": "2026-10-07T22:10Z",
+  "main_before_wp7": "e1bfd045 (Merge PR #15 wp5-profile-name); WP6 merge will precede WP7 and be recorded in the report",
+  "edge_functions": {
+    "admin-api":              { "version": 18, "verify_jwt": true,  "ezbr_sha256": "96bd5e041aab688663f52742be89fd8b0dfe7b153ebd15344291d3e599ffc872" },
+    "email-api":              { "version": 9,  "verify_jwt": true,  "ezbr_sha256": "9829750aa1641f18d1e3af7f2db63d53042a3254ae35633586a08954ae1674a7" },
+    "service-email-dispatch": { "version": 3,  "verify_jwt": true,  "ezbr_sha256": "ddc626ed5cedd76b3095551cc106dda02619adde12a0a8da2c0620509b812169" },
+    "resend-webhook":         { "version": 3,  "verify_jwt": false, "ezbr_sha256": "ee504d8f1492904af6e25d51fc308f511045e271e9e2aa278dba91c47abb08f4" },
+    "admin-delete-user":      { "version": 5,  "verify_jwt": true,  "ezbr_sha256": "cca533f8cc40b59a34eff79af2b3e8bb9862a28446795ba1ef6df19c7b4b585f" },
+    "adim2-dispatch-once":    { "version": 6,  "verify_jwt": true,  "ezbr_sha256": "123689d3399e52f26274766b7594181d99a5d3aefdf69fc9eeaae32b578e4111", "note": "410 stub" },
+    "qa-media-cleanup":       { "version": 1,  "verify_jwt": true,  "ezbr_sha256": "50228753a79dd92337df235611cd593c160b9c6548929131181aca42767026b4", "note": "temporary QA function, QA-admin-only guard; to be replaced by the 410 stub at program end" }
+  },
+  "migration_ledger_tail": ["20261007184033 wp5_member_private_name", "20261007175734 sec_public_views_readonly", "20261007150508 sec_media_close_anon_write", "20260930202808 admin_rate_check_media_upload_token"],
+  "wp7_db_changes": "none (WP7 is static-only: HTML, _redirects, _headers, tests)",
+  "rollback": "git revert -m 1 <WP7 merge commit> on main → Cloudflare Pages redeploys the previous static tree; no Edge or DB step"
+}
