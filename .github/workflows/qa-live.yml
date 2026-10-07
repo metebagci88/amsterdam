@@ -21,7 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 170
     env:
-      ASALOCAL_BASE_URL: https://www.asalocal.club
       ASALOCAL_ADMIN_EMAIL: asalocal-qa-admin@example.com
       ASALOCAL_MEMBER_EMAIL: asalocal-qa-member@example.com
       QA_BRANCH: cdp3b-asset-preview-2y4qmd
@@ -44,14 +43,24 @@ jobs:
           npx playwright install --with-deps chromium >/dev/null
       - name: Selftest
         run: node LIVE_CHECKS/qa/qa_runner.mjs selftest
-      - name: Phases from the triggering request file (default s1,s2)
+      - name: Phases + target from the triggering request file (default s1,s2 on production)
+        env:
+          EV_BEFORE: ${{ github.event.before }}
+          EV_AFTER: ${{ github.sha }}
         run: |
           set -euo pipefail
-          req="$(git diff --name-only HEAD~1 HEAD -- qa_signals/request/ | head -1 || true)"
-          phases="s1,s2"
-          if [ -n "$req" ] && [ -f "$req" ]; then phases="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.phases||"s1,s2"))' "$req")"; fi
+          range="HEAD~1 HEAD"
+          if [ -n "${EV_BEFORE:-}" ] && ! [[ "$EV_BEFORE" =~ ^0+$ ]] && git cat-file -e "$EV_BEFORE" 2>/dev/null; then range="$EV_BEFORE $EV_AFTER"; fi
+          req="$(git diff --name-only $range -- qa_signals/request/ | tail -1 || true)"
+          phases="s1,s2"; url="https://www.asalocal.club"
+          if [ -n "$req" ] && [ -f "$req" ]; then
+            phases="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.phases||"s1,s2"))' "$req")"
+            url="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.url||"https://www.asalocal.club"))' "$req")"
+          fi
           case "$phases" in *[!a-z0-9,]*) echo "bad phases"; exit 2;; esac
-          echo "QA_PHASES=,$phases," >> "$GITHUB_ENV"; echo "request=$req phases=$phases"
+          case "$url" in https://www.asalocal.club|https://*.amsterdam-zhw.pages.dev) ;; *) echo "refusing url: $url"; exit 2;; esac
+          { echo "QA_PHASES=,$phases,"; echo "ASALOCAL_BASE_URL=$url"; } >> "$GITHUB_ENV"
+          echo "request=$req phases=$phases url=$url"
       - name: Generate passwords in-runner, publish bcrypt hashes only
         run: node LIVE_CHECKS/qa/qa_runner.mjs gen
       - name: Wait for operator to install hashes (login poll)
@@ -111,6 +120,15 @@ jobs:
       - name: Publish S2 result
         if: contains(env.QA_PHASES, ',s2,')
         run: node LIVE_CHECKS/qa/qa_runner.mjs signal s2 "$S1_OUT_DIR/exit_d.json" "$S1_OUT_DIR/s2_http_result.json"
+      - name: "WP4: logged-in member account menu (read/navigate only)"
+        if: contains(env.QA_PHASES, ',wp4,')
+        run: |
+          set -uo pipefail
+          node LIVE_CHECKS/qa/wp4_live.mjs; e=$?
+          echo "{\"wp4_live\":$e}" > "$S1_OUT_DIR/exit_wp4.json"; cat "$S1_OUT_DIR/exit_wp4.json"
+      - name: Publish WP4 result
+        if: contains(env.QA_PHASES, ',wp4,')
+        run: node LIVE_CHECKS/qa/qa_runner.mjs signal wp4 "$S1_OUT_DIR/exit_wp4.json" "$S1_OUT_DIR/wp4_live_result.json"
       - name: Secret scan of outputs
         if: always()
         run: |
