@@ -627,7 +627,7 @@ window.TripSync=(function(){
   TS.hydrate=function(t){ if(!t)return; try{
     if(t.preferences&&t.preferences.plan_prefs&&Object.keys(t.preferences.plan_prefs).length){ S('plan_prefs',t.preferences.plan_prefs); }
     if(t.plan){ if(t.plan.dayven)S('dayven',t.plan.dayven); if(t.plan.cal)S('cal',t.plan.cal); if(t.plan.plan)S('plan',t.plan.plan); }
-  }catch(e){} try{ if(window.PSET&&window.PSET._reload)window.PSET._reload(); }catch(e){} };
+  }catch(e){} try{ if(window.PSET&&window.PSET._reload)window.PSET._reload(); }catch(e){} try{ if(window.__asaReloadPlanState)window.__asaReloadPlanState(); }catch(e){} };
   return TS;
 })();
 window.__tripDirty=function(){ try{ if(window.TripSync)window.TripSync.schedule(); }catch(e){} };
@@ -1457,6 +1457,15 @@ function buildCalDays(){
  return {days:arr,title:n+" günlük akış"+(sample?" · örnek plan":""),sample:sample};
 }
 let CAL=buildCalDays();
+// WP6: TripSync.hydrate DB planını depolamaya yazdıktan sonra bellekteki kopyaları da yeniler. Aksi halde sayfa
+// açılışında okunan eski/boş dayVenues ile Plan sekmesi yeni plan üretip autosave ile DB'deki kayıtlı planın üstüne yazar.
+window.__asaReloadPlanState=function(){
+ calNotes=ASA_ST.get("cal",{}); calPlans=ASA_ST.get("plan",{}); dayVenues=ASA_ST.get("dayven",{});
+ try{ CAL=buildCalDays(); }catch(e){}
+ try{ renderPlanCtl(); }catch(e){}
+ try{ renderCal(); }catch(e){}
+ try{ const m=document.getElementById("dayModal"); if(dayCur&&m&&!m.classList.contains("hide")) renderDay(dayCur); }catch(e){}
+};
 function dayInfo(k){return CAL.days.find(x=>x.key===k)||{key:k,label:String(k),dow:"",weekend:false};}
 /* ===== KİŞİSEL PLAN ÜRETİCİ ===== */
 function catOf(v){
