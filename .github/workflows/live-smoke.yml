@@ -35,6 +35,8 @@ jobs:
           npx playwright install --with-deps chromium >/dev/null
       - name: Live smoke
         run: node LIVE_CHECKS/live_smoke.mjs
+      - name: WP3 live storage checks (SKIP until main ships WP3)
+        run: node LIVE_CHECKS/wp3_live.mjs
       - name: Screenshots
         if: always()
         uses: actions/upload-artifact@v4
