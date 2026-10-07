@@ -22,10 +22,10 @@ Production Edge versions (salt-okunur, değişmedi):
   resend-webhook v3 verify_jwt=false
   admin-delete-user v5 verify_jwt=true
   adim2-dispatch-once v6 verify_jwt=true (410 gone stub)
-Migration ledger additions: YOK (son kayıt: 20260930202808 admin_rate_check_media_upload_token)
+Migration ledger additions: sec_media_close_anon_write (2026-10-07, İP2 v2)
 
 Stage 01: PASS        — SEC_MEDIA_UPLOAD_ACCEPTANCE_PASS (canlı, QA run 37629590923): gerçek admin upload Edge yolu, 17/17 negatif, residue=0 (§5.4)
-Stage 02: NOT STARTED — önkoşul (Stage 01 PASS) yok. Migration paketi HAZIRLANDI, UYGULANMADI
+Stage 02: PASS        — SEC_MEDIA_STORAGE_CLOSED: v2 (ALTER POLICY TO service_role, Mete onaylı) uygulandı; prod_assert 19/19, zero-footprint PASS, canlı HTTP 15/15, residue 0 (§5.5)
 Stage 03: NOT STARTED — sıra kuralı (PRD §4)
 Stage 04: NOT STARTED — sıra kuralı
 Stage 05: NOT STARTED — sıra kuralı
@@ -38,7 +38,7 @@ Stage 11: NOT STARTED — sıra kuralı
 Stage 12: NOT STARTED — sıra kuralı
 
 Security:
-- anon media write: AÇIK (değişmedi) — "media anon insert/update/delete" policy'leri roles={public} ile mevcut
+- anon media write: KAPALI — üç yazma policy'si roles={service_role} (etkisiz, BYPASSRLS); public/anon/authenticated için yazma policy'si 0; canlı HTTP ile kanıtlandı
 - public media read: AÇIK (beklenen) — "media anon read" + bucket media public=true
 - secret scan: yeni eklenen dosyalarda çalıştırıldı (bkz. §5)
 - RLS/policy regressions: YOK (hiçbir DDL/policy değişikliği yapılmadı)
@@ -265,6 +265,29 @@ Girişsiz, yazmasız canlı smoke testi; sonuçlar §2.1'de. Her push'ta ya da e
 | S1-11 sızıntı | çıktılarda iki secret scanner temiz; Edge loglarında token benzeri iz 0, error 0 |
 
 **Gözlem (bilgi, kapı değil):** A01i'de gerçek Chromium'un aldığı `/CDP3B/admin` HTML'inin hash'i (`bf9eab9d…`) repo ve Node fetch hash'inden (`b9fb1610…`) farklı. Bu, Cloudflare'in tarayıcıya giden HTML'i dönüştürdüğünü düşündürüyor (ör. e-posta gizleme veya script enjeksiyonu). Statik kontroller ve işlev etkilenmedi.
+
+### 5.5 İş Paketi 2 — CANLI: `SEC_MEDIA_STORAGE_CLOSED` (2026-10-07)
+
+**Yöntem değişikliği (v2) ve gerekçesi:**
+- Supabase MCP, metninde `DROP` geçen her ifadeyi etkileşimli bir insan onayına bağlıyor. Bu onay penceresi oturuma ulaşmadı: `apply_migration` üç kez 60 saniyede zaman aşımına düştü, sorgu Postgres'e hiç ulaşmadı ve her seferinde durumun değişmediği doğrulandı.
+- Silmeyen alternatif, Mete'ye açıkça soruldu ve onaylandı ("sen uygula. onaylıyorum"): `ALTER POLICY ... TO service_role` ile üç yazma policy'si etkisizleştirildi ve `COMMENT ON POLICY` ile işaretlendi.
+- Policy'ler yeniden adlandırılamadı, çünkü bu tablo sahipliği gerektiriyor (42501).
+- Güvenlik etkisi PRD'nin istediğiyle aynı: anon/authenticated için `storage.objects` üzerinde yazma policy'si kalmadı.
+- **PRD sapması:** PRD policy'lerin "kaldırılmasını" istiyordu; burada etkisiz hâlde duruyorlar. Kozmetik temizlik (sahibin Dashboard SQL editöründe silmesi) bir non-goal olarak not edildi.
+
+| Adım | Sonuç |
+|---|---|
+| CI (gerçek Supabase storage, CLI 2.118.0 / storage-api v1.77.0) | [run 37641194409](https://github.com/metebagci88/amsterdam/actions/runs/37641194409): local-gates ✅, storage-api **43/0** ✅ |
+| PRE assert | `S2_PRE_ASSERT_PASS` 16/16 (diğer 25 policy md5 + bucket öznitelikleri dahil) |
+| `apply_migration sec_media_close_anon_write` | success (ledger +1) |
+| `s2_prod_assert` | **19/19 PASS**: matris md5 `74b56eca…`, yazma policy (public/anon/auth) = 0, açıklama 3/3, diğer policy/bucket md5 değişmedi |
+| Zero-footprint davranış testi | **PASS, 0 fail**:<br>• anon/authenticated INSERT ve UPSERT → 42501 RLS<br>• UPDATE ve DELETE → 0 satır<br>• SELECT izinli<br>• service_role yazabiliyor<br>• tüm test geri alındı |
+| Güvenlik advisor'ları | baseline ile aynı, yeni bulgu yok |
+| QA run [37642562397](https://github.com/metebagci88/amsterdam/actions/runs/37642562397) — S2 sonrası İP1 araçları | preflight / runtime / negatif 17/17 PASS; gerçek admin UI upload A04–A17 PASS; cleanup `removed:1`; GONE |
+| QA — S2 HTTP kabulü | **15/15 PASS**:<br>• anon/üye doğrudan INSERT → 400<br>• PUT, upsert → 400<br>• DELETE → 0 obje silindi<br>• admin Edge upload 200 + public okuma bayt eşit<br>• üye Edge upload 403 `not_admin`<br>• cleanup ile 1 obje silindi |
+| Final | media obje 0 (**residue 0**); toplam 3 Edge upload, hepsi temizlendi; QA hesapları kilitlendi (`encrypted_password=''`) |
+
+Rollback: `S2_down_INSECURE.sql`. Bu dosya güvenliği gevşetir, arming GUC'u ister ve policy'leri `TO public`'e çevirir; içinde `DROP` yoktur.
 
 ## 6. Yeniden başlamak için gereken tek karar
 
