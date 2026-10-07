@@ -132,10 +132,10 @@ begin
 
   -- doğrudan UPDATE ile geçersiz isim -> CHECK 23514 (RPC'yi atlayan yol da korunur)
   v_in  := array['<script>', '  a', 'a  ', '', repeat('a', 51), 'a' || chr(9) || 'b', '{', '"',
-                 chr(12644), repeat(chr(12644), 3), chr(4447), chr(4448), chr(6068), 'a' || chr(6155), 'a' || chr(847),
+                 chr(12644), repeat(chr(12644), 3), 'a' || chr(12644) || 'b', chr(4447), chr(4448), chr(6068), 'a' || chr(6155), 'a' || chr(847),
                  'a' || repeat(chr(1425), 49), repeat(chr(1614), 20), chr(10240), repeat(chr(1600), 3)];
   v_lbl := array['script', 'lead-space', 'trail-space', 'empty', '51chars', 'tab', 'brace', 'dquote',
-                 'U+3164', 'U+3164x3', 'U+115F', 'U+1160', 'U+17B4', 'a+U+180B', 'a+U+034F',
+                 'U+3164', 'U+3164x3', 'a+U+3164+b', 'U+115F', 'U+1160', 'U+17B4', 'a+U+180B', 'a+U+034F',
                  'a+49xU+0591', '20xU+064E', 'U+2800', '3xU+0640'];
   for i in 1 .. array_length(v_in, 1) loop
     begin

@@ -1,0 +1,16 @@
+{
+  "what": "WP5 gates/wp5_pre_assert.sql (revised, 24 counted rows) on production tosqsabuaomgqjtogdrn after sec_public_views_readonly",
+  "ran_at": "2026-10-07",
+  "mode": "execute_sql, read-only SELECT",
+  "overall": "WP5_PRE_ASSERT_PASS",
+  "summary": "0 FAIL / 24 counted",
+  "counted_rows_pass": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,26,27,28,29],
+  "info": {
+    "21_guard_has_email_lock": "false",
+    "22_members_row_count": "3",
+    "23_default_function_execute_acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "24_members_rewrite_dependents": "behavior_events:created_at,user_id ; comment_reaction_counts:blocked,user_id ; comments_public:blocked,user_id ; member_public:blocked,display_name,tier",
+    "25_member_public_updatable_mask|anon_write": "28|false"
+  },
+  "prerequisites": { "sec_views_acl_target": "PASS (row 28)", "pg_graphql_installed": "0 (row 29); extensions: pg_stat_statements, pgcrypto, plpgsql, supabase_vault, uuid-ossp" }
+}

@@ -20,6 +20,10 @@
 --   7) POST guard: baseline durumu (kolon imzası, guard md5'leri, ACL, policy/trigger matrisi)
 --      birebir değilse RAISE -> tüm transaction geri alınır.
 --   İdempotent: zaten baseline durumundaysa adımlar etkisizdir ve POST guard yine geçer.
+--   DOKUNMAZ: SEC_VIEWS (sec_public_views_readonly) view ACL'leri ve eklentiler — "baseline" burada
+--   SEC_VIEWS SONRASI production durumudur; geri alma sonrası view'lar salt-okunur kalır
+--   (wp5_pre_assert satır 26-29 yine PASS). CHECK constraint adları değişmedi; DROP CONSTRAINT
+--   IF EXISTS her iki politika sürümünü de kaldırır.
 --
 -- ÇALIŞTIRMA
 --   Supabase Dashboard -> SQL Editor: dosyanın TAMAMINI yapıştırın, ARM satırını yorumdan

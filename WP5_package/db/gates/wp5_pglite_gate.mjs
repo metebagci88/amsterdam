@@ -15,7 +15,10 @@
 // kilidi (PATCH, INSERT, JWT senkronu, service_role, trusted), member_upsert_profile + complete_profile
 // baseline ile davranış eşdeğerliği, view'lar isim açmaz, prod_assert + zero-footprint (iz yok),
 // drift negatifleri, atomiklik, down (silahsız ret, silahlı birebir baseline + guard md5), yeniden up.
-// Ön-mevcut bulgu (WP5 kapsamı DIŞI; FAIL sayılmaz): member_public üzerinden RLS'siz DML.
+// ÖNKOŞUL SEC_VIEWS (sec_public_views_readonly): fixture production'ın SEC_VIEWS SONRASI durumudur;
+// owner-rights member_public üzerinden yazma anon/authenticated için 42501 (sayılır); SEC_VIEWS öncesi
+// modelde açık yeniden üretilir (red) ve UP o durumda HİÇBİR ŞEY değiştirmeden reddeder (drift).
+// ÖNKOŞUL pg_graphql yok: kurulu modelde (katalog satırı) UP reddeder.
 // Sentinel: WP5_LOCAL_PGLITE_GATE_PASS
 // =====================================================================
 import { readFileSync } from "node:fs";
@@ -60,6 +63,18 @@ const PROD_COMPLETE_DEF = "0678ab70409b74d002ff0f3a4c6abf56";
 // WP5 literalleri
 const WP5_GUARD_SRC = "ef160b239cd9dc207a7f78313b0a3242";
 const WP5_SETNAME_SRC = "993b6a358e3ed58f478af75853d4e7fe";
+const WP5_CHK_FIRST = "7614490ed320884bf7d453bbcb61ccd8";
+// SEC_VIEWS (SEC_VIEWS_package) production literalleri: view tanımı md5(pg_get_viewdef(oid,true)) + hedef ACL
+const SV_VIEW_MD5 = "comment_reaction_counts:240f9780784dbce197e977c3279ec4f6,comments_public:1d109aaeddd96e0ad746fb7a177d5da1,member_public:bfb056b40e300dbb32edb4606f348ad2";
+const SV_ACL = "{postgres=arwdDxtm/postgres,anon=r/postgres,authenticated=r/postgres,service_role=arwdDxtm/postgres}";
+const SV_VIEWS = "public.member_public, public.comments_public, public.comment_reaction_counts";
+// SEC_VIEWS öncesi production ACL'ini geri getirir (açığı yeniden açar) — yalnız yerel model
+const REOPEN_VIEWS = `grant insert, update, delete, truncate, references, trigger, maintain on table ${SV_VIEWS} to anon, authenticated;`;
+const VIEW_WRITABLE = `select count(*)::int n from (values ('member_public'), ('comments_public'), ('comment_reaction_counts')) v(n)
+  cross join (values ('anon'), ('authenticated')) r(n)
+  where has_table_privilege(r.n, ('public.' || v.n)::regclass, 'INSERT,UPDATE,DELETE,TRUNCATE')
+     or has_any_column_privilege(r.n, ('public.' || v.n)::regclass, 'INSERT,UPDATE')`;
+const FAKE_PG_GRAPHQL = "insert into pg_extension(oid, extname, extowner, extnamespace, extrelocatable, extversion) values (999001, 'pg_graphql', 10, 2200, false, '1.5.11');";
 
 const TOKEN = "dr" + "op";
 const cp = (...c) => String.fromCodePoint(...c);
@@ -71,7 +86,6 @@ const ok = (name, cond, detail = "") => {
   if (cond) { pass++; log.push("PASS " + name); }
   else { fail++; log.push("FAIL " + name + (detail ? " :: " + String(detail).slice(0, 600) : "")); }
 };
-const finding = (name, detail) => log.push("FINDING(pre-existing, not counted) " + name + (detail ? " :: " + detail : ""));
 
 // ---------------------------------------------------------------- statik
 function stripComments(sql) { return sql.replace(/--[^\n]*/g, ""); }
@@ -86,9 +100,9 @@ function fnBlock(sql, name) {
   return j < 0 ? null : sql.slice(i, j + "$function$\n;".length);
 }
 const WP5_ADDED = [
-  "    -- WP5: client INSERT email = verified JWT email claim (same value member_upsert_profile inserts)",
+  "    -- WP5: client INSERT email = email claim of the caller's JWT (same value member_upsert_profile inserts)",
   "    NEW.email:=(auth.jwt()->>'email');",
-  "    -- WP5: client UPDATE may only sync email to its own verified JWT email claim; anything else is pinned to OLD",
+  "    -- WP5: client UPDATE may only sync email to the email claim of its own JWT; anything else is pinned to OLD",
   "    IF NEW.email IS DISTINCT FROM (auth.jwt()->>'email') THEN NEW.email:=OLD.email; END IF;",
 ];
 {
@@ -247,18 +261,34 @@ async function runZF(db) {
 }
 
 // isim politikası test vektörleri
-const ACCEPT = ["Ayşe", "Çağrı", "O'Neil", "Jean-Luc", "İlkay Nur", "O" + cp(0x2019) + "Neil", "Ğülşen", "Øyvind", "José María", "J. R.",
-  "Nguyễn", "Αλέξανδρος", "Владимир", "محمد", "李小龍", "a".repeat(50), "Jean" + cp(0x2010) + "Luc", "Zoë"];
+const ACCEPT_RAW = ["Ayşe", "Çağrı", "O'Neil", "Jean-Luc", "İlkay Nur", "O" + cp(0x2019) + "Neil", "Ğülşen", "Gül", "Øyvind", "José María", "J. R.",
+  "Nguyễn", "Αλέξανδρος", "Владимир", "محمد", "דוד", "李小龍", "王小明", "김민준", "प्रिया", "a".repeat(50), "Jean" + cp(0x2010) + "Luc", "Zoë",
+  // P6/P7 genişlemesi sonrası da kabul: harekeli Arapça (şedde+fetha = 2 işaret), noktalı İbranice, nukta'lı Devanagari,
+  // Bengal, Tamil, Tay, Gürcü, Amhar, Ermeni, Farsça, Japonca (hiragana/katakana + uzatma), Hawaii ʻokina
+  "مُحَمَّد", "שְׁלֹמֹה", "फ़िरोज़", "রবি", "முருகன்", "สมชาย", "გიორგი", "አበበ", "Արամ", "پگاه", "さくら", "ユーリ", "Kaʻiulani"];
+const ACCEPT = ACCEPT_RAW.map((v) => v.normalize("NFC"));
 const REJECT = [["<script>", "<script>"], ["  a", "lead-space"], ["a  ", "trail-space"], ["", "empty"], ["a".repeat(51), "51chars"],
   ["a" + cp(1) + "b", "ctl-01"], ["a\tb", "tab"], ["a\nb", "newline"], ["a" + cp(0x7f) + "b", "DEL"], ["a" + cp(0x85) + "b", "C1-NEL"],
   ["{", "{"], ["a{b}", "{}"], ['"', '"'], ['a"b', 'quote'], ["a<b", "<"], ["a>b", ">"], ["a&b", "&"], ["a\\b", "backslash"], ["a`b", "backtick"],
   ["Ali2", "digit"], ["-Ali", "lead-hyphen"], ["Ali-", "trail-hyphen"], ["'Ali", "lead-apos"], ["a  b", "double-space"], ["a--b", "double-sep"],
   ["a" + cp(0x200b) + "b", "ZWSP"], ["a" + cp(0x202e) + "b", "RLO"], ["a" + cp(0xa0) + "b", "NBSP"], ["a" + cp(0xfeff) + "b", "BOM"],
   [cp(0x1f600), "emoji"], ["a" + cp(0xe0041), "tag-char"], ["C" + cp(0x327) + "a", "non-NFC"], [cp(0x301) + "a", "lead-combining"],
-  [cp(0xff21, 0xff22), "fullwidth"], ["a" + cp(0x2014) + "b", "em-dash"], ["a" + cp(0xab) + "b", "guillemet"], [cp(0x1d400), "math-bold"]];
+  [cp(0xff21, 0xff22), "fullwidth"], ["a" + cp(0x2014) + "b", "em-dash"], ["a" + cp(0xab) + "b", "guillemet"], [cp(0x1d400), "math-bold"],
+  // görünmez / görsel olarak boş girdiler (P5 dolgu karakterleri; harf içeren 'a?b' biçimleri sınıf girdisini tek başına zorlar)
+  [cp(0x3164), "U+3164"], [cp(0x3164).repeat(3), "U+3164x3"], ["a" + cp(0x3164) + "b", "a+U+3164+b"], [cp(0x115f), "U+115F"], ["a" + cp(0x115f) + "b", "a+U+115F+b"],
+  [cp(0x1160), "U+1160"], ["a" + cp(0x1160) + "b", "a+U+1160+b"], [cp(0x17b4), "U+17B4"], ["a" + cp(0x17b4) + "b", "a+U+17B4+b"], ["a" + cp(0x17b5), "a+U+17B5"],
+  ["a" + cp(0x180b), "a+U+180B"], ["a" + cp(0x180f), "a+U+180F"], ["a" + cp(0x34f), "a+U+034F"], [cp(0x2800), "U+2800 braille"], ["a" + cp(0x2800) + "b", "a+U+2800+b"],
+  [cp(0xffa0), "U+FFA0"], ["a" + cp(0xffa0) + "b", "a+U+FFA0+b"],
+  // P6 işaret dizisi / baştaki işaret (genişletilmiş M kümesi)
+  ["a" + cp(0x591).repeat(49), "a+49xU+0591"], [cp(0x64e).repeat(20), "20xU+064E harakat"], ["a" + cp(0x483, 0x484, 0x485), "a+3 Kiril işareti"],
+  ["क" + cp(0x93c, 0x93f, 0x902), "Devanagari 3 ardışık işaret"], ["a" + cp(0x64b, 0x64c, 0x64d), "a+3 hareke"], [cp(0x64e) + "a", "lead U+064E"],
+  [cp(0x93f) + "क", "lead U+093F"], [cp(0x5b8) + "ד", "lead U+05B8"],
+  // P7 harf şartı (yalnız harf olmayan, reddedilmeyen karakterler)
+  [cp(0x640).repeat(3), "3xU+0640 tatweel"], [cp(0x2bb), "U+02BB yalnız"], [cp(0x30fb), "U+30FB yalnız"], [cp(0x384), "U+0384 yalnız"]];
 
 try {
   // ============================================================ 1) fixture sadakati
+  let rows;
   let db = await fresh();
   const version = (await q(db, "select version() v"))[0].v.split(" on ")[0];
   log.push("-- engine: " + version);
@@ -269,11 +299,19 @@ try {
   ok("fixture: member_upsert_profile md5'leri = production", fxm.member_upsert_profile === `${PROD_UPSERT_SRC}/${PROD_UPSERT_DEF}`, fxm.member_upsert_profile);
   ok("fixture: complete_profile md5'leri = production", fxm.complete_profile === `${PROD_COMPLETE_SRC}/${PROD_COMPLETE_DEF}`, fxm.complete_profile);
   let a = await assertRows(db, PRE);
-  ok("fixture: wp5_pre_assert -> WP5_PRE_ASSERT_PASS (0 FAIL / 20 counted)", a.overall === "WP5_PRE_ASSERT_PASS" && a.summary === "0 FAIL / 20 counted", a.bad.join(" | "));
-  const evid = Object.fromEntries(EVID.rows.filter((r) => r.result === "PASS").map((r) => [r.ord, r.actual]));
-  const diffs = a.rows.filter((r) => r.result === "PASS" && evid[r.ord] !== r.actual).map((r) => r.ord);
-  ok("fixture: pre_assert counted satırlarının actual değerleri production kanıtıyla birebir (20/20)",
-     Object.keys(evid).length === 20 && diffs.length === 0 && a.rows.filter((r) => r.result === "PASS").length === 20, "fark: " + diffs.join(","));
+  ok("fixture: wp5_pre_assert -> WP5_PRE_ASSERT_PASS (0 FAIL / 24 counted)", a.overall === "WP5_PRE_ASSERT_PASS" && a.summary === "0 FAIL / 24 counted", a.bad.join(" | "));
+  const evid = Object.fromEntries(EVID.rows.filter((r) => r.result === "PASS").map((r) => [Number(r.ord), r.actual]));
+  const evidRows = a.rows.filter((r) => Number(r.ord) in evid);
+  const diffs = evidRows.filter((r) => r.result !== "PASS" || evid[Number(r.ord)] !== r.actual).map((r) => r.ord);
+  ok("fixture: pre_assert satır 1-20 actual değerleri 2026-10-07 production kanıtıyla birebir (20/20)",
+     Object.keys(evid).length === 20 && evidRows.length === 20 && diffs.length === 0, "fark: " + diffs.join(","));
+  const newRows = a.rows.filter((r) => [26, 27, 28, 29].includes(Number(r.ord)));
+  ok("fixture: pre_assert yeni satırlar 26-29 (SEC_VIEWS önkoşulu anon/authenticated 0 yazılabilir, 3 view ACL hedef, pg_graphql yok) PASS — production kanıtında YOK, SEC_VIEWS sonrası production'da yeniden çalıştırılmalı",
+     newRows.length === 4 && newRows.every((r) => r.result === "PASS") && !(26 in evid), JSON.stringify(newRows.map((r) => [r.ord, r.actual])));
+  rows = await q(db, `select string_agg(relname || ':' || md5(pg_get_viewdef(oid, true)), ',' order by relname) m, count(distinct relacl::text)::int n, min(relacl::text) acl
+                        from pg_class where relnamespace = 'public'::regnamespace and relname in ('member_public', 'comments_public', 'comment_reaction_counts')`);
+  ok("fixture: 3 view tanımı md5 = SEC_VIEWS production literalleri; ACL = SEC_VIEWS hedefi (anon/authenticated yalnız SELECT)",
+     rows[0].m === SV_VIEW_MD5 && rows[0].n === 1 && rows[0].acl === SV_ACL, JSON.stringify(rows[0]));
   const BASE_CAT = await catSnap(db);
   const BASE_DATA = await dataSnap(db);
   const BASE_OTHER = await otherTablesSnap(db);
@@ -321,7 +359,7 @@ try {
   e = await applyUp(db);
   ok("up#2: idempotent (PRE applied kabul) ve durum birebir aynı", !e && (await fullSnap(db)) === FULL1, e && e.message);
   ok("up: veri değişmedi (isim dışı tüm members alanları + diğer tablolar)", (await dataSnap(db)) === BASE_DATA && (await otherTablesSnap(db)) === BASE_OTHER);
-  let rows = await q(db, "select count(*)::int n, count(first_name)::int f, count(last_name)::int l from public.members");
+  rows = await q(db, "select count(*)::int n, count(first_name)::int f, count(last_name)::int l from public.members");
   ok("up: mevcut satırlarda first_name/last_name NULL (backfill yok)", rows[0].n === 2 && rows[0].f === 0 && rows[0].l === 0, JSON.stringify(rows));
   rows = await q(db, `select md5(prosrc) s from pg_proc where oid='public.guard_member_admin_fields()'::regprocedure
                       union all select md5(prosrc) from pg_proc where oid='public.member_set_name(text,text)'::regprocedure`);
@@ -370,7 +408,8 @@ try {
     const cases = [["<script>", "X", "bad_first"], ["X", "<b>", "bad_last"], ["<a>", "<b>", "bad_first"], ["", "X", "bad_first"], [null, "X", "bad_first"],
       ["   ", "X", "bad_first"], ["X", "", "bad_last"], ["X", null, "bad_last"], ["a".repeat(51), "X", "bad_first"], ["X", "b".repeat(51), "bad_last"],
       ["a".repeat(201), "X", "bad_first"], ["a" + cp(1) + "b", "X", "bad_first"], ["{x}", "X", "bad_first"], ['a"b', "X", "bad_first"],
-      ["X", "a" + cp(0x200b) + "b", "bad_last"], ["Al1", "X", "bad_first"], ["a".repeat(50), "b".repeat(50), "ok"]];
+      ["X", "a" + cp(0x200b) + "b", "bad_last"], ["Al1", "X", "bad_first"], ["a".repeat(50), "b".repeat(50), "ok"],
+      [cp(0x3164), "X", "bad_first"], ["X", "a" + cp(0x591).repeat(49), "bad_last"], [cp(0x2800), "X", "bad_first"], ["X", cp(0x640).repeat(3), "bad_last"]];
     o.bad = [];
     for (const [f, l, exp] of cases) {
       const x = await t.run("select public.member_set_name($1, $2) r", [f, l]);
@@ -432,7 +471,7 @@ try {
   ok("email: sahip doğrudan PATCH email -> satır güncellenir, e-posta DEĞİŞMEZ (display_name değişir)",
      r.patch.ok && r.patch.n === 1 && r.row1.email === E.A && r.row1.display_name === "Ali-new", JSON.stringify(r.row1));
   ok("email: JWT e-postası değişmişken başka değere PATCH -> yine OLD'a sabit", r.patch2.ok && r.row2.email === E.A, r.row2.email);
-  ok("email: kendi doğrulanmış JWT e-postasına eşitleme izinli (member_upsert_profile semantiği)", r.sync.ok && r.row3.email === E.A2, r.row3.email);
+  ok("email: kendi JWT'sinin email claim'ine eşitleme izinli (member_upsert_profile semantiği)", r.sync.ok && r.row3.email === E.A2, r.row3.email);
   ok("email: yeni kullanıcı sahte e-posta + admin alanlarıyla INSERT -> email=JWT, tier/points/blocked sabit",
      r.ins.ok && r.rowC.email === E.C && r.rowC.tier === "Kaşif" && r.rowC.points === 0 && r.rowC.blocked === false, JSON.stringify(r.rowC));
   ok("email: JWT'de email claim'i yoksa client INSERT 23502 (sahte e-posta yazılamaz; bilinçli)", !r.insNoClaim.ok && r.insNoClaim.code === "23502", JSON.stringify(r.insNoClaim));
@@ -476,7 +515,7 @@ try {
   // ============================================================ 9) prod_assert + zero-footprint
   await db.query("insert into supabase_migrations.schema_migrations(version, name) values ('20991231000000', 'wp5_member_private_name')");
   a = await assertRows(db, PROD);
-  ok("prod_assert (fixture, up sonrası): WP5_PROD_ASSERT_PASS (0 FAIL / 23 counted)", a.overall === "WP5_PROD_ASSERT_PASS" && a.summary === "0 FAIL / 23 counted", a.bad.join(" | "));
+  ok("prod_assert (fixture, up sonrası): WP5_PROD_ASSERT_PASS (0 FAIL / 27 counted)", a.overall === "WP5_PROD_ASSERT_PASS" && a.summary === "0 FAIL / 27 counted", a.bad.join(" | "));
   const CAT_Z = await catSnap(db), DATA_Z = await fullSnap(db), OTHER_Z = await otherTablesSnap(db);
   z = await runZF(db);
   ok("zf: WP5 sonrası VERDICT=PASS fails=0 (REPORT ile biter)", z.isReport && z.verdict === "PASS" && z.fails === 0, z.msg);
@@ -495,7 +534,7 @@ try {
   rows = await q(db, "select md5(prosrc) s, md5(pg_get_functiondef(oid)) d from pg_proc where oid='public.guard_member_admin_fields()'::regprocedure");
   ok("down: guard md5(prosrc) == yakalanan production md5 (9bba99..) ve md5(functiondef) == 48bd6e..", rows[0].s === PROD_GUARD_SRC && rows[0].d === PROD_GUARD_DEF, JSON.stringify(rows));
   a = await assertRows(db, PRE);
-  ok("down: wp5_pre_assert yalnız ledger satırı (20) FAIL (beklenen; ledger kaydı kalır), diğer 19 PASS",
+  ok("down: wp5_pre_assert yalnız ledger satırı (20) FAIL (beklenen; ledger kaydı kalır), diğer 23 PASS (SEC_VIEWS/pg_graphql satırları dahil)",
      a.bad.length === 1 && a.bad[0].startsWith("20:"), a.bad.join(" | "));
   e = await runDown(db, DOWN_ARMED);
   ok("down: ikinci kez (baseline'da) idempotent", !e && (await catSnap(db)) === BASE_CAT, e && e.message);
@@ -530,6 +569,14 @@ try {
     ["member_public isim/e-posta açıyor", "create or replace view public.member_public with (security_invoker = false, security_barrier = true) as select display_name, tier, email from public.members where blocked = false;", /member_public/],
     ["guard ACL drift", "grant execute on function public.guard_member_admin_fields() to anon;", /öznitelikleri/],
     ["trigger drift", "alter table public.members disable trigger trg_member_ref;", /trigger/],
+    // ÖNKOŞUL SEC_VIEWS: herhangi bir view anon/authenticated için yazılabilir -> UP hiçbir şey değiştirmeden reddeder
+    ["SEC_VIEWS uygulanmamış (3 view'da anon/authenticated geniş ACL geri; production 2026-10-07 öncesi durumu)", REOPEN_VIEWS, /WP5_PRE_DRIFT: SEC_VIEWS önkoşulu/],
+    ["yalnız authenticated DELETE member_public", "grant delete on public.member_public to authenticated;", /WP5_PRE_DRIFT: SEC_VIEWS önkoşulu.*member_public:authenticated/],
+    ["anon kolon düzeyi UPDATE comments_public(body)", "grant update (body) on public.comments_public to anon;", /WP5_PRE_DRIFT: SEC_VIEWS önkoşulu.*comments_public:anon/],
+    ["PUBLIC'e TRUNCATE comment_reaction_counts", "grant truncate on public.comment_reaction_counts to public;", /WP5_PRE_DRIFT: SEC_VIEWS önkoşulu.*comment_reaction_counts:anon/],
+    ["comment_reaction_counts view'ı yok", `${TOKEN} view public.comment_reaction_counts;`, /WP5_PRE_DRIFT: SEC_VIEWS önkoşulu.*comment_reaction_counts/],
+    // ÖNKOŞUL pg_graphql yok
+    ["pg_graphql kurulu (katalog modeli)", FAKE_PG_GRAPHQL, /WP5_PRE_DRIFT: pg_graphql kurulu/],
   ];
   for (const [name, mut, re] of drifts) {
     const d = await fresh();
@@ -542,10 +589,10 @@ try {
   {
     const d = await fresh();
     const before = await fullSnap(d);
-    const tampered = UP.replace("c_chk_first   constant text := '7614490ed320884bf7d453bbcb61ccd8'", "c_chk_first   constant text := 'ffffffffffffffffffffffffffffffff'");
+    const tampered = UP.replaceAll("c_chk_first   constant text := '" + WP5_CHK_FIRST + "'", "c_chk_first   constant text := 'ffffffffffffffffffffffffffffffff'");
     const er = await applyUp(d, tampered);
     ok("atomik: POST guard hatası (tanım md5 uyuşmazlığı) -> kolon/constraint/fonksiyon değişiklikleri tamamen geri alındı",
-       tampered !== UP && er && /WP5_POST_FAIL: members_first_name_wp5_policy/.test(er.message) && (await fullSnap(d)) === before, er && er.message);
+       tampered !== UP && UP.split("c_chk_first   constant text := '" + WP5_CHK_FIRST + "'").length === 3 && er && /WP5_POST_FAIL: members_first_name_wp5_policy/.test(er.message) && (await fullSnap(d)) === before, er && er.message);
     const er2 = await applyUp(d, UP + "\ndo $inj$ begin raise exception 'WP5_TEST_INJECTED_FAILURE'; end $inj$;");
     ok("atomik: UP sonrası enjekte hata -> her şey geri alındı", er2 && /WP5_TEST_INJECTED_FAILURE/.test(er2.message) && (await fullSnap(d)) === before, er2 && er2.message);
     await applyUp(d);
@@ -554,6 +601,21 @@ try {
     const er3 = await runDown(d, DOWN_ARMED);
     ok("down: silinecek kolondaki ek drift (varsayılan) zararsız -> down baseline'a birebir döner",
        !er3 && mixed !== (await fullSnap(d)) && (await catSnap(d)) === BASE_CAT, er3 && er3.message);
+    await d.close();
+  }
+  // uygulanmış durumda (re-run) önkoşul ve CHECK tanımı drift'leri
+  for (const [name, mut, re] of [
+    ["uygulanmış + SEC_VIEWS geri alınmış (view'lar yazılabilir)", REOPEN_VIEWS, /WP5_PRE_DRIFT: SEC_VIEWS önkoşulu/],
+    ["uygulanmış + pg_graphql kurulmuş", FAKE_PG_GRAPHQL, /WP5_PRE_DRIFT: pg_graphql kurulu/],
+    ["uygulanmış + farklı/eski CHECK tanımı (aynı ad)", `alter table public.members ${TOKEN} constraint members_first_name_wp5_policy;
+      alter table public.members add constraint members_first_name_wp5_policy check (first_name is null or char_length(first_name) between 1 and 50);`, /WP5_PRE_DRIFT: WP5 CHECK tanımı/],
+  ]) {
+    const d = await fresh();
+    const e0 = await applyUp(d);
+    await d.exec(mut);
+    const before = await fullSnap(d);
+    const er = await applyUp(d);
+    ok(`drift(applied): ${name} -> UP#2 reddeder, hiçbir şey değişmez`, !e0 && er && re.test(er.message) && (await fullSnap(d)) === before, er ? er.message : "UYGULANDI");
     await d.close();
   }
   {
@@ -566,28 +628,67 @@ try {
     await d.close();
   }
 
-  // ============================================================ 14) ön-mevcut bulgu (WP5 kapsamı DIŞI; sayılmaz)
+  // ============================================================ 14) SEC_VIEWS önkoşulu: owner-rights view üzerinden yazma (sayılır)
   {
-    const d = await fresh();
-    await applyUp(d);
-    const o = await tx(d, async (t) => {
+    // red: SEC_VIEWS öncesi production modeli (geniş ACL geri) -> açık gerçekten yeniden üretilir (aşağıdaki 42501 testleri boş değil)
+    const d0 = await fresh();
+    await d0.exec(REOPEN_VIEWS);
+    const o0 = await tx(d0, async (t) => {
       const x = {};
-      await t.as({ role: "anon" }, "anon");
-      x.upd = await t.run("update public.member_public set display_name = 'x' where display_name = 'Ali'");
       await t.as(claims("A"));
       x.updB = await t.run("update public.member_public set display_name = 'renamed-by-A' where display_name = 'Berk'");
-      x.namesViaView = await t.run("update public.member_public set first_name = 'x'");
       await t.as({ role: "anon" }, "anon");
       x.del = await t.run("delete from public.member_public where display_name = 'renamed-by-A'");
       await t.su();
-      x.b = await rowOf(d, "B");
+      x.cnt = (await q(d0, "select count(*)::int n from public.members"))[0].n;
       return x;
     });
-    finding("member_public otomatik-güncellenebilir + security_invoker=false + anon/authenticated DML yetkisi: anon DELETE (RLS atlanır)",
-            `rows=${o.del.ok ? o.del.n : o.del.code}`);
-    finding("anon UPDATE member_public -> guard 'auth required' ile reddedilir", o.upd.ok ? `rows=${o.upd.n}` : `${o.upd.code} ${o.upd.message}`);
-    finding("authenticated A, member_public üzerinden B'nin display_name'ini değiştirebilir (RLS atlanır)", o.updB.ok ? `rows=${o.updB.n}` : o.updB.code);
+    ok("sec_views(red, SEC_VIEWS öncesi model): A, member_public üzerinden B'nin display_name'ini değiştirir ve anon DELETE B'yi siler (RLS atlanır) — testin anlamlı olduğunun kanıtı",
+       o0.updB.ok && o0.updB.n === 1 && o0.del.ok && o0.del.n === 1 && o0.cnt === 1, JSON.stringify(o0));
+    await d0.close();
+
+    // green: fixture = SEC_VIEWS sonrası production; WP5 uygulanmış
+    const d = await fresh();
+    await applyUp(d);
+    const B0 = await rowOf(d, "B");
+    const o = await tx(d, async (t) => {
+      const x = {};
+      await t.as({ role: "anon" }, "anon");
+      x.anonUpd = await t.run("update public.member_public set display_name = 'x' where display_name = 'Ali'");
+      x.anonDel = await t.run("delete from public.member_public where display_name = 'Berk'");
+      x.anonIns = await t.run("insert into public.member_public(display_name, tier) values ('x', 'Insider')");
+      x.anonSel = await t.run("select count(*)::int n from public.member_public");
+      await t.as(claims("A"));
+      x.authUpdB = await t.run("update public.member_public set display_name = 'renamed-by-A' where display_name = 'Berk'");
+      x.authDel = await t.run("delete from public.member_public where display_name = 'Berk'");
+      x.authIns = await t.run("insert into public.member_public(display_name, tier) values ('x', 'Insider')");
+      x.authSel = await t.run("select count(*)::int n from public.member_public");
+      x.namesViaView = await t.run("update public.member_public set first_name = 'x'");
+      await t.su();
+      x.b = await rowOf(d, "B");
+      x.cnt = (await q(d, "select count(*)::int n from public.members"))[0].n;
+      x.writable = (await q(d, VIEW_WRITABLE))[0].n;
+      return x;
+    });
+    const den = (r) => !r.ok && r.code === "42501";
+    ok("sec_views: anon UPDATE / DELETE / INSERT member_public -> 42501 (3/3)", den(o.anonUpd) && den(o.anonDel) && den(o.anonIns),
+       JSON.stringify([o.anonUpd, o.anonDel, o.anonIns]));
+    ok("sec_views: authenticated A UPDATE (B'nin display_name) / DELETE / INSERT member_public -> 42501 (3/3)", den(o.authUpdB) && den(o.authDel) && den(o.authIns),
+       JSON.stringify([o.authUpdB, o.authDel, o.authIns]));
+    ok("sec_views: B satırı birebir, members satır sayısı değişmedi; okuma (SELECT) anon+authenticated için çalışır",
+       JSON.stringify(o.b) === JSON.stringify(B0) && o.cnt === 2 && o.anonSel.ok && o.anonSel.rows[0].n === 2 && o.authSel.ok && o.authSel.rows[0].n === 2, JSON.stringify(o));
+    ok("sec_views: 3 view (member_public, comments_public, comment_reaction_counts) x {anon, authenticated} yazılabilir sayısı = 0 (tablo + kolon düzeyi)", o.writable === 0, String(o.writable));
     ok("bulgu sınırı: WP5 isim kolonlarına view üzerinden erişim yok (42703)", !o.namesViaView.ok && o.namesViaView.code === "42703", JSON.stringify(o.namesViaView));
+
+    // SEC_VIEWS WP5'ten SONRA geri alınırsa: ZF ve prod_assert bunu yakalar, UP#2 reddeder
+    await d.exec(REOPEN_VIEWS);
+    const zr = await runZF(d);
+    ok("sec_views: WP5 sonrası view'lar yeniden yazılabilir olursa ZF FAIL verir (anon + A member_public UPDATE/DELETE ALLOWED)",
+       zr.isReport && zr.verdict === "FAIL" && zr.fails === 4 && /FAIL anon\.member_public_update ALLOWED/.test(zr.msg) && /FAIL A\.member_public_delete ALLOWED/.test(zr.msg), zr.msg);
+    await d.query("insert into supabase_migrations.schema_migrations(version, name) values ('20991231000000', 'wp5_member_private_name')");
+    const pa = await assertRows(d, PROD);
+    ok("sec_views: aynı durumda prod_assert yalnız satır 26-28 FAIL (SEC_VIEWS önkoşulu)",
+       pa.overall === "WP5_PROD_ASSERT_FAIL" && JSON.stringify(pa.bad.map((x) => Number(x.split(":")[0]))) === "[26,27,28]", pa.bad.join(" | "));
     await d.close();
   }
 } catch (err) {
