@@ -50,14 +50,20 @@ ok("wse ui predicate intact", city.includes('const pending=(v==="config_pending"
 ok("teaser contract", city.includes("const TEASER_MAX=10") && city.includes(".slice(0,TEASER_MAX)") && city.includes("ids.sort()"));
 ok("paywall copy", ["Devamı üyeler için", "İlk 10 mekân gösteriliyor.", "Üye ol veya giriş yap", "Favorilerime git", "Harita ile liste aynı 10 mekânı gösterir.", "Tam listeye üye olunca ulaşırsın."].every((s) => city.includes(s)));
 ok("fav copy", city.includes("Henüz favorin yok. Mekânlar’dan kalp ile ekle.") && city.includes("Favorilerin bu cihazda. Üye olursan hesabına taşıyabilirsin."));
-ok("seed only when key missing", /getItem\("ams_fav"\)[\s\S]{0,220}if\(raw!==null\)/.test(city));
+ok("seed only when new and legacy fav keys are missing", /const favRaw=ASA_ST\.read\("fav"\);\s*if\(favRaw\.present\)\{[\s\S]{0,200}return;\s*\}\s*if\(!ASA_ST\.writable\(\)\) return;/.test(city));
 ok("accommodation is not a hard CTA block", !city.includes("konaklama noktanı seçmelisin") && city.includes("(Önerilir)"));
 ok("one primary plan cta", (city.match(/data-cta="primary"/g) || []).length === 1);
 ok("admin login a11y", admin.includes('<label for="le">E-posta</label>') && admin.includes('<label for="lp">Şifre</label>') && admin.includes('id="aerr" role="alert"'));
 ok("admin login has no stack name", !/Supabase/.test(admin.slice(admin.indexOf("function renderLogin"), admin.indexOf("async function loadCaps"))));
 ok("admin role gate intact", admin.includes("is_current_user_admin") && admin.includes("if(!CAPS.admin)") && admin.includes('role="alert">Bu hesap için yönetim erişimi yok.'));
 
-function stripSrc(html) { return html.replace(/<script\s+src=[^>]*>\s*<\/script>/gi, ""); }
+// WP3: the same-origin storage library is inlined (jsdom does not fetch it); third-party src scripts are dropped.
+const asaLib = read("lib/asa-storage/asa_storage.js");
+function stripSrc(html) {
+  return html
+    .replace(/<script\s+src="\/lib\/asa-storage\/asa_storage\.js\?v=[0-9a-f]{16}"><\/script>/, () => "<script>" + asaLib + "</script>")
+    .replace(/<script\s+src=[^>]*>\s*<\/script>/gi, "");
+}
 function boot(html, storage, extra) {
   const errors = [];
   const vc = new VirtualConsole();
@@ -104,8 +110,9 @@ ok("anon shows at most 10", cards().length <= 10 && cards().length === Math.min(
 ok("anon list ids == deterministic teaser", cards().slice().sort().join("|") === teaser.slice().sort().join("|"));
 ok("teaser is sorted prefix", teaser.join("|") === catalog.slice().sort().join("|").split("|").slice(0, teaser.length).join("|") || teaser.join("|") === catalog.slice(0, 10).join("|"));
 ok("gate when catalog exceeds 10", catalog.length <= 10 || w.document.body.textContent.includes("İlk 10 mekân gösteriliyor."));
-const seeded = JSON.parse(w.localStorage.getItem("ams_fav") || "null");
+const seeded = JSON.parse(w.localStorage.getItem("asa:ams:fav") || "null");
 ok("empty storage seeded once", Array.isArray(seeded) && new Set(seeded).size === seeded.length && seeded.includes("barpif") && !seeded.includes("poi_noorderkerk"));
+ok("seed writes no legacy key", w.localStorage.getItem("ams_fav") === null);
 
 w.setActiveView("map");
 await new Promise((r) => setTimeout(r, 120));
@@ -120,7 +127,7 @@ outsideProbe.dom.window.close();
 ok("fixture id outside teaser", !!outside);
 
 const kept = boot(city, { ams_fav: JSON.stringify([outside]) });
-ok("non-empty storage not reseeded", kept.w.localStorage.getItem("ams_fav") === JSON.stringify([outside]));
+ok("non-empty storage not reseeded", kept.w.localStorage.getItem("asa:ams:fav") === JSON.stringify([outside]) && kept.w.localStorage.getItem("ams_fav") === JSON.stringify([outside]));
 ok("default list hides outside id", !cardsOf(kept.w).includes(outside));
 kept.w.setOnlyChip("fav");
 ok("favorilerim shows outside id", cardsOf(kept.w).includes(outside));
@@ -135,7 +142,7 @@ kept.dom.window.close();
 function cardsOf(win) { return [...win.document.querySelectorAll("[data-venue-id]")].map((el) => el.getAttribute("data-venue-id")); }
 
 const cleared = boot(city, { ams_fav: "[]" });
-ok("explicit empty array stays empty", cleared.w.localStorage.getItem("ams_fav") === "[]");
+ok("explicit empty array stays empty", cleared.w.localStorage.getItem("asa:ams:fav") === "[]" && cleared.w.localStorage.getItem("ams_fav") === "[]");
 cleared.w.setOnlyChip("fav");
 ok("empty favorites copy", cleared.w.document.body.textContent.includes("Henüz favorin yok. Mekânlar’dan kalp ile ekle."));
 cleared.dom.window.close();
