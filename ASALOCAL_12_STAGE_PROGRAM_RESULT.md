@@ -29,7 +29,7 @@ Stage 01: PASS        — SEC_MEDIA_UPLOAD_ACCEPTANCE_PASS (canlı, QA run 37629
 Stage 02: PASS        — SEC_MEDIA_STORAGE_CLOSED: v2 (ALTER POLICY TO service_role, Mete onaylı) uygulandı; prod_assert 19/19, zero-footprint PASS, canlı HTTP 15/15, residue 0 (§5.5)
 Stage 03: PASS        — PR #13 merge 8acfb0e; Cloudflare preview 55/55 + production live 55/55 + live smoke PASS (§5.6)
 Stage 04: PASS        — PR #14 merge cfdf79e; preview QA üye 37/37 + production QA üye 37/37 + live smoke 50/50 + WP3 live 55/55 (§5.7)
-Stage 05: NOT STARTED — sıra kuralı
+Stage 05: IN PROGRESS — DB canlı PASS (27/27, ZF PASS); web PR #15 preview 38/38 PASS; merge + production doğrulaması sürüyor (§5.9)
 Stage 06: NOT STARTED — sıra kuralı
 Stage 07: NOT STARTED — sıra kuralı
 Stage 08: NOT STARTED — sıra kuralı
@@ -334,6 +334,28 @@ Açık ürün kararı (owner delegasyonuyla verildi):
 | Rollback | `SEC_VIEWS_down_INSECURE.sql` (açığı geri açar; `sec_views.rollback_armed` GUC'u olmadan çalışmaz) |
 
 Kalan kök neden (kapsam dışı, öneri): Supabase varsayılan yetkileri `public` şemadaki yeni view'lara anon/authenticated için tüm yetkileri veriyor. Live smoke'taki view probları ve prod assert satır 5 regresyonu yakalar.
+
+### 5.9 İş Paketi 5 — ad-soyad ve profil tamamlama (2026-10-07)
+
+**Veritabanı (`WP5_package/db/`, migration `wp5_member_private_name`)**
+
+| Adım | Sonuç |
+|---|---|
+| Adversarial inceleme | Kritik bulgu: yazılabilir `member_public` view'ı (önceden vardı). Önce SEC-VIEWS ile kapatıldı (§5.8). Ayrıca:<br>• görünmez/dolgu karakterli isimler kabul ediliyordu → reddedildi<br>• pg_graphql varsayımı → önkoşul olarak eklendi<br>• e-posta için "verified" ifadesi → düzeltildi |
+| Kapılar | PGlite PG17 114/114 + PG18 114/114; mutasyon 12/12; CI `wp5-db-gates` ✅ |
+| PRE (prod, salt-okunur) | `WP5_PRE_ASSERT_PASS` 0 FAIL / 24 (SEC-VIEWS ACL ve pg_graphql yokluğu dahil) |
+| Uygulama | `apply_migration` ✅ — PRE state=baseline. POST guard'da CHECK, guard ve RPC md5'leri PGlite ile birebir aynı |
+| POST (prod) | `WP5_PROD_ASSERT_PASS` 0 FAIL / 27 |
+| Davranış (prod, zero-footprint) | `WP5_ZF_VERDICT=PASS fails=0`:<br>• 23 ret vektörü `member_set_name` ile reddedildi<br>• 20 doğrudan PATCH 23514 ile reddedildi<br>• başka adrese e-posta PATCH sabitlendi<br>• A, B'yi güncelleyemiyor (0 satır)<br>• view üzerinden yazma 42501<br>• anon isimleri okuyamıyor<br>• service_role çalışıyor<br>Kalıntı 0 |
+| Değişen satır | 0 (mevcut üyelere isim yazılmadı; zorla güncelleme yok) |
+
+**Web (`WP5_package/web/`, PR [#15](https://github.com/metebagci88/amsterdam/pull/15))**
+
+| Adım | Sonuç |
+|---|---|
+| Yerel | WP5 unit 17/0 (DB politikası eşleşmesi 18/18); WP5 e2e 405/0 (1366/390/360); mutasyon 16/16; WP4 e2e 342/0; WP3 e2e 454/0; WP3 78/78; UX PASS; Kopenhag birebir; WSE PASS |
+| Preview kabul (gerçek DB, QA üye) | QA run 37672669867: 36/37. Tek FAIL testin kendisinden geliyordu: bilerek gönderilen ve reddedilen PATCH'in 400'ü konsola düştü (site hatası değil). Test düzeltildi; QA run [37673198744](https://github.com/metebagci88/amsterdam/actions/runs/37673198744) **38/38 PASS**:<br>• banner (şehir + ana sayfa) ve "Şimdi değil" kalıcılığı<br>• XSS, 51 karakter, boş girdi reddi<br>• sunucu reddi (script, U+3164, 51, boş, rakam)<br>• doğrudan PATCH 23514; e-posta sabit<br>• kayıt, düzenleme ve kalıcılık<br>• display_name korundu<br>• dolu profilde banner yok<br>• anon için isimler görünmez ve RPC çalıştırılamaz (42703/42501) |
+| QA verisi | Her koşu öncesi QA üyede ad/soyad NULL, display_name işaret değeri yapılır; sonrası temizlenir. Hesaplar kilitli |
 
 ## 6. Yeniden başlamak için gereken tek karar
 
