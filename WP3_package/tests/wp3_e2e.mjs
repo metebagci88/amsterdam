@@ -24,6 +24,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
+const { fingerprint } = require(join(REPO, "lib", "asa-storage", "asa_storage.js"));
 const BASE_REF = process.env.WP3_BASE_REF || "7a548e9";
 const ONLY = process.env.WP3_ONLY || "";
 const VIEWPORTS = { desktop: { width: 1280, height: 800 }, mobile: { width: 390, height: 844 } };
@@ -98,18 +99,28 @@ async function newContext(browser, origin, vp, opts = {}) {
     if (rt === "font") return route.fulfill({ status: 204, body: "" });
     return route.fulfill({ status: 204, body: "" });
   });
-  await ctx.addInitScript(({ supa, failSet }) => {
+  await ctx.addInitScript(({ supa, failSet, armOnRemove }) => {
     window.__WP3_SUPA = supa;
     const log = [];
     Object.defineProperty(window, "__WP3_LS_LOG", { value: log });
     const P = Storage.prototype;
     const g = P.getItem, s = P.setItem, r = P.removeItem, c = P.clear;
     Object.defineProperty(window, "__WP3_RAW_GET", { value: (k) => g.call(window.localStorage, k) });
+    // armOnRemove {key, fail[, error]}: once per page, the first removeItem(key) arms a forced, non-quota
+    // exception (Error, or TypeError with error:"TypeError") for the next setItem of each key in `fail`
+    // (a failure between remove and write).
+    let armed = [], used = false;
     P.getItem = function (k) { log.push(["get", String(k)]); return g.call(this, k); };
-    P.setItem = function (k, v) { log.push(["set", String(k)]); if (failSet.includes(String(k))) throw new DOMException("quota (test)", "QuotaExceededError"); return s.call(this, k, v); };
-    P.removeItem = function (k) { log.push(["remove", String(k)]); return r.call(this, k); };
+    P.setItem = function (k, v) {
+      log.push(["set", String(k)]);
+      if (failSet.includes(String(k))) throw new DOMException("quota (test)", "QuotaExceededError");
+      const i = armed.indexOf(String(k));
+      if (i >= 0) { armed.splice(i, 1); const err = armOnRemove.error === "TypeError" ? new TypeError("forced failure between remove and write (test)") : new Error("forced failure between remove and write (test)"); log.push(["forced", String(k), err.name]); throw err; }
+      return s.call(this, k, v);
+    };
+    P.removeItem = function (k) { log.push(["remove", String(k)]); const out = r.call(this, k); if (armOnRemove && !used && String(k) === armOnRemove.key) { used = true; armed = armOnRemove.fail.slice(); } return out; };
     P.clear = function () { log.push(["clear", ""]); return c.call(this); };
-  }, { supa: opts.supa || {}, failSet: opts.failSet || [] });
+  }, { supa: opts.supa || {}, failSet: opts.failSet || [], armOnRemove: opts.armOnRemove || null });
   return ctx;
 }
 
@@ -463,6 +474,8 @@ sc("synthetic write failure on asa:ams:calphoto: reads fall back; a delete is re
   await page.evaluate(() => delPhoto("2026-11-02", 0));
   t("refused delete: visible message", dialogs.some((m) => /Fotoğraf silme kaydedilemedi/.test(m)), JSON.stringify(dialogs));
   t("refused delete: screen reverted (photo still shown)", (await page.evaluate(() => (calPhotos["2026-11-02"] || []).length)) === 1);
+  t("copy_failed is not 'accounted for': no legacy removal attempted", !(await lsLog(page)).some((e) => e[0] === "remove"));
+  t("legacy still byte-identical", (await dump(page)).ams_calphoto === LEGACY_SEED.ams_calphoto);
   await openCity(page, origin);
   t("reload matches what the screen showed", (await page.evaluate(() => (calPhotos["2026-11-02"] || []).length)) === 1);
 }, { failSet: ["asa:ams:calphoto"] });
@@ -479,31 +492,148 @@ const photoBlob = (quota, n) => { const per = Math.floor(quota * 0.05); const pa
 const waitDialog = async (page, dialogs, re) => { for (let i = 0; i < 50 && !dialogs.some((m) => re.test(m)); i++) await page.waitForTimeout(100); return dialogs.some((m) => re.test(m)); };
 const photoCount = (page) => page.evaluate(() => (calPhotos["2026-11-02"] || []).length);
 
-sc("real quota ~55% photos (review #2/#3): no duplicate at load; photo add/delete that cannot be stored are reverted with a message; other data still saves", async ({ page, origin, t, dialogs }) => {
+const PHOTO_DAY = "2026-11-02";
+const removesOf = async (page) => (await lsLog(page)).filter((e) => e[0] === "remove" || e[0] === "clear");
+async function openPhotoUser(page, origin, t, n = 11) {
   await seedStorage(page, origin, {});
   const Q = await measureQuota(page);
-  const blob = photoBlob(Q, 11);
-  await seedStorage(page, origin, { ams_calphoto: blob, asa_trip: LEGACY_SEED.asa_trip });
+  const blob = photoBlob(Q, n);
+  await seedStorage(page, origin, { ams_calphoto: blob, asa_trip: LEGACY_SEED.asa_trip, ams_fav: JSON.stringify(["chun"]) });
   await openCity(page, origin);
   const used = await usedChars(page);
-  const m = JSON.parse((await dump(page))["asa:ams:_migrated"]);
-  t("large legacy photos deferred, not duplicated", m.keys.ams_calphoto.state === "deferred" && used < Q * 0.6, `state=${m.keys.ams_calphoto.state} used=${used} Q=${Q}`);
-  t("all 11 photos shown from legacy", (await photoCount(page)) === 11);
-  t("no notice at load", !(await notice(page)).visible);
-  await page.evaluate(() => delPhoto("2026-11-02", 0));
-  t("delete that cannot be stored: message", await waitDialog(page, dialogs, /Fotoğraf silme kaydedilemedi/), JSON.stringify(dialogs));
-  t("delete that cannot be stored: screen reverted", (await photoCount(page)) === 11);
-  await page.evaluate(() => openDay("2026-11-02"));
+  const d = await dump(page);
+  const m = JSON.parse(d["asa:ams:_migrated"]);
+  t("large legacy photos deferred, not duplicated", m.keys.ams_calphoto.state === "deferred" && m.keys.ams_calphoto.fp === fingerprint(blob) && used < Q * 0.6, `state=${m.keys.ams_calphoto.state} used=${used} Q=${Q}`);
+  t(`all ${n} photos shown from legacy`, (await photoCount(page)) === n);
+  t("page load removed nothing", (await removesOf(page)).length === 0);
+  return { Q, blob, marker0: d["asa:ams:_migrated"] };
+}
+async function addPhotoUI(page) {
+  await page.evaluate((day) => openDay(day), PHOTO_DAY);
   await page.setInputFiles("#dayPhotoInput", { name: "p.png", mimeType: "image/png", buffer: PNG });
-  t("add that cannot be stored: message", await waitDialog(page, dialogs, /Fotoğraf kaydedilemedi/), JSON.stringify(dialogs));
-  t("add that cannot be stored: screen reverted", (await photoCount(page)) === 11);
+}
+
+sc("real quota ~55% photos (owner decision: safe move): delete and add persist after reload; legacy ams_calphoto retired once and recorded; other data saves; pre-WP3 page sees no photos (documented)", async ({ page, origin, t, dialogs }) => {
+  const { blob } = await openPhotoUser(page, origin, t);
+  t("no notice at load", !(await notice(page)).visible);
+  await page.evaluate((day) => delPhoto(day, 0), PHOTO_DAY);
+  let d = await dump(page);
+  t("delete saved without a message", dialogs.length === 0 && (await photoCount(page)) === 10, JSON.stringify(dialogs));
+  t("legacy ams_calphoto removed; asa:ams:calphoto holds the 10 photos", !("ams_calphoto" in d) && JSON.parse(d["asa:ams:calphoto"] || "{}")[PHOTO_DAY].length === 10);
+  const e = JSON.parse(d["asa:ams:_migrated"]).keys.ams_calphoto;
+  t("marker records the retirement: fp of the removed bytes, time, prior state", e.state === "retired" && e.fp === fingerprint(blob) && /^\d{4}-\d\d-\d\dT/.test(e.at || "") && e.from === "deferred" && JSON.parse(d["asa:ams:_migrated"]).legacy_kept === false, JSON.stringify(e));
+  t("exactly one removal, of ams_calphoto only", JSON.stringify(await removesOf(page)) === JSON.stringify([["remove", "ams_calphoto"]]));
+  await addPhotoUI(page);
+  await page.waitForFunction((day) => (calPhotos[day] || []).length === 11, PHOTO_DAY, { timeout: 5000 }).catch(() => {});
+  t("add saved without a message", dialogs.length === 0 && (await photoCount(page)) === 11, JSON.stringify(dialogs));
   await page.evaluate(() => { closeDay(); toggleFav("winkel43"); });
   await openCity(page, origin);
-  t("reload: 11 photos, as the screen showed", (await photoCount(page)) === 11);
-  t("favorite saved (free space not halved)", await page.evaluate(() => isFav("winkel43")));
-  const d = await dump(page);
-  t("legacy photos byte-identical, no partial new key", d.ams_calphoto === blob && !("asa:ams:calphoto" in d));
+  const after = await page.evaluate((day) => { const l = calPhotos[day] || []; return { n: l.length, firstDeleted: !l.some((x) => x.endsWith("AAAA")), added: l.some((x) => x.startsWith("data:image/jpeg") && x.length < 5000) }; }, PHOTO_DAY);
+  t("reload: delete and add both persisted", after.n === 11 && after.firstDeleted && after.added, JSON.stringify(after));
+  t("favorite saved", await page.evaluate(() => isFav("winkel43") && isFav("chun")));
+  t("no notice after reload", !(await notice(page)).visible);
+  t("reload: zero storage writes (retirement record stable)", (await lsLog(page)).filter((x) => x[0] !== "get").length === 0);
+  d = await dump(page);
+  t("reload: record kept, ams_calphoto still absent, other legacy byte-identical", JSON.parse(d["asa:ams:_migrated"]).keys.ams_calphoto.state === "retired" && !("ams_calphoto" in d) && d.ams_fav === JSON.stringify(["chun"]) && d.asa_trip === LEGACY_SEED.asa_trip);
+  await page.goto(origin + "/__wp3_old__/amsterdam/?city=Amsterdam", { waitUntil: "load" });
+  await page.waitForFunction(() => typeof window.isFav === "function");
+  await page.waitForTimeout(150);
+  t("rollback cost: pre-WP3 page shows no calendar photos after the retirement (documented)", await page.evaluate(() => !window.AsaStorage && Object.keys(calPhotos).length === 0));
+  t("pre-WP3 page leaves asa:ams:calphoto untouched", (await dump(page))["asa:ams:calphoto"] === d["asa:ams:calphoto"]);
+  await openCity(page, origin);
+  t("roll-forward: all 11 photos back", (await photoCount(page)) === 11);
+}, { needsOld: true });
+
+sc("real quota ~55% photos + full storage: an add that still cannot fit after the move writes ams_calphoto back byte-identical; a delete then moves", async ({ page, origin, t, dialogs }) => {
+  const { blob, marker0 } = await openPhotoUser(page, origin, t);
+  await fillToFull(page);
+  await addPhotoUI(page);
+  t("add that cannot be stored: existing message", await waitDialog(page, dialogs, /Fotoğraf kaydedilemedi: cihaz depolaması dolu/), JSON.stringify(dialogs));
+  t("add that cannot be stored: screen reverted", (await photoCount(page)) === 11);
+  let d = await dump(page);
+  t("legacy written back byte-identical; no partial new key", d.ams_calphoto === blob && !("asa:ams:calphoto" in d));
+  t("marker rolled back byte-identical (no retirement claimed)", d["asa:ams:_migrated"] === marker0);
+  const log = (await lsLog(page)).filter((x) => x[0] !== "get" && x[1] !== "wp3_fill").map((x) => x.join(" "));
+  t("sequence: remove → record → retry → record rolled back → legacy restored", JSON.stringify(log.slice(-6)) === JSON.stringify(["set asa:ams:calphoto", "remove ams_calphoto", "set asa:ams:_migrated", "set asa:ams:calphoto", "set asa:ams:_migrated", "set ams_calphoto"]), JSON.stringify(log.slice(-8)));
+  await page.evaluate((day) => { closeDay(); delPhoto(day, 0); }, PHOTO_DAY);
+  d = await dump(page);
+  t("delete in a full storage moves cleanly (smaller than the freed legacy)", dialogs.length === 1 && (await photoCount(page)) === 10 && !("ams_calphoto" in d) && JSON.parse(d["asa:ams:_migrated"]).keys.ams_calphoto.state === "retired", JSON.stringify(dialogs));
+  await page.evaluate(() => localStorage.removeItem("wp3_fill"));
+  await openCity(page, origin);
+  t("reload: 10 photos, as the screen showed", (await photoCount(page)) === 10);
 });
+
+sc("forced failure between the legacy remove and the new write (~55%): ams_calphoto restored byte-identical, message, screen reverted; the next save moves cleanly", async ({ page, origin, t, dialogs }) => {
+  const { blob, marker0 } = await openPhotoUser(page, origin, t);
+  await page.evaluate((day) => delPhoto(day, 0), PHOTO_DAY);
+  t("existing delete message", await waitDialog(page, dialogs, /Fotoğraf silme kaydedilemedi/), JSON.stringify(dialogs));
+  t("screen reverted: 11 photos", (await photoCount(page)) === 11);
+  const d = await dump(page);
+  t("legacy restored byte-identical; no new key; marker byte-identical", d.ams_calphoto === blob && !("asa:ams:calphoto" in d) && d["asa:ams:_migrated"] === marker0);
+  t("the failure really hit between remove and write", (await lsLog(page)).some((x) => x[0] === "forced" && x[1] === "asa:ams:calphoto"));
+  await page.evaluate((day) => delPhoto(day, 0), PHOTO_DAY);
+  t("next save moves cleanly", dialogs.length === 1 && (await photoCount(page)) === 10);
+  await openCity(page, origin);
+  const d2 = await dump(page);
+  t("reload: 10 photos, legacy retired and recorded", (await photoCount(page)) === 10 && !("ams_calphoto" in d2) && JSON.parse(d2["asa:ams:_migrated"]).keys.ams_calphoto.state === "retired");
+}, { armOnRemove: { key: "ams_calphoto", fail: ["asa:ams:calphoto"] } });
+
+const restoreFailedFlow = (errorName) => async ({ page, origin, t, dialogs }) => {
+  await openPhotoUser(page, origin, t);
+  await page.evaluate((day) => delPhoto(day, 0), PHOTO_DAY);
+  t("restore-failed message, not the 'unchanged' one", await waitDialog(page, dialogs, /eski fotoğraf kaydı geri yazılamadı/) && !dialogs.some((m) => /kayıtlı fotoğrafların değişmedi/.test(m)), JSON.stringify(dialogs));
+  const forced = (await lsLog(page)).filter((x) => x[0] === "forced").map((x) => x.slice(1).join(" "));
+  t(`both forced ${errorName}s hit: the retry and the restore`, JSON.stringify(forced) === JSON.stringify([`asa:ams:calphoto ${errorName}`, `ams_calphoto ${errorName}`]), JSON.stringify(forced));
+  t("photos still in the tab", (await photoCount(page)) === 11);
+  await page.evaluate((day) => delPhoto(day, 0), PHOTO_DAY);
+  t("the advised next save stores them", dialogs.length === 1 && (await photoCount(page)) === 10);
+  await openCity(page, origin);
+  t("reload: 10 photos", (await photoCount(page)) === 10);
+};
+sc("forced failure of the write AND the restore: the page says so honestly (no 'unchanged' claim) and the photos stay in the tab until the next save", restoreFailedFlow("Error"), { armOnRemove: { key: "ams_calphoto", fail: ["asa:ams:calphoto", "ams_calphoto"] } });
+sc("forced TypeError on the retry AND a failed restore (review LOW): still the honest restore-failed message, never 'unchanged'", restoreFailedFlow("TypeError"), { armOnRemove: { key: "ams_calphoto", fail: ["asa:ams:calphoto", "ams_calphoto"], error: "TypeError" } });
+
+// Another tab of the same browser context (same localStorage), instrumented like `page`.
+async function otherTab(ctx, errs, dialogs) {
+  const p = await ctx.newPage();
+  attach(p, errs);
+  p.on("dialog", (dlg) => { dialogs.push(dlg.message()); dlg.dismiss().catch(() => {}); });
+  return p;
+}
+sc("stale reader (review MEDIUM, ~55%, 3 tabs): legacy a pre-WP3 tab wrote after Tab A loaded is never retired by Tab A, even after another Amsterdam load re-recorded the marker", async ({ page, origin, t, dialogs, ctx }) => {
+  const { blob } = await openPhotoUser(page, origin, t); // Tab A read L (11 photos)
+  const errs = [], otherDialogs = [];
+  const old = await otherTab(ctx, errs, otherDialogs);
+  await old.goto(origin + "/__wp3_old__/amsterdam/?city=Amsterdam", { waitUntil: "load" });
+  await old.waitForFunction(() => typeof window.addPhoto === "function" && typeof window.openDay === "function");
+  await old.waitForTimeout(150);
+  await addPhotoUI(old);
+  await old.waitForFunction((day) => (calPhotos[day] || []).length === 12, PHOTO_DAY, { timeout: 5000 }).catch(() => {});
+  const L2 = await old.evaluate(() => window.__WP3_RAW_GET("ams_calphoto"));
+  t("pre-WP3 tab wrote ams_calphoto itself (its own add: 12 photos)", (await old.evaluate(() => !window.AsaStorage)) && !!L2 && L2 !== blob && JSON.parse(L2)[PHOTO_DAY].length === 12);
+  const tabB = await otherTab(ctx, errs, otherDialogs);
+  await openCity(tabB, origin); // another WP3 load reconciles
+  const mB = JSON.parse((await dump(tabB))["asa:ams:_migrated"]).keys.ams_calphoto;
+  t("second Amsterdam tab re-recorded the shared marker with the old tab's bytes", mB.state === "deferred" && mB.fp === fingerprint(L2), JSON.stringify(mB));
+  await tabB.close();
+  await old.close();
+  await page.waitForFunction((n) => (window.__WP3_RAW_GET("ams_calphoto") || "").length === n, L2.length, { timeout: 5000 }).catch(() => {});
+  await addPhotoUI(page); // Tab A still shows its 11 and adds one at quota
+  t("Tab A: existing 'not saved; saved photos unchanged' message", await waitDialog(page, dialogs, /Fotoğraf kaydedilemedi: cihaz depolaması dolu/), JSON.stringify(dialogs));
+  t("Tab A: screen reverted to its 11", (await photoCount(page)) === 11);
+  const d = await dump(page);
+  t("the old tab's photos kept byte-identical; no new key", d.ams_calphoto === L2 && !("asa:ams:calphoto" in d));
+  t("Tab A removed nothing", (await removesOf(page)).length === 0, JSON.stringify(await removesOf(page)));
+  const m = JSON.parse(d["asa:ams:_migrated"]).keys.ams_calphoto;
+  t("no retirement claimed: marker still the second tab's record", m.state === "deferred" && m.fp === fingerprint(L2), JSON.stringify(m));
+  await openCity(page, origin); // Tab A reloads: now it has read the old tab's bytes
+  t("reload: the old tab's photo is shown (12)", (await photoCount(page)) === 12);
+  await page.evaluate((day) => delPhoto(day, 0), PHOTO_DAY);
+  const d2 = await dump(page);
+  const e2 = JSON.parse(d2["asa:ams:_migrated"]).keys.ams_calphoto;
+  t("after the reload the move works: delete saved, ams_calphoto retired with the old tab's fp", dialogs.length === 1 && (await photoCount(page)) === 11 && !("ams_calphoto" in d2) && e2.state === "retired" && e2.fp === fingerprint(L2), JSON.stringify([dialogs, e2]));
+  t("other tabs: no dialogs, console/page errors = 0", otherDialogs.length === 0 && errs.length === 0, JSON.stringify([otherDialogs, errs.slice(0, 3)]));
+}, { needsOld: true });
 
 sc("real quota ~45% photos (review #2/#3): no duplicate at load; delete and add persist; a favorite refused by a full storage is undone with a message", async ({ page, origin, t, dialogs }) => {
   await seedStorage(page, origin, {});
@@ -519,6 +649,7 @@ sc("real quota ~45% photos (review #2/#3): no duplicate at load; delete and add 
   await page.setInputFiles("#dayPhotoInput", { name: "p.png", mimeType: "image/png", buffer: PNG });
   await page.waitForFunction(() => (calPhotos["2026-11-02"] || []).length === 9, null, { timeout: 5000 }).catch(() => {});
   t("no storage message for edits that fit", dialogs.length === 0, JSON.stringify(dialogs));
+  t("edits that fit next to the kept legacy never remove it", (await removesOf(page)).length === 0);
   await openCity(page, origin);
   const after = await page.evaluate(() => { const l = calPhotos["2026-11-02"] || []; return { n: l.length, firstDeleted: !l.some((x) => x.endsWith("AAAA")), added: l.some((x) => x.startsWith("data:image/jpeg") && x.length < 5000) }; });
   t("reload: delete and add both persisted", after.n === 9 && after.firstDeleted && after.added, JSON.stringify(after));
@@ -572,14 +703,14 @@ try {
       if (ONLY && !s.name.includes(ONLY)) continue;
       const label = `[${vp}] ${s.name}`;
       if (s.opts.needsOld && !oldHtml) { ok(label + " :: base page available", false, "git show " + BASE_REF + " failed"); continue; }
-      const ctx = await newContext(browser, origin, vp, { supa: s.opts.supa, libMissing: s.opts.libMissing, failSet: s.opts.failSet, oldPage: s.opts.needsOld ? oldHtml : null });
+      const ctx = await newContext(browser, origin, vp, { supa: s.opts.supa, libMissing: s.opts.libMissing, failSet: s.opts.failSet, armOnRemove: s.opts.armOnRemove, oldPage: s.opts.needsOld ? oldHtml : null });
       const page = await ctx.newPage();
       const errs = [];
       attach(page, errs);
       const dialogs = [];
       page.on("dialog", (dlg) => { dialogs.push(dlg.message()); dlg.dismiss().catch(() => {}); });
       const t = (n, c, d) => ok(label + " :: " + n, c, d);
-      try { await s.fn({ page, origin, vp, t, dialogs }); }
+      try { await s.fn({ page, origin, vp, t, dialogs, ctx }); }
       catch (e) { t("scenario completed", false, String(e && e.stack || e).split("\n").slice(0, 3).join(" | ")); }
       const pageErrs = errs.filter((e) => !(s.opts.expectConsole && s.opts.expectConsole.test(e.text + " " + (e.url || ""))));
       for (const e of errs) if (!pageErrs.includes(e)) consoleNoise.push(label + " (expected) " + e.kind + ": " + e.text.slice(0, 160));

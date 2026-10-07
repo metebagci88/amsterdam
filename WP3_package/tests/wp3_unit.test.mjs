@@ -160,8 +160,105 @@ test("rollback safety: after migration every legacy key still holds its original
   for (const k of Object.keys(LEGACY)) assert.equal(asa.isLegacyCopyVerified(s, k).reason === "absent", false, k);
 });
 
-test("library refuses non-city keys and never exposes a delete-legacy API", () => {
+test("library refuses non-city keys and exposes no generic delete-legacy API (only the scoped photo safe move)", () => {
   const s = mem({});
   for (const bad of ["asa_session", "sb-x-auth-token", "_migrated", "custom"]) assert.throws(() => asa.set(s, "ams", bad, {}), /invalid_domain/);
+  for (const bad of ["asa_session", "sb-x-auth-token", "_migrated", "custom"]) assert.throws(() => asa.setSafeMove(s, "ams", bad, {}), /invalid_domain/);
   for (const name of ["retireLegacy", "deleteLegacy", "removeLegacy"]) assert.equal(asa[name], undefined);
+});
+
+// Chromium-like per-origin quota (key + value chars); a refused setItem throws QuotaExceededError
+// and leaves the previous value.
+function quota(seed, limit) {
+  const s = mem(seed);
+  const raw = { get: s.getItem, set: s.setItem };
+  const used = () => Object.entries(s.dump()).reduce((n, [k, v]) => n + k.length + v.length, 0);
+  s.limit = limit;
+  s.used = used;
+  s.setItem = (k, v) => {
+    const prev = raw.get(k);
+    if (used() - (prev === null ? 0 : k.length + prev.length) + k.length + String(v).length > s.limit) { s.calls.set.push(k); throw new DOMException("quota (test)", "QuotaExceededError"); }
+    raw.set(k, v);
+  };
+  return s;
+}
+// The page's photo save (ASA_ST.set("calphoto") → setSafeMove) with addPhoto/delPhoto's undo on refusal.
+// readFp = what ASA_ST keeps from ITS OWN load-time reconcile (the ams_calphoto bytes that tab read).
+const readFpOf = (rep) => { const e = rep.marker.keys.ams_calphoto; return e && typeof e.fp === "string" && e.state !== "retired" ? e.fp : null; };
+const savePhotos = (s, photos, readFp) => asa.setSafeMove(s, "ams", "calphoto", photos, { expectLegacyFp: readFp }).ok;
+
+test("lifecycle (WP3 blocker, owner decision): ~55% photo user can delete and add again; legacy retired once, verified record kept across reloads", () => {
+  const Q = 5242880;
+  const per = Math.floor(Q * 0.05);
+  const list = Array.from({ length: 11 }, (_, i) => "data:image/gif;base64," + String.fromCharCode(65 + i).repeat(per));
+  const legacy = JSON.stringify({ "2026-11-02": list });
+  const s = quota({ ams_calphoto: legacy, ams_fav: '["chun"]', asa_trip: trip("Amsterdam"), asa_session: '{"uid":"x"}' }, Q);
+  const readFp = readFpOf(pageLoad(s, 1));
+  assert.equal(asa.readMarker(s, "ams").value.keys.ams_calphoto.state, "deferred");
+  let photos = asa.get(s, "ams", "calphoto").value;
+  photos["2026-11-02"].splice(0, 1); // delete
+  assert.equal(asa.set(s, "ams", "calphoto", photos).ok, false, "without the safe move this is the WP3 blocker");
+  assert.equal(savePhotos(s, photos, readFp), true, "delete persists");
+  assert.equal(s.getItem("ams_calphoto"), null, "legacy retired");
+  photos["2026-11-02"].push("data:image/jpeg;base64,NEW"); // add
+  assert.equal(savePhotos(s, photos, readFp), true, "add persists");
+  const writes = s.calls.set.length;
+  for (const n of [2, 3]) {
+    const r = pageLoad(s, n);
+    assert.deepEqual([r.marker.keys.ams_calphoto.state, r.marker.keys.ams_calphoto.fp, r.marker.legacy_kept, r.conflicts.length], ["retired", asa.fingerprint(legacy), false, 0]);
+  }
+  assert.equal(s.calls.set.length, writes, "reloads write nothing");
+  const back = asa.get(s, "ams", "calphoto");
+  assert.equal(back.source, "city");
+  assert.equal(back.value["2026-11-02"].length, 11);
+  assert.equal(back.value["2026-11-02"][0], list[1], "first photo deleted");
+  assert.equal(back.value["2026-11-02"][10], "data:image/jpeg;base64,NEW", "new photo added");
+  assert.deepEqual(s.calls.remove, ["ams_calphoto"], "only ams_calphoto, only once");
+  assert.equal(s.getItem("ams_fav"), '["chun"]');
+  assert.equal(s.getItem("asa_trip"), trip("Amsterdam"));
+  assert.equal(s.getItem("asa_session"), '{"uid":"x"}');
+  // Rollback cost (documented): the pre-WP3 page reads only ams_calphoto → it shows no calendar photos.
+  assert.equal(s.getItem("ams_calphoto"), null);
+});
+
+test("lifecycle (review MEDIUM): Amsterdam tab open → pre-WP3 tab adds a photo → homepage chooses Amsterdam (reconcile) → the open tab's quota save keeps the old tab's photo", () => {
+  const Q = 5242880;
+  const per = Math.floor(Q * 0.05);
+  const list = Array.from({ length: 11 }, (_, i) => "data:image/gif;base64," + String.fromCharCode(65 + i).repeat(per));
+  const legacy = JSON.stringify({ "2026-11-02": list });
+  const s = quota({ ams_calphoto: legacy, asa_trip: trip("Amsterdam") }, Q);
+  const tabA = readFpOf(pageLoad(s, 1));
+  const tabAPhotos = asa.get(s, "ams", "calphoto").value;
+  const oldTab = JSON.stringify({ "2026-11-02": list.concat(["data:image/jpeg;base64,OLDTAB"]) });
+  s.setItem("ams_calphoto", oldTab); // the pre-WP3 page writes ams_calphoto directly
+  assert.equal(homepage(s, "ams", trip("Amsterdam", "2026-11-20")).ok, true, "index.html: reconcile(ams) + trip write");
+  assert.equal(asa.readMarker(s, "ams").value.keys.ams_calphoto.fp, asa.fingerprint(oldTab), "the homepage reconcile re-recorded the marker");
+  tabAPhotos["2026-11-02"].push("data:image/jpeg;base64,TAB_A");
+  assert.equal(savePhotos(s, tabAPhotos, tabA), false, "refused: Tab A never read these bytes (page undoes + existing message)");
+  assert.equal(s.getItem("ams_calphoto"), oldTab, "old tab's photo kept byte-identical");
+  assert.equal(s.getItem("asa:ams:calphoto"), null);
+  assert.deepEqual(s.calls.remove, []);
+  const reload = pageLoad(s, 3); // Tab A reloaded: now it has read the old tab's bytes
+  const fresh = asa.get(s, "ams", "calphoto").value;
+  assert.equal(fresh["2026-11-02"].length, 12, "the old tab's photo is shown");
+  fresh["2026-11-02"].push("data:image/jpeg;base64,TAB_A");
+  assert.equal(savePhotos(s, fresh, readFpOf(reload)), true, "after the reload the move works");
+  assert.deepEqual(asa.get(s, "ams", "calphoto").value["2026-11-02"].slice(-2), ["data:image/jpeg;base64,OLDTAB", "data:image/jpeg;base64,TAB_A"]);
+  assert.deepEqual(s.calls.remove, ["ams_calphoto"]);
+});
+
+test("lifecycle: ~45% photo user is unchanged — edits fit next to the kept legacy, nothing is retired", () => {
+  const Q = 5242880;
+  const per = Math.floor(Q * 0.05);
+  const legacy = JSON.stringify({ "2026-11-02": Array.from({ length: 9 }, (_, i) => "data:image/gif;base64," + String.fromCharCode(65 + i).repeat(per)) });
+  const s = quota({ ams_calphoto: legacy }, Q);
+  const readFp = readFpOf(pageLoad(s, 1));
+  const photos = asa.get(s, "ams", "calphoto").value;
+  photos["2026-11-02"].splice(0, 1);
+  assert.equal(savePhotos(s, photos, readFp), true);
+  photos["2026-11-02"].push("data:image/jpeg;base64,NEW");
+  assert.equal(savePhotos(s, photos, readFp), true);
+  assert.equal(pageLoad(s, 2).marker.keys.ams_calphoto.state, "superseded");
+  assert.equal(s.getItem("ams_calphoto"), legacy, "legacy kept byte-identical");
+  assert.deepEqual(s.calls.remove, []);
 });

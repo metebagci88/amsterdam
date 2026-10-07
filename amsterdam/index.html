@@ -566,7 +566,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="/lib/asa-storage/asa_storage.js?v=32e524e7e15fe4bb"></script>   <!-- WP3 şehir-izole depolama; SHA-256(16), her güncellemede yenile -->
+<script src="/lib/asa-storage/asa_storage.js?v=d3b3e32eb81a46bf"></script>   <!-- WP3 şehir-izole depolama; SHA-256(16), her güncellemede yenile -->
 <script>
 /* ASALOCAL TripStore (A2 veri katmanı) — A1 sözleşmesine göre, production'da doğrulandı */
 (function(global){
@@ -957,23 +957,26 @@ function winopen(u){if(!u)return;try{const w=window.open(u,"_blank","noopener");
 /* ===== WP3 · ŞEHİR-İZOLE TARAYICI DEPOLAMA (asa:ams:*) — window.AsaStorage (lib/asa-storage) =====
    Amsterdam verisi yalnız asa:ams:<domain> anahtarlarından okunur/yazılır. Eski ams_* / asa_trip /
    asa_plan_prefs anahtarları SİLİNMEZ (geri dönüş güvencesi); açılışta idempotent kopyalanır ve
-   asa:ams:_migrated işareti tutulur (reconcile). Yeni değer otoritedir; eski≠yeni ise sessiz overwrite
+   asa:ams:_migrated işareti tutulur (reconcile). Tek istisna (sahibi kararı, açılışta asla): fotoğraf kaydı
+   depolama dolu diye reddedilirse, işaret eski ams_calphoto'yu "hesaba katılmış" gösteriyorsa ve bu sekme açılışta aynı baytları okuduysa LIB.setSafeMove
+   eski anahtarı kaldırıp yeniden dener; başarılıysa işarete "retired" kaydı düşer, olmazsa eski baytları birebir geri yazar. Yeni değer otoritedir; eski≠yeni ise sessiz overwrite
    YOK, kullanıcıya uyarı gösterilir. Başka şehrin seyahati Amsterdam'ınki gibi gösterilmez.
    Eski asa_trip başka şehri gösterdiği için Amsterdam'a bağlanmayan eski plan tercihleri (yalnız bu sayfa yazardı)
    kullanıcıya gösterilir; yalnız "Amsterdam planına aktar" ile kopyalanır (otomatik değil, eski kayıt silinmez).
    Kayıt başarısız olursa (depolama dolu) ekrandaki değişiklik geri alınır ve kullanıcıya söylenir.
    asa_session ve Supabase auth anahtarları bu katmanın DIŞINDADIR. Kopenhag (cph) anahtarları burada okunmaz. */
 window.ASA_ST=(function(){
-  var CODE="ams", LIB=window.AsaStorage||null, LS=null, mode="ok", rep=null, other="", extra=[], seen=false, adopted=false;
+  var CODE="ams", LIB=window.AsaStorage||null, LS=null, mode="ok", rep=null, other="", extra=[], seen=false, adopted=false, unsaved=false, readFp=null;
   var NAMES={fav:"Favoriler",plan:"Gün planı notları",dayven:"Günlük mekân listeleri",cal:"Takvim notları",calphoto:"Takvim fotoğrafları",trip:"Seyahat bilgileri",plan_prefs:"Plan tercihleri"};
   try{ LS=window.localStorage; }catch(e){ LS=null; }
   if(!LIB||typeof LIB.reconcile!=="function"||!LS) mode="unavailable";
   else { var pc=null; try{ pc=LIB.cityCodeFromLabel(CITY); }catch(e){} if(pc!==CODE){ mode="locked"; other=String(CITY||"").slice(0,64); } }
-  if(mode==="ok"){ try{ rep=LIB.reconcile(LS,CODE); }catch(e){ rep=null; mode="unavailable"; } }
+  if(mode==="ok"){ try{ rep=LIB.reconcile(LS,CODE); }catch(e){ rep=null; mode="unavailable"; } try{ var pe=rep&&rep.marker&&rep.marker.keys&&rep.marker.keys.ams_calphoto; readFp=(pe&&typeof pe.fp==="string"&&pe.state!=="retired")?pe.fp:null; }catch(e){ readFp=null; } }   // readFp: bu sekmenin açılışta okuduğu eski ams_calphoto baytları
   function writable(){ return mode==="ok"; }
   function read(d){ if(mode!=="ok")return {present:false,value:null}; try{ var r=LIB.get(LS,CODE,d); return {present:r.source!=="missing",value:(r.ok?r.value:null)}; }catch(e){ return {present:true,value:null}; } }
   function get(d,x){ var r=read(d); return (r.value!=null)?r.value:x; }
-  function set(d,v){ if(mode!=="ok")return false; try{ return LIB.set(LS,CODE,d,v).ok===true; }catch(e){ return false; } }
+  // Fotoğraflar: kota reddinde hesaba katılmış eski ams_calphoto güvenli taşınır (LIB.setSafeMove; yalnız yazım anında, yalnız bu sekmenin açılışta okuduğu baytlar — readFp; başka sekme/ana sayfa işareti sonradan yenilese bile).
+  function set(d,v){ unsaved=false; if(mode!=="ok")return false; try{ var r=(d==="calphoto"&&typeof LIB.setSafeMove==="function")?LIB.setSafeMove(LS,CODE,d,v,{expectLegacyFp:readFp}):LIB.set(LS,CODE,d,v); unsaved=(d==="calphoto"&&r.reason==="restore_failed"); return r.ok===true; }catch(e){ return false; } }
   function tripCityOk(t){ try{ return mode==="ok"&&LIB.checkTripCity(t,CODE).match===true; }catch(e){ return false; } }
   function trip(){ var t=get("trip",null); return (t&&tripCityOk(t))?t:null; }
   function stranded(){ return (!seen&&!adopted&&mode==="ok"&&rep&&rep.stranded)?rep.stranded.filter(function(x){return x.domain==="plan_prefs"&&!x.acknowledged;}):[]; }
@@ -1005,7 +1008,7 @@ window.ASA_ST=(function(){
   function say(m){ extra.push(m); notice(); }
   function foreignTrip(label){ say("Açılan seyahat "+(label||"başka bir şehir")+" için. Amsterdam planına yüklenmedi; Amsterdam’daki kayıtların değişmedi."); }
   // Depolama yazımı reddedildiğinde (kota): çağıran ekrandaki değişikliği geri alır, kullanıcıya söylenir.
-  function full(m){ try{ alert(m); }catch(e){} }
+  function full(m){ if(unsaved) m="Takvim fotoğrafların bu cihaza kaydedilemedi ve eski fotoğraf kaydı geri yazılamadı; fotoğraflarının bir kısmı şu an yalnız bu sekmede olabilir. Sekmeyi kapatma: cihazda yer açıp bir fotoğraf ekleyerek ya da silerek yeniden kaydetmeyi dene."; try{ alert(m); }catch(e){} }
   try{ notice(); }catch(e){}
   return { CODE:CODE, mode:function(){return mode;}, report:function(){return rep;}, writable:writable, read:read, get:get, set:set, trip:trip, tripCityOk:tripCityOk, foreignTrip:foreignTrip, notice:notice, say:say, full:full, adopt:adopt };
 })();
