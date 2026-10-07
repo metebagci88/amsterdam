@@ -48,7 +48,7 @@ RUNNER_TEMP="$WORK/rt" S1_OUT_DIR="$WORK/out" QA_DEPS="$WORK/qadeps" \
 ASALOCAL_BASE_URL="http://127.0.0.1:$port" ASALOCAL_MEMBER_EMAIL="$MEMBER" ASALOCAL_ADMIN_EMAIL="$SECOND" \
 DRY_ROOT="$DRY_ROOT" DRY_STUB_DIR="$HERE" DRY_STATE_OUT="$WORK/out/dry_state.json" \
 PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}" NODE_PATH="${TAILWIND_NODE_PATH:-}" \
-node "$REPO/LIVE_CHECKS/qa/wp6_live.mjs"
+node "$REPO/LIVE_CHECKS/qa/${DRY_SCRIPT:-wp6_live.mjs}"
 rc=$?
 echo "DRYRUN_EXIT=$rc result=$WORK/out/wp6_live_result.json"
 exit $rc

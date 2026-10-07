@@ -151,6 +151,15 @@ jobs:
       - name: Publish WP6 result
         if: contains(env.QA_PHASES, ',wp6,')
         run: node LIVE_CHECKS/qa/qa_runner.mjs signal wp6 "$S1_OUT_DIR/exit_wp6.json" "$S1_OUT_DIR/wp6_live_result.json"
+      - name: "WP7: beta launch, member view (QA member, read-only)"
+        if: contains(env.QA_PHASES, ',wp7,')
+        run: |
+          set +e -uo pipefail
+          node LIVE_CHECKS/qa/wp7_live.mjs; e=$?
+          echo "{\"wp7_live\":$e}" > "$S1_OUT_DIR/exit_wp7.json"; cat "$S1_OUT_DIR/exit_wp7.json"
+      - name: Publish WP7 result
+        if: contains(env.QA_PHASES, ',wp7,')
+        run: node LIVE_CHECKS/qa/qa_runner.mjs signal wp7 "$S1_OUT_DIR/exit_wp7.json" "$S1_OUT_DIR/wp7_live_result.json"
       - name: Secret scan of outputs
         if: always()
         run: |

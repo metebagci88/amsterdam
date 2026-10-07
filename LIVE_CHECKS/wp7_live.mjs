@@ -99,7 +99,8 @@ async function checkBrowser() {
       const leak = (info.txt || "").match(LEAK_RE);
       rec(`page ${path}: no internal/personal text in the rendered page`, !info.err && !leak, leak ? `hit="${leak[0]}"` : (info.err || "clean"));
       rec(`page ${path}: no tracker hosts (consent-free)`, trackers.length === 0 && cdnCgi.length === 0, (trackers.concat(cdnCgi)).slice(0, 5).join(" | ") || `hosts=${[...hosts].sort().join(",")}`);
-      rec(`page ${path}: canonical on www`, (info.canon || "").startsWith("https://www.asalocal.club" + path), `canonical=${info.canon || "-"}`);
+      // The Kopenhag stub is byte-pinned by the WP3/WP4/WP5 gates and stays as is (no canonical); / and /amsterdam/ carry one.
+      if (path !== "/kopenhag/") rec(`page ${path}: canonical on www`, (info.canon || "").startsWith("https://www.asalocal.club" + path), `canonical=${info.canon || "-"}`);
       rec(`page ${path}: no visible '#' links, footer links real`, info.hashLinks === 0 && info.footerHash === 0, `visible#=${info.hashLinks} footer#=${info.footerHash} footer=${info.hasFooter}`);
       if (path === "/") {
         const t = info.txt || "";
