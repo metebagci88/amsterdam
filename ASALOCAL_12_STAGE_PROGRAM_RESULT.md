@@ -1,6 +1,7 @@
 # ASALOCAL — 12 Aşamalı Program · Yürütme Sonucu (STOP raporu)
 
 **Belge türü:** PRD §7 kapanış raporu + §2.2 kanıtlı STOP raporu
+**Son güncelleme:** 2026-10-07 — Mete onayıyla `admin-api` v18 deploy edildi (B1 düzeltmesi); canlı runtime kabulü B2 nedeniyle bekliyor
 **Kaynak PRD:** `ASALOCAL_12_ASAMALI_URUNLESTIRME_PRD.md`
 **Rapor tarihi:** 2026-10-07 (UTC)
 **Yürüten:** Claude Code (bulut oturumu), repo `metebagci88/amsterdam`, Supabase projesi `asa-local` (`tosqsabuaomgqjtogdrn`)
@@ -10,12 +11,12 @@
 ## ASALOCAL_12_STAGE_PROGRAM_RESULT
 
 ```text
-Overall: PARTIAL_BLOCKED   (İş Paketi 1 başlamadan durduruldu; production'a HİÇBİR yazma yapılmadı)
+Overall: PARTIAL_BLOCKED   (İş Paketi 1 başlamadan durduruldu; tek production değişikliği: Mete onaylı admin-api v18 deploy'u)
 Main final SHA: 7a548e979b7b72556622edc6a8d52391a5874b7e   (değişmedi; PR #12 merge commit'i)
 Production URLs: https://www.asalocal.club  (/, /amsterdam/, /kopenhag/, /admin → /CDP3B/admin.html)
                  — bu yürütme ortamından ERİŞİLEMEDİ, canlı smoke YAPILAMADI
 Production Edge versions (salt-okunur, değişmedi):
-  admin-api v17 verify_jwt=true   ← KIRIK (bkz. Blocker B1)
+  admin-api v18 verify_jwt=true   ← 2026-10-07 Mete onayıyla deploy (repo main kaynağı); v17 KIRIKTI (bkz. B1)
   email-api v9 verify_jwt=true
   service-email-dispatch v3 verify_jwt=true
   resend-webhook v3 verify_jwt=false
@@ -23,7 +24,7 @@ Production Edge versions (salt-okunur, değişmedi):
   adim2-dispatch-once v6 verify_jwt=true (410 gone stub)
 Migration ledger additions: YOK (son kayıt: 20260930202808 admin_rate_check_media_upload_token)
 
-Stage 01: BLOCKED     — B1: canlı admin-api v17 boot hatası (PLACEHOLDER_INDEX); B2: canlı site + admin oturumu erişimi yok
+Stage 01: BLOCKED     — B1 (admin-api v17 PLACEHOLDER_INDEX) v18 ile düzeltildi, runtime kabulü bekliyor; B2: canlı site + admin oturumu erişimi yok
 Stage 02: NOT STARTED — önkoşul (Stage 01 PASS) yok. Migration paketi HAZIRLANDI, UYGULANMADI
 Stage 03: NOT STARTED — sıra kuralı (PRD §4)
 Stage 04: NOT STARTED — sıra kuralı
@@ -55,9 +56,9 @@ Costs:
 - paid resource created: NO
 - card/plan upgrade: NO
 
-Remaining blockers: B1 (production admin-api kırık), B2 (canlı erişim/oturum yok) — bkz. §3
+Remaining blockers: B2 (canlı erişim/oturum yok); B1 deploy edildi ama canlı HTTP kabulü B2'ye bağlı — bkz. §3
 Known non-goals: bkz. §7
-Rollback references: main 7a548e9; admin-api v17 ezbr d4ea5db5…; migration ledger son kayıt 20260930202808
+Rollback references: main 7a548e9; admin-api v18 ezbr 96bd5e04… (önceki v17 ezbr d4ea5db5… — kırık, geri dönülmez); migration ledger son kayıt 20260930202808
 ```
 
 ---
