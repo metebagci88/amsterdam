@@ -24,7 +24,7 @@ Production Edge versions (salt-okunur, değişmedi):
   adim2-dispatch-once v6 verify_jwt=true (410 gone stub)
 Migration ledger additions: YOK (son kayıt: 20260930202808 admin_rate_check_media_upload_token)
 
-Stage 01: BLOCKED     — B1 (admin-api v17 PLACEHOLDER_INDEX) v18 ile düzeltildi + canlı girişsiz kabul PASS; B2: admin/üye test oturumu yok
+Stage 01: PASS        — SEC_MEDIA_UPLOAD_ACCEPTANCE_PASS (canlı, QA run 37629590923): gerçek admin upload Edge yolu, 17/17 negatif, residue=0 (§5.4)
 Stage 02: NOT STARTED — önkoşul (Stage 01 PASS) yok. Migration paketi HAZIRLANDI, UYGULANMADI
 Stage 03: NOT STARTED — sıra kuralı (PRD §4)
 Stage 04: NOT STARTED — sıra kuralı
@@ -234,6 +234,37 @@ Girişsiz, yazmasız canlı smoke testi; sonuçlar §2.1'de. Her push'ta ya da e
 
 
 ---
+
+### 5.4 İş Paketi 1 — CANLI KABUL: `SEC_MEDIA_UPLOAD_ACCEPTANCE_PASS` (2026-10-07)
+
+**Erişim yöntemi (Mete onaylı):**
+- İki adanmış, etiketli test hesabı oluşturuldu (SQL ile, e-posta gönderilmeden):
+  - `qa-admin`: yalnız `venue_editor` rolü
+  - `qa-member`: rolsüz
+- Parolalar GitHub Actions runner'ında rastgele üretildi ve maskelendi; Claude dahil kimse görmedi. Dışarıya yalnız bcrypt özetleri çıktı (`qa_signals/<run>/hashes.json`).
+- Operatör özetleri SQL ile hesaplara yazdı. Koşu bitince parolalar yeniden kullanılamaz (`''`) yapıldı.
+- Koşu: [QA live run 37629590923](https://github.com/metebagci88/amsterdam/actions/runs/37629590923). Adımlar arası operatör kapıları `go_upload` / `go_cleanup`.
+- Temizlik için geçici Edge fonksiyonu `qa-media-cleanup` v1 kullanıldı:
+  - verify_jwt açık; yalnız qa-admin çağırabilir; yalnız `venues/<uuid>` yolları ve 3 saatten yeni objeler.
+  - Silme service-role ile Storage API üzerinden yapılır, metadata ve blob birlikte silinir.
+  - İş bitince 410 stub'ına çevrilecek.
+
+| Adım | Sonuç |
+|---|---|
+| S1-00 baseline | admin-api v18, `verify_jwt=true`, iki dosya hash'i = repo |
+| S1-00b runtime | `RUNTIME_PASS`: gerçek UI girişi, `counts` 200, CORS OPTIONS 200, yazma 0, console error 0 |
+| S1-02 PRE | PASS B1–B7 (`evidence/live_2026-10-07/pre.json`) |
+| S1-03 preflight | `PREFLIGHT_PASS`: canlı kaynak statik kontrolleri S01–S13 |
+| S1-04 negatif | **17/17 PASS**:<br>• JWT yok / anon → 401<br>• qa-member → 403 `not_admin`<br>• izinsiz prefix → 400<br>• JSON → 415<br>• 7 bozuk multipart → 4xx<br>• stack/secret yok |
+| S1-05 MID0 | PASS: obje Δ=0, rate Δ=0 (negatif testler hiçbir şey yazmadı) |
+| S1-06 tek upload | **PASS A04–A17**:<br>• admin-api'ye tam 1 multipart POST<br>• boundary tarayıcı tarafından üretildi; sayfa Content-Type set etmedi<br>• Bearer oturum JWT'si; değer hiçbir çıktıya yazılmadı<br>• form alanları yalnız `action`/`prefix`/`file`<br>• yanıt 200 ve allowlist alanları<br>• `public_url` = https + `media` + `venues/<uuid>.png`<br>• public GET 200 `image/png`, bayt eşit<br>• doğrudan Storage yazımı 0; form kaydedilmeden kapatıldı |
+| S1-07 MID | PASS M1–M6: +1 obje, +1 `media_upload` rate token (Edge yolu kanıtı); sha256(name) eşleşti; 10488 B png |
+| S1-08 cleanup | `qa-media-cleanup` → HTTP 200, `removed:1` |
+| S1-09 POST | PASS P1–P4: **residue=0**; toplam tam 1 Edge upload; policy md5 `91917dec…` değişmedi |
+| S1-10 verify-gone | public URL → 400 (`GONE`) |
+| S1-11 sızıntı | çıktılarda iki secret scanner temiz; Edge loglarında token benzeri iz 0, error 0 |
+
+**Gözlem (bilgi, kapı değil):** A01i'de gerçek Chromium'un aldığı `/CDP3B/admin` HTML'inin hash'i (`bf9eab9d…`) repo ve Node fetch hash'inden (`b9fb1610…`) farklı. Bu, Cloudflare'in tarayıcıya giden HTML'i dönüştürdüğünü düşündürüyor (ör. e-posta gizleme veya script enjeksiyonu). Statik kontroller ve işlev etkilenmedi.
 
 ## 6. Yeniden başlamak için gereken tek karar
 
