@@ -430,10 +430,12 @@ sc("homepage: Trip Policy A (Amsterdam→ams, Kopenhag→cph, Paris→none), no 
   await page.waitForFunction(() => window.AsaStorage && document.getElementById("countrySel").options.length > 1);
   await page.selectOption("#countrySel", "fr");
   await page.selectOption("#citySel", "Paris");
-  await page.click("#goBtn");
+  // WP7 beta: a "yakında" city has a disabled button and no interest/save promise (was: "ilgimi bırak" + no write).
+  t("Paris: button disabled, no interest promise", await page.isDisabled("#goBtn") && !/İlgin kaydedildi/.test(await page.content()));
+  await page.evaluate(() => document.getElementById("goBtn").click());
   await page.waitForTimeout(150);
   let d = await dump(page);
-  t("Paris interest writes no trip key", !Object.keys(d).some((k) => /^asa:(ams|cph):trip$/.test(k)) && d.asa_trip === oldTrip);
+  t("Paris writes no trip key", !Object.keys(d).some((k) => /^asa:(ams|cph):trip$/.test(k)) && d.asa_trip === oldTrip);
   await page.goto(origin + "/", { waitUntil: "load" });
   await page.waitForFunction(() => document.getElementById("countrySel").options.length > 1);
   await page.selectOption("#countrySel", "nl");

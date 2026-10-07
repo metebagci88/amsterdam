@@ -3,6 +3,8 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>asalocal · Bir yerli gibi gez</title>
+<link rel="canonical" href="https://www.asalocal.club/"/>
+<meta property="og:url" content="https://www.asalocal.club/"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
@@ -191,7 +193,10 @@
 <body class="bg-surface text-on-surface font-body-md antialiased flex flex-col min-h-screen">
 <header class="bg-surface flex justify-between items-center px-margin-mobile md:px-margin-desktop h-20 w-full max-w-container-max mx-auto top-0 border-b border-primary/20 z-40">
   <div class="flex flex-col">
-    <a class="font-headline-xl text-headline-lg-mobile md:text-headline-xl text-primary tracking-tight" href="/">asalocal</a>
+    <div class="flex items-center gap-2">
+      <a class="font-headline-xl text-headline-lg-mobile md:text-headline-xl text-primary tracking-tight" href="/">asalocal</a>
+      <span id="betaBadge" class="font-label-md text-label-md text-secondary border border-secondary/40 rounded-full px-2" title="Amsterdam Türkçe rehberi beta sürümünde">Beta</span>
+    </div>
     <span class="font-label-md text-label-md text-on-surface-variant italic">as a local · yerel gibi</span>
   </div>
   <div class="flex items-center gap-4">
@@ -369,7 +374,7 @@ const TIERS=[{name:"Kaşif",min:0,emoji:"🧭"},{name:"Şehirli",min:5,emoji:"�
 function tierFor(p){let t=TIERS[0];for(const x of TIERS){if(p>=x.min)t=x;}return t;}
 const COUNTRIES=[
   {code:"nl",name:"Hollanda",flag:"🇳🇱",cities:[{name:"Amsterdam",active:true}]},
-  {code:"dk",name:"Danimarka",flag:"🇩🇰",cities:[{name:"Kopenhag",active:true}]},
+  {code:"dk",name:"Danimarka",flag:"🇩🇰",cities:[{name:"Kopenhag",preparing:true}]},
   {code:"fr",name:"Fransa",flag:"🇫🇷",cities:[{name:"Paris"},{name:"Nice"}]},
   {code:"de",name:"Almanya",flag:"🇩🇪",cities:[{name:"Berlin"},{name:"Münih"}]},
   {code:"es",name:"İspanya",flag:"🇪🇸",cities:[{name:"Madrid"},{name:"Barselona"}]},
@@ -448,7 +453,7 @@ const ASA_DLG=(function(){
 })();
 let db=null, session=null;
 let nameInfo=null, nameSeq=0;   // WP5: oturumdaki üyenin kendi ad/soyad durumu (ASA_NAME.load) + yarış sayacı
-let sel={country:null,city:null,active:false,duration:null,durationDays:null,startDate:null,endDate:null,approx:null,types:new Set()};
+let sel={country:null,city:null,active:false,preparing:false,duration:null,durationDays:null,startDate:null,endDate:null,approx:null,types:new Set()};
 try{ if(window.supabase&&window.supabase.createClient) db=window.supabase.createClient(CFG.url,CFG.key); }catch(e){}
 try{ if(db&&window.createTripStore) window.TripStore=window.createTripStore(db); }catch(e){}
 session=null;
@@ -474,7 +479,7 @@ function renderCities(){
   const c=COUNTRIES.find(x=>x.code===sel.country); const s=$("citySel");
   if(!c){ s.innerHTML='<option value="">Şehir Seçin</option>'; s.disabled=true; return; }
   s.disabled=false;
-  s.innerHTML='<option value="">Şehir Seçin</option>'+c.cities.map(ci=>'<option value="'+ci.name+'"'+(sel.city===ci.name?' selected':'')+'>'+ci.name+(ci.active?'':' (yakında)')+'</option>').join("");
+  s.innerHTML='<option value="">Şehir Seçin</option>'+c.cities.map(ci=>'<option value="'+ci.name+'"'+(sel.city===ci.name?' selected':'')+'>'+ci.name+(ci.active?'':ci.preparing?' (hazırlanıyor)':' (yakında)')+'</option>').join("");
 }
 function renderTypes(){
   $("typeChips").innerHTML="";
@@ -493,7 +498,10 @@ function updateGo(){
   if(interestFlight){ go.disabled=true; return; }
   if(!sel.city){ go.disabled=true; go.textContent="Keşfet"; note.textContent=""; return; }
   if(sel.active){ go.disabled=false; go.textContent=sel.city+"'ı keşfet →"; note.textContent=""; }
-  else { go.disabled=false; go.textContent=sel.city+" · ilgimi bırak"; note.textContent=sel.city+" yakında açılıyor."; }
+  // WP7 beta: Kopenhag "hazırlanıyor" (yalnız tanıtım sayfası açılır, sunucuya seyahat yazılmaz);
+  // diğer şehirler "yakında": düğme kapalı, kayıt/haber verme vaadi yok.
+  else if(sel.preparing){ go.disabled=false; go.textContent=sel.city+" · hazırlanıyor →"; note.textContent=sel.city+" rehberi hazırlanıyor; şimdilik bilgi sayfası açılır. Şu an açık rehber: Amsterdam."; }
+  else { go.disabled=true; go.textContent=sel.city+" · yakında"; note.textContent=sel.city+" henüz açılmadı. Şu an açık rehber: Amsterdam."; }
 }
 function renderDests(){
   const g=$("destGrid"); g.innerHTML="";
@@ -503,7 +511,13 @@ function renderDests(){
       const a=document.createElement("a");
       a.className="group flex flex-col gap-4 border-t-2 border-transparent hover:border-secondary pt-4 transition-colors duration-300 cursor-pointer";
       a.innerHTML='<div class="aspect-[4/5] w-full overflow-hidden bg-surface-container-low"><img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="'+img+'"/></div><div class="flex flex-col gap-1"><span class="font-label-lg text-label-md text-on-surface-variant uppercase tracking-widest">'+c.name+'</span><h3 class="font-headline-md text-headline-md text-primary group-hover:text-secondary transition-colors">'+ci.name+'</h3></div>';
-      a.onclick=()=>{ sel.country=c.code; sel.city=ci.name; sel.active=true; renderCountries(); renderCities(); updateGo(); window.scrollTo({top:document.querySelector('form').offsetTop-120,behavior:"smooth"}); };
+      a.onclick=()=>{ sel.country=c.code; sel.city=ci.name; sel.active=true; sel.preparing=false; renderCountries(); renderCities(); updateGo(); window.scrollTo({top:document.querySelector('form').offsetTop-120,behavior:"smooth"}); };
+      g.appendChild(a);
+    } else if(ci.preparing){
+      const a=document.createElement("a");
+      a.href=asaCityPath(ci.name);
+      a.className="group flex flex-col gap-4 border-t-2 border-transparent hover:border-secondary pt-4 transition-colors duration-300";
+      a.innerHTML='<div class="aspect-[4/5] w-full bg-surface-container-high relative overflow-hidden flex items-center justify-center"><div class="absolute inset-0 bg-primary/5"></div><span class="font-label-lg text-label-md text-primary uppercase tracking-widest z-10 bg-surface px-4 py-2 border border-primary/20">Hazırlanıyor</span>'+(img?'<img class="absolute inset-0 w-full h-full object-cover opacity-40 grayscale" src="'+img+'"/>':'')+'</div><div class="flex flex-col gap-1"><span class="font-label-lg text-label-md text-on-surface-variant uppercase tracking-widest">'+c.name+'</span><h3 class="font-headline-md text-headline-md text-primary group-hover:text-secondary transition-colors">'+ci.name+' · hazırlanıyor</h3></div>';
       g.appendChild(a);
     } else {
       const d=document.createElement("div");
@@ -523,7 +537,8 @@ async function saveTrip(navigate){
   try{ const S=window.AsaStorage, code=S?S.cityCodeFromLabel(sel.city):null; if(code){ if(code==="ams") S.reconcile(localStorage,code); S.set(localStorage,code,"trip",trip); } }catch(e){}
   if(!navigate) return;
   // A4: giriş yapılmış + kesin tarih varsa gerçek trips kaydı oluştur (mükerrer kontrollü)
-  if(session && window.TripStore && sel.startDate && sel.endDate){
+  // WP7: yalnız açık (aktif) şehir için sunucu seyahati; "hazırlanıyor" şehirde kayıt oluşmaz.
+  if(session && sel.active && window.TripStore && sel.startDate && sel.endDate){
     try{
       const res=await window.TripStore.create({
         city:sel.city, country:c?c.name:null,
@@ -540,8 +555,8 @@ async function saveTrip(navigate){
   location.href=asaCityPath(sel.city)+"?city="+encodeURIComponent(sel.city);
 }
 function wire(){
-  $("countrySel").onchange=e=>{ sel.country=e.target.value||null; sel.city=null; sel.active=false; renderCities(); updateGo(); };
-  $("citySel").onchange=e=>{ const c=COUNTRIES.find(x=>x.code===sel.country); const ci=c&&c.cities.find(x=>x.name===e.target.value); sel.city=ci?ci.name:null; sel.active=ci?!!ci.active:false; updateGo(); };
+  $("countrySel").onchange=e=>{ sel.country=e.target.value||null; sel.city=null; sel.active=false; sel.preparing=false; renderCities(); updateGo(); };
+  $("citySel").onchange=e=>{ const c=COUNTRIES.find(x=>x.code===sel.country); const ci=c&&c.cities.find(x=>x.name===e.target.value); sel.city=ci?ci.name:null; sel.active=ci?!!ci.active:false; sel.preparing=ci?!!ci.preparing:false; updateGo(); };
   const ds=$("dStart"),de=$("dEnd"),un=$("flexDates"),dur=$("durSel");
   const today=new Date().toISOString().slice(0,10); ds.min=today;
   ds.onchange=()=>{ sel.startDate=ds.value||null; if(ds.value)de.min=ds.value; if(de.value&&de.value<ds.value)de.value=""; sel.endDate=de.value||null; updateDInfo(); };
@@ -549,20 +564,15 @@ function wire(){
   un.onchange=()=>{ if(un.checked){ ds.value="";de.value="";ds.disabled=true;de.disabled=true;sel.startDate=null;sel.endDate=null;sel.approx="Belli değil"; } else { ds.disabled=false;de.disabled=false;sel.approx=null; } updateDInfo(); };
   dur.onchange=()=>{ sel.duration=dur.value||null; updateDInfo(); };
   $("goBtn").onclick=async()=>{
-    if(!sel.city||interestFlight) return;
+    // WP7: yalnız açık şehir ve "hazırlanıyor" tanıtım sayfası açılır; "yakında" şehirde düğme kapalıdır, kayıt vaadi yoktur.
+    if(!sel.city||interestFlight||!(sel.active||sel.preparing)) return;
     interestFlight=true;
     const b=$("goBtn");
     b.disabled=true;
     b.setAttribute("aria-busy","true");
     try{
-      if(sel.active){
-        b.textContent="Hazırlanıyor…";
-        await saveTrip(true);
-      } else {
-        await saveTrip(false);
-        $("goNote").textContent="✓ İlgin kaydedildi — "+sel.city+" açılınca haber vereceğiz.";
-        await new Promise(function(r){ setTimeout(r,4000); });
-      }
+      b.textContent=sel.active?"Hazırlanıyor…":"Açılıyor…";
+      await saveTrip(true);
     } finally {
       interestFlight=false;
       b.removeAttribute("aria-busy");

@@ -47,7 +47,8 @@ ok("pw property removed from home/city", !/\bpw\s*:/.test(home) && !/\bpw\s*:/.t
 ok("legacy UID page retired with a 301 to /amsterdam/", uidRetired && /^\/amsterdam_index_UID\.html\s+\/amsterdam\/\s+301$/m.test(read("_redirects")));
 ok("footer copyright", home.includes("© 2026 ASALOCAL · yerel gibi"));
 ok("footer has no placeholder links", !/<footer[\s\S]*?href\s*=\s*"#"/.test(home));
-ok("ilgimi birak live region and 4s", /id="goNote"[^>]*aria-live="polite"/.test(home) && home.includes("setTimeout(r,4000)") && home.includes("interestFlight"));
+// WP7 beta: no "ilgimi bırak / İlgin kaydedildi" promise (nothing was stored); "yakında" cities have a disabled button.
+ok("goNote live region; no false interest confirmation", /id="goNote"[^>]*aria-live="polite"/.test(home) && !home.includes("İlgin kaydedildi") && !home.includes("ilgimi bırak") && home.includes("interestFlight"));
 ok("cph stub unchanged marker", /data-asa-city-state\s*=\s*"stub"/.test(cph) && cph.includes("Kopenhag içerikleri hazırlanıyor") && !/<script\b/i.test(cph));
 // WP4: the live consent_get_my_state returns 'not_configured' for a missing row; 'config_pending' stays accepted (older name).
 ok("wse ui predicate intact", city.includes('const pending=(v==="not_configured"||v==="config_pending"); const on=(v===true);'));
@@ -188,17 +189,19 @@ hw.document.getElementById("citySel").value = "Paris";
 hw.document.getElementById("citySel").onchange({ target: hw.document.getElementById("citySel") });
 const go = hw.document.getElementById("goBtn");
 const note = hw.document.getElementById("goNote");
-ok("interest cta", go.textContent.includes("ilgimi bırak"));
-go.click();
-ok("disabled while in flight", go.disabled === true);
+ok("yakında city: disabled button, honest note", go.disabled === true && go.textContent.includes("yakında") && note.textContent.includes("henüz açılmadı") && note.textContent.includes("Amsterdam"));
 go.click();
 await new Promise((r) => setTimeout(r, 20));
-ok("success message", note.textContent.includes("İlgin kaydedildi"));
-ok("stays disabled during the hold", go.disabled === true);
-await new Promise((r) => setTimeout(r, 3500));
-ok("still visible before 4s", note.textContent.includes("İlgin kaydedildi") && go.disabled === true);
-await new Promise((r) => setTimeout(r, 800));
-ok("enabled after 4s", go.disabled === false);
+ok("yakında city: click does nothing, no save claim", !note.textContent.includes("İlgin kaydedildi") && go.disabled === true);
+hw.document.getElementById("countrySel").value = "dk";
+hw.document.getElementById("countrySel").onchange({ target: hw.document.getElementById("countrySel") });
+hw.document.getElementById("citySel").value = "Kopenhag";
+hw.document.getElementById("citySel").onchange({ target: hw.document.getElementById("citySel") });
+ok("Kopenhag: 'hazırlanıyor' CTA, not an active city", go.disabled === false && go.textContent.includes("hazırlanıyor") && !go.textContent.includes("keşfet") && note.textContent.includes("hazırlanıyor"));
+ok("Kopenhag option labelled (hazırlanıyor)", [...hw.document.getElementById("citySel").options].some((o) => o.textContent === "Kopenhag (hazırlanıyor)"));
+ok("Kopenhag card says hazırlanıyor and links to the stub", [...hw.document.querySelectorAll("#destGrid a")].some((a) => a.getAttribute("href") === "/kopenhag/" && a.textContent.includes("Hazırlanıyor")));
+ok("beta badge", (hw.document.getElementById("betaBadge") || {}).textContent === "Beta");
+ok("canonical www", (hw.document.querySelector('link[rel="canonical"]') || {}).href === "https://www.asalocal.club/");
 homeBoot.dom.window.close();
 
 const adminBoot = boot(admin, {});
