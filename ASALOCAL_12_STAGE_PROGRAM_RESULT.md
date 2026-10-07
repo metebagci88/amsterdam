@@ -141,7 +141,19 @@ event loop error: ReferenceError: PLACEHOLDER_INDEX is not defined
   - Normal üye → 403
   - Admin `counts` → 200
   - Ardından İş Paketi 1 akışı
-- Bu, PRD kapsamı dışında bir production yüzeyine dokunduğu için (§2.5, §8) Mete'nin açık onayı olmadan yapılmadı.
+- Bu, PRD kapsamı dışında bir production yüzeyine dokunduğu için (§2.5, §8) Mete'nin açık onayı beklendi.
+
+**Uygulama (2026-10-07, Mete onayı: "1'e onay veriyorum"):**
+
+| Adım | Sonuç |
+|---|---|
+| Kaynak = `origin/main` | `git diff origin/main -- CDP3B/edge/admin-api/` boş |
+| `deploy_edge_function admin-api`, dosyalar `index.ts` + `inert/media_upload.ts`, `verify_jwt=true` | v18 ACTIVE, ezbr `96bd5e041aab6886…` (bundle derlendi) |
+| Geri okuma + bağımsız byte karşılaştırması (ayrı ajan, `get_edge_function` → dosya → `sha256sum` + `diff`) | `index.ts` `7dce8225a16f53d2…` = repo; `inert/media_upload.ts` `4a77daf0bf682543…` = repo; diff boş → **IDENTICAL** |
+| verify_jwt | true (değişmedi) |
+| Runtime kabul (OPTIONS 200 / no-JWT 401 / üye 403 / admin `counts` 200) | **BEKLİYOR**. Bu ortamdan `*.supabase.co` HTTP erişimi yok (B2). Deploy sonrası fonksiyona henüz istek gelmediği için boot logu da yok. |
+
+Not: Her iki dosyanın başlık yorumunda hâlâ "NOT deployed" yazıyor (`index.ts:8`, `inert/media_upload.ts:3-4`). Bu yorumlar artık eskidi. Deploy edilen baytlarla repo'nun eşit kalması için bu turda değiştirilmedi. Bir sonraki admin-api değişikliğinde yorumla birlikte güncellenmeli.
 
 ### B2 — Canlı site ve admin oturumu erişimi yok (sınıf: **erişim / altyapı**)
 
@@ -163,8 +175,8 @@ event loop error: ReferenceError: PLACEHOLDER_INDEX is not defined
 
 ## 4. Production'a yapılan değişiklikler
 
-**Yok.** Bu yürütmede:
-- `apply_migration`, `deploy_edge_function` ve yazma SQL'i çalıştırılmadı. Yalnız `SELECT` sorguları, `list_*`, `get_edge_function`, `get_advisors` ve `query_logs` kullanıldı.
+**Tek değişiklik:** `admin-api` v17 → v18 Edge deploy'u. Mete'nin açık onayıyla yapıldı ve kaynağı repo `main` ile bayt bayt aynı (§3 B1). Bunun dışında:
+- `apply_migration` ve yazma SQL'i çalıştırılmadı. Yalnız `SELECT` sorguları, `list_*`, `get_edge_function`, `get_advisors` ve `query_logs` kullanıldı.
 - Storage'a obje yüklenmedi; media object sayısı 0 → 0.
 - Kullanıcı verisi okunmadı veya değiştirilmedi. Raporda e-posta, UUID ya da token yok.
 - `main`'e merge yapılmadı. PR açılmadı.
@@ -179,10 +191,10 @@ _(bölüm aşağıda doldurulacak)_
 
 ## 6. Yeniden başlamak için gereken tek karar
 
-> **Karar:** `admin-api`'yi repo `main` kaynağından (v18, `verify_jwt=true`) yeniden deploy etmeme onay veriyor musun?
-> Ve canlı doğrulama için B2'deki ağ izni ile test hesaplarını ortam ayarlarına ekleyip yeni oturum başlatabilir misin?
+> ~~Karar 1: admin-api v18 deploy onayı~~ → **verildi ve uygulandı** (§3 B1).
+> **Kalan karar:** B2'deki ağ izni ve test hesaplarını ortam ayarlarına ekleyip yeni oturum başlatmak. Bu ayar yalnız Mete'nin claude.ai arayüzünden yapılabilir.
 
-İkisi tamamlanınca sıra: B1 düzeltme ve deploy kabul testleri → İş Paketi 1 (hazır araçla) → İş Paketi 2 (hazır paketle) → İş Paketi 3 …
+Bu tamamlanınca sıra: v18 runtime kabul testleri → İş Paketi 1 (hazır araçla) → İş Paketi 2 (hazır paketle) → İş Paketi 3 …
 
 ---
 
