@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="asa-city-code" content="nl-ams" />
 <title>Amsterdam · Lokal Yaşam Rehberi</title>
+<link rel="canonical" href="https://www.asalocal.club/amsterdam/"/>
+<meta property="og:url" content="https://www.asalocal.club/amsterdam/"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,0,700;9..144,1,400;9..144,1,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
@@ -129,7 +131,8 @@ select.asasel:focus{outline:none;border-color:#131908;box-shadow:0 0 0 2px rgba(
 .cnote b{color:var(--ink)}
 .badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 .badge{font-size:10.5px;padding:3px 8px;border-radius:999px;background:var(--bg2);color:var(--ink2);font-weight:600}
-.badge.src-user{background:#e7eef4;color:#3f6383}
+.badge.src-user,.badge.src-editor{background:#e7eef4;color:#3f6383}
+.badge.src-poi{background:#efe7f4;color:#6f5390}
 .badge.src-deck{background:#e3f0ee;color:#3c7670}
 .badge.src-extra{background:#eaf1e1;color:#5a7a36}
 .badge.src-audio{background:#efe7f4;color:#6f5390}
@@ -441,7 +444,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
       <button class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" onclick="goBack()" title="Geri"><span class="msym text-[20px]">arrow_back</span></button>
       <a href="/" class="w-9 h-9 rounded-full border border-outline-variant bg-surface flex items-center justify-center text-on-surface hover:bg-surface-container transition-colors shrink-0" title="Ana sayfa"><span class="msym text-[20px]">home</span></a>
       <div class="min-w-0 ml-1 leading-tight">
-        <div class="font-headline-lg text-[19px] text-primary whitespace-nowrap">AsaLocal Club</div>
+        <div class="font-headline-lg text-[19px] text-primary whitespace-nowrap">AsaLocal Club <span id="betaBadge" class="align-middle text-[10px] tracking-[0.08em] uppercase border border-secondary/40 text-secondary rounded-full px-1.5 py-[1px]" title="Amsterdam Türkçe rehberi beta sürümünde">Beta</span></div>
         <div id="hdrSub" class="text-[9.5px] tracking-[0.14em] uppercase text-on-surface-variant">Amsterdam · yerel gibi gez</div>
       </div>
     </div>
@@ -481,7 +484,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   <!-- HARITA -->
   <section class="view" id="v-map">
     <h2 class="section-title" data-ck="app.map.h">Harita</h2>
-    <p class="section-sub">Noktaya dokun → mekan kartı + Google Maps linki. Sürükle & yakınlaştır. Renk = kaynak · kalp = favori · ★ = sen.</p>
+    <p class="section-sub">Noktaya dokun → mekan kartı + Google Maps linki. Sürükle & yakınlaştır. Renk = kaynak · kalp = Listem · ★ = sen.</p>
     <div class="flex flex-wrap gap-2">
       <select class="asasel" id="mapCity">
         <option value="Amsterdam">Amsterdam</option>
@@ -489,10 +492,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
       <select class="asasel" id="mapCat"><option value="">Tüm kategoriler</option></select>
       <select class="asasel" id="mapSrc">
         <option value="">Tüm kaynaklar</option>
-        <option value="user">Benim listem</option>
-        <option value="deck">Önceki araştırmam</option>
-        <option value="extra">Ek araştırma</option>
-        <option value="audio">Ses kaydı</option>
+        <option value="editor">Editör seçimi</option>
         <option value="poi">Gezilecek yer</option>
       </select>
     </div>
@@ -502,17 +502,16 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
       <button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors" id="openGoogle">🧭 Google Haritalar’da aç</button>
     </div>
     <div class="legend">
-      <span><i class="dot" style="background:var(--fav)"></i>Favori</span>
-      <span><i class="dot" style="background:var(--blue)"></i>Benim listem</span>
-      <span><i class="dot" style="background:var(--teal)"></i>Önceki araştırmam</span>
-      <span><i class="dot" style="background:var(--green)"></i>Ek araştırma</span>
+      <span><i class="dot" style="background:var(--fav)"></i>Listem</span>
+      <span><i class="dot" style="background:var(--blue)"></i>Editör seçimi</span>
+      <span><i class="dot" style="background:var(--purple)"></i>Gezilecek yer</span>
       <span><i class="dot" style="background:var(--gold)"></i>Sen (★)</span>
     </div>
     <div id="mapWrap">
       <div id="lmap" style="height:62vh;min-height:380px;border-radius:16px;border:1px solid #e6e1d6;box-shadow:0 2px 10px rgba(40,35,25,.06)"></div>
       <p id="mapTeaserAria" class="sr-only"></p>
     </div>
-    <p class="section-sub" style="margin-top:10px">Gerçek sokak haritası (OpenStreetMap). Bir pine dokun → mekan kartı + Google Maps linki açılır. Renk = kaynak, kalp = favori, altın nokta = konumun. Filtreler pinleri anında günceller.</p>
+    <p class="section-sub" style="margin-top:10px">Gerçek sokak haritası (OpenStreetMap). Bir pine dokun → mekan kartı + Google Maps linki açılır. Renk = kaynak, kalp = Listem, altın nokta = konumun. Filtreler pinleri anında günceller.</p>
   </section>
 
   <!-- MEKANLAR -->
@@ -528,10 +527,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
         <select class="asasel" id="fArea"><option value="">Tüm bölgeler</option></select>
         <select class="asasel" id="fSrc">
           <option value="">Tüm kaynaklar</option>
-          <option value="user">Benim listem</option>
-          <option value="deck">Önceki araştırmam</option>
-          <option value="extra">Ek araştırma</option>
-          <option value="audio">Ses kaydı önerileri</option>
+          <option value="editor">Editör seçimi</option>
           <option value="poi">Gezilecek yer</option>
         </select>
         <select class="asasel" id="fSort">
@@ -554,7 +550,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
   <!-- PLAN -->
   <section class="view" id="v-cal">
     <h2 class="section-title" id="calTitle">Günlük akış</h2>
-    <p class="section-sub">İlgi alanlarına göre sana özel bir taslak plan hazırlıyorum: her güne sabah–öğle–öğleden sonra–akşam için mekan önerileri. Beğenmediğini çıkar, favorilerinden ekle, plan notu yaz. Koyu günler hafta sonu.</p>
+    <p class="section-sub">İlgi alanlarına göre sana özel bir taslak plan hazırlıyorum: her güne sabah–öğle–öğleden sonra–akşam için mekan önerileri. Beğenmediğini çıkar, listenden ekle, kendi notunu yaz. Koyu günler hafta sonu.</p>
     <div id="planSetup" class="mb-6"></div>
     <div id="planCtl"></div>
     <div id="cal"></div>
@@ -572,7 +568,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
 
   <section class="view" id="v-member">
     <h2 class="section-title" data-ck="app.member.h">Üyelik</h2>
-    <p class="section-sub">Hesabınla giriş yap; favorilerin buluta kaydolsun, profilin ve seviyen oluşsun. Seviyeler: 🧭 Kaşif · 🏙️ Şehirli · 🎨 Küratör · 💎 Insider.</p>
+    <p class="section-sub">Hesabınla giriş yap; listen hesabına kaydolsun, profilin ve seviyen oluşsun. Seviyeler: 🧭 Kaşif · 🏙️ Şehirli · 🎨 Küratör · 💎 Insider.</p>
     <div id="memberBody"></div>
   </section>
 
@@ -627,12 +623,12 @@ function asaCityTz(city){ var m={'Amsterdam':'Europe/Amsterdam','Kopenhag':'Euro
 window.asaDB=function(){ try{ if(!window.__asaSB && window.supabase && window.supabase.createClient){ window.__asaSB=window.supabase.createClient("https://tosqsabuaomgqjtogdrn.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvc3FzYWJ1YW9tZ3FqdG9nZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyNjc5NTAsImV4cCI6MjEwMTg0Mzk1MH0.KHx2yJrQvkQoRSwqEE5uVSbmOlvfUkKXeKejFqO_Nz0"); } }catch(e){} return window.__asaSB||null; };
 /* A5/A9 TripSync: plan+tercihleri DB trip'ine otomatik kaydet, durum göster, geri yükle */
 window.TripSync=(function(){
-  var TS={status:'idle',_t:null,_hide:null};
+  var TS={status:'idle',_t:null,_hide:null,noteDirty:false};
   function P(k,d){ try{ return (window.ASA_ST?window.ASA_ST.get(k,d):d)||d; }catch(e){return d;} }   // WP3: asa:ams:<domain>
   function T(){ try{ return (window.ASA_ST&&window.ASA_ST.trip())||{}; }catch(e){return {};} }
   function S(k,v){ try{ if(window.ASA_ST)window.ASA_ST.set(k,v); }catch(e){} }
   function pill(){ var el=document.getElementById('tripSyncPill'); if(!el){ el=document.createElement('div'); el.id='tripSyncPill'; el.style.cssText='position:fixed;right:12px;bottom:80px;z-index:99999;font-size:12px;padding:6px 12px;border-radius:999px;color:#fff;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.25)'; if(document.body)document.body.appendChild(el);} return el; }
-  TS.setStatus=function(s){ TS.status=s; var el=pill(); if(!el)return; var map={saving:['Kaydediliyor…','#555'],saved:['Kaydedildi ✓','#2e7d32'],error:['Kaydedilemedi ⚠','#b3261e']}; var m=map[s]; if(!m){el.style.opacity='0';return;} el.textContent=m[0]; el.style.background=m[1]; el.style.opacity='1'; if(s==='saved'){ clearTimeout(TS._hide); TS._hide=setTimeout(function(){el.style.opacity='0';},1800);} };
+  TS.setStatus=function(s){ TS.status=s; var el=pill(); if(!el)return; var map={saving:['Kaydediliyor…','#555'],saved:[(TS.noteDirty?'Notun kaydedildi':'Kaydedildi ✓'),'#2e7d32'],error:['Kaydedilemedi ⚠','#b3261e']}; var m=map[s]; if(!m){el.style.opacity='0';return;} el.textContent=m[0]; el.style.background=m[1]; el.style.opacity='1'; if(s==='saved'){ TS.noteDirty=false; clearTimeout(TS._hide); TS._hide=setTimeout(function(){el.style.opacity='0';},1800);} };
   TS.collect=function(){
     var pp=P('plan_prefs',{}), t=T();
     try{ var _liveAcc=(window.__asaGetAccommodation?window.__asaGetAccommodation():null); if(_liveAcc){ pp.accommodation=_liveAcc; pp.base_area=_liveAcc.label||pp.base_area||null; } }catch(e){}
@@ -676,6 +672,8 @@ window.__snapshotPlan=async function(){
 <script>
 /* ===== referans noktaları ===== */
 const CITY=(()=>{try{var p=new URLSearchParams(location.search).get('city');if(p)return p;var m=(location.pathname||'').match(/\/(kopenhag|copenhagen)\//i);if(m)return 'Kopenhag';}catch(e){}return 'Amsterdam';})();
+// WP7 beta: Kopenhag henüz açık değil — bu sayfada Kopenhag görünümü açılmaz, dürüst tanıtım sayfasına gidilir.
+try{ if(/^(kopenhag|copenhagen|københavn|kobenhavn)$/i.test(String(CITY||'').trim()) && /^\/amsterdam\//.test(location.pathname)) location.replace('/kopenhag/'); }catch(e){}
 const CITYCONF={
  "Amsterdam":{home:{lat:52.370,lng:4.895,name:"Merkez"},view:[52.370,4.895,12],sub:"Amsterdam \u00b7 yerel gibi gez",blurb:"Klasik turist de\u011fil, lokal ya\u015fam modundas\u0131n: iyi kahve, g\u00fczel \u00f6\u011fle yeme\u011fi, bisikletle ke\u015fif, ak\u015fam \u015farab\u0131."},
  "Kopenhag":{home:{lat:55.6805,lng:12.5615,name:"Indre By (merkez)"},view:[55.6805,12.5615,13],sub:"Kopenhag \u00b7 yerel gibi gez",blurb:"\u0130skandinav tasar\u0131m\u0131, \u00fc\u00e7\u00fcnc\u00fc dalga kahve, efsane f\u0131r\u0131nlar ve liman kenar\u0131: Kopenhag'\u0131 turist de\u011fil, yerel gibi ke\u015ffet."}
@@ -753,153 +751,153 @@ function areaKey(area){
 let V=[
 {id:"binnenvisser",hours:"12:00–00:00",garden:false,type:"Kafe & şarap barı",tags:["öğlen","akşam","şarap"],tip:"Küçük, popüler brown cafe; akşam natürel şarap + sebze tabakları. Laptopla çalışmaya uygun değil.",name:"Café Binnenvisser",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe","wine bar","restoran"],best:["kahve","öğlen","akşam","şarap"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36680,lng:4.87170,conf:"high",
  web:"https://binnenvisser.nl/",ig:"https://www.instagram.com/cafebinnenvisser/",
- desc:"Natürel şarap odaklı, sebze ağırlıklı mevsimsel mutfağı olan modern bir 'brown cafe'.",note:"<b>Senin notun:</b> Walk-in. Rezervasyon almıyor."},
+ desc:"Natürel şarap odaklı, sebze ağırlıklı mevsimsel mutfağı olan modern bir 'brown cafe'.",note:""},
 {id:"barpif",hours:"17:00–00:00",garden:false,type:"Natürel şarap barı",tags:["öğlen","şarap","akşam"],tip:"Rezervasyon şart; natürel şarap + küçük tabaklar. Akşamları dolu olur.",name:"Bar Pif",city:"Amsterdam",area:"Jordaan",cats:["wine bar","restoran"],best:["öğlen","şarap","akşam"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.37790,lng:4.88330,conf:"high",
  web:"https://barpif.nl/en/",ig:"https://www.instagram.com/barpifamsterdam/",
- desc:"Rebel Wines ekibinden natürel şarap barı + küçük tabaklar.",note:"<b>Senin notun:</b> Rezervasyonla. Öğlen de olabilir. ❤️ Öncelikli favori."},
+ desc:"Rebel Wines ekibinden natürel şarap barı + küçük tabaklar.",note:""},
 {id:"oficina",hours:"09:00–22:00",garden:true,type:"Gündüz kafesi",tags:["kahve","öğlen","şarap","tatlı"],tip:"Gündüz kahve/öğle, akşam şarap. Ortak masalar, kısa oturmalık.",name:"Oficina",city:"Amsterdam",area:"De Baarsjes",cats:["kafe","wine bar","restoran"],best:["öğlen","kahve","şarap","tatlı"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.37190,lng:4.85620,conf:"medium",
  web:"https://oficinaoficina.com/",ig:"https://www.instagram.com/oficina.amsterdam/",
- desc:"Gündüz kantini & yemek-tasarım stüdyosu: kahvaltı, öğle, çay, pasta, şarap.",note:"<b>Senin notun:</b> Rezervasyon almıyor. Şarap, tatlı, öğlen için uygun."},
+ desc:"Gündüz kantini & yemek-tasarım stüdyosu: kahvaltı, öğle, çay, pasta, şarap.",note:""},
 {id:"shiraz",hours:"16:00–00:00",garden:false,type:"Şarap barı",tags:["akşam","şarap"],tip:"Kanal kenarı; şarap + peynir/kanepe. Rezervasyon durumunu kontrol et.",name:"Shiraz (Jardin des Vins)",city:"Amsterdam",area:"Centrum",cats:["wine bar"],best:["şarap","akşam"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36280,lng:4.88290,conf:"medium",
  web:"https://shirazamsterdam.nl/en/",ig:"",
- desc:"Kanal kenarı samimi şarap barı, geniş kadeh listesi.",note:"<b>Senin notun:</b> Wine bar. Şarapla gelen peynir/kanepe çok iyiymiş. Rezervasyon almıyor. ❤️ Favori. <i>(Araştırmada bazı kaynaklar rezervasyonu öneriyor — kontrol et.)</i>"},
+ desc:"Kanal kenarı samimi şarap barı, geniş kadeh listesi.",note:""},
 {id:"4850",hours:"08:00–01:00",garden:false,type:"Kahve & şarap",tags:["kahve","çalışma","akşam","şarap"],tip:"Gündüz specialty kahve (laptop uygun), akşam şarap barına döner.",name:"4850",city:"Amsterdam",area:"Oost (Oud-Oost)",cats:["kafe","wine bar"],best:["kahve","şarap","akşam","çalışma"],src:"user",fav:false,resv:"rec",walkIn:true,work:true,lat:52.35740,lng:4.91560,conf:"high",
  web:"https://www.4850.nl/",ig:"https://www.instagram.com/4850nl/",
- desc:"Gündüz specialty kahve barı, akşam şarap + yemek.",note:"<b>Senin notun:</b> Kahve, drink."},
+ desc:"Gündüz specialty kahve barı, akşam şarap + yemek.",note:""},
 {id:"csnoord",hours:"17:00–23:00",garden:true,type:"Restoran",tags:["akşam"],tip:"Noord'da yaratıcı akşam yemeği; rezervasyonla. (Cornerstore)",name:"CS Noord (Cornerstore)",city:"Amsterdam",area:"Noord",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"req",walkIn:false,work:false,lat:52.40150,lng:4.90130,conf:"medium",
  web:"https://csnoord.com/",ig:"https://www.instagram.com/cornerstore.ams/",
- desc:"Amsterdam-Noord’da yaratıcı akşam yemeği restoranı & bar.",note:"<b>Senin notun:</b> Akşam yemeği. Rezervasyonla."},
+ desc:"Amsterdam-Noord’da yaratıcı akşam yemeği restoranı & bar.",note:""},
 {id:"carmen",hours:"10:00–18:00",garden:false,type:"Concept store + kafe",tags:["kahve","mağaza"],tip:"Kanal evinde mağaza + kafe; alışveriş arası kahve molası.",name:"Carmen Amsterdam",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["mağaza","kafe"],best:["mağaza","kahve"],src:"user",fav:false,resv:"unknown",walkIn:true,work:false,lat:52.36560,lng:4.89180,conf:"high",
  web:"https://www.carmenamsterdam.com/",ig:"https://www.instagram.com/carmen.amsterdam/",
- desc:"Kanal evinde concept store + kafe + misafirhane.",note:"<b>Senin notun:</b> Mağaza + cafe."},
+ desc:"Kanal evinde concept store + kafe + misafirhane.",note:""},
 {id:"chun",hours:"09:00–17:00",garden:false,type:"Sandviç / al-götür",tags:["öğlen","take-away"],tip:"Küçük al-götür; Kore usulü tost + matcha. Oturma çok sınırlı.",name:"Chun",city:"Amsterdam",area:"Centrum (9 Straatjes)",cats:["take-away","kafe"],best:["öğlen","take-away","kahve"],src:"user",fav:true,resv:"no",walkIn:true,work:false,lat:52.36900,lng:4.88440,conf:"high",
  web:"https://www.chun-amsterdam.com/",ig:"https://www.instagram.com/chun_ams/",
- desc:"Kore usulü tost/sandviç + matcha, al-götür.",note:"<b>Senin notun:</b> Sandviç, al-götür, öğlen. ❤️ Favori."},
+ desc:"Kore usulü tost/sandviç + matcha, al-götür.",note:""},
 {id:"pllek",hours:"10:00–01:00",garden:true,type:"Restoran & bar",tags:["öğlen","akşam","gece","park"],tip:"NDSM'de su kıyısı; gün batımı + geç saat DJ. Feribotla git.",name:"Pllek",city:"Amsterdam",area:"Noord (NDSM)",cats:["restoran","bar","gece","park"],best:["akşam","gece","öğlen","park"],src:"user",fav:true,resv:"rec",walkIn:true,work:false,lat:52.40130,lng:4.89360,conf:"high",
  web:"https://www.pllek.nl/",ig:"https://www.instagram.com/pllek_amsterdam/",
- desc:"IJ kıyısında konteyner restoran + plaj + gün batımı + gece.",note:"<b>Senin notun:</b> Yemek + gece. ❤️ Favori."},
+ desc:"IJ kıyısında konteyner restoran + plaj + gün batımı + gece.",note:""},
 {id:"cheznina",hours:"17:00–23:00",garden:false,type:"İtalyan restoran",tags:["öğlen","akşam","italyan"],tip:"Rezervasyonla. 'Noof' olarak yenilenmiş olabilir — kontrol et.",name:"Chez Nina",city:"Amsterdam",area:"Westerpark (Staatsliedenbuurt)",cats:["restoran","italyan"],best:["akşam","öğlen"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.38400,lng:4.87280,conf:"medium",
  web:"https://www.noof-amsterdam.nl/",ig:"https://www.instagram.com/noof.amsterdam/",
- desc:"İtalyan/Akdeniz brasserie.",note:"<b>Senin notun:</b> İtalyan. Rezervasyonla. <i>(Araştırma: Kasım 2025’te ‘Noof’ adıyla yenilenmiş, vejetaryen Akdeniz konseptine geçmiş olabilir — kontrol et.)</i>"},
+ desc:"İtalyan/Akdeniz brasserie.",note:""},
 {id:"oeuf",hours:"08:00–16:00",garden:false,type:"Kahvaltı & brunch",tags:["kahvaltı","brunch"],tip:"Yumurta ağırlıklı; sabah git, hafta sonu sıra olur.",name:"Oeuf Amsterdam",city:"Amsterdam",area:"De Pijp",cats:["kahvaltı","brunch","kafe"],best:["kahvaltı","brunch","kahve"],src:"user",fav:true,resv:"unknown",walkIn:true,work:false,lat:52.35540,lng:4.89010,conf:"high",
  web:"https://www.oeufamsterdam.nl/",ig:"https://www.instagram.com/oeufamsterdam/",
- desc:"Yumurta ağırlıklı kahvaltı & brunch.",note:"<b>Senin notun:</b> Kahvaltıcı. ❤️ Favori."},
+ desc:"Yumurta ağırlıklı kahvaltı & brunch.",note:""},
 {id:"plantage",hours:"09:00–23:00",garden:true,type:"Brasserie",tags:["kahvaltı","öğlen","akşam","brunch"],tip:"Cam serada tüm-gün; rezervasyon iyi olur.",name:"Café-Restaurant De Plantage",city:"Amsterdam",area:"Plantage",cats:["restoran","brunch","kafe"],best:["kahvaltı","öğlen","akşam","brunch"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.36670,lng:4.91460,conf:"medium",
  web:"https://www.caferestaurantdeplantage.nl/",ig:"https://www.instagram.com/caferestaurantdeplantage/",
- desc:"Artisplein’da cam serada Akdeniz esintili brasserie.",note:"<b>Senin notun:</b> Sabah, öğle, akşam uygun. Rezervasyon lazım."},
+ desc:"Artisplein’da cam serada Akdeniz esintili brasserie.",note:""},
 {id:"escobar",hours:"17:00–01:00",garden:false,type:"Taco & gece",tags:["akşam","gece","taco"],tip:"22:00 sonrası eğlence modu. ⚠️ Hâlâ açık mı mutlaka kontrol et.",name:"Escobar",city:"Amsterdam",area:"De Pijp",cats:["restoran","taco","bar","gece"],best:["akşam","gece","taco"],src:"user",fav:true,resv:"rec",walkIn:false,work:false,lat:52.35550,lng:4.89760,conf:"low",
  web:"https://escobar.nu/",ig:"https://www.instagram.com/escobar.nu/",
- desc:"Taco & farklı mutfaklar; geç saatte eğlence moduna geçer.",note:"<b>Senin notun:</b> Taco + farklı mutfaklar. 22:00 sonrası masalar kalkıp eğlence modu. Rezervasyon lazım. ❤️ Favori. <i>(⚠️ Bazı kaynaklar kapandığını yazıyor — gitmeden mutlaka kontrol et.)</i>"},
+ desc:"Taco & farklı mutfaklar; geç saatte eğlence moduna geçer.",note:""},
 {id:"coba",hours:"12:00–22:00",garden:false,type:"Taqueria",tags:["öğlen","akşam","taco"],tip:"Otantik Meksika; taco + margarita.",name:"Coba Taqueria",city:"Amsterdam",area:"Noord (Oud-Noord)",cats:["restoran","taco"],best:["öğlen","akşam","taco"],src:"user",fav:true,resv:"rec",walkIn:true,work:false,lat:52.39600,lng:4.92330,conf:"high",
  web:"https://www.coba-taqueria.com/",ig:"https://www.instagram.com/coba.amsterdam/",
- desc:"Otantik Meksika taqueria.",note:"<b>Senin notun:</b> Tacocu. ❤️ Favori."},
+ desc:"Otantik Meksika taqueria.",note:""},
 {id:"annanina",hours:"10:00–18:00",garden:false,type:"Mağaza",tags:["mağaza"],tip:"Tasarım/takı/vintage concept store; hızlı vitrin turu.",name:"Anna + Nina",city:"Amsterdam",area:"De Pijp",cats:["mağaza"],best:["mağaza"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.35530,lng:4.89160,conf:"high",
  web:"https://www.anna-nina.nl/",ig:"https://www.instagram.com/annaninanl/",
- desc:"Concept/tasarım mağazası: takı, ev eşyası, vintage.",note:"<b>Senin notun:</b> Mağaza."},
+ desc:"Concept/tasarım mağazası: takı, ev eşyası, vintage.",note:""},
 {id:"brutdemer",hours:"16:00–23:00",garden:false,type:"Deniz mahsulleri barı",tags:["akşam","şarap","deniz mahsulleri"],tip:"İstiridye + şampanya; küçük mekan.",name:"Brut de Mer",city:"Amsterdam",area:"De Pijp",cats:["restoran","deniz mahsulleri","wine bar"],best:["akşam","şarap","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:true,work:false,lat:52.35470,lng:4.89200,conf:"high",
  web:"",ig:"https://www.instagram.com/brut_de_mer/",
- desc:"İstiridye & deniz mahsulleri barı, şampanya/şarap.",note:"<b>Senin notun:</b> Deniz mahsulleri."},
+ desc:"İstiridye & deniz mahsulleri barı, şampanya/şarap.",note:""},
 {id:"flos",hours:"08:00–16:00",garden:false,type:"Bagel / deli",tags:["öğlen","take-away","parkta yemek","bagel"],tip:"Parkta yemek için buradan sandviç al.",name:"Flo's Appetizing",city:"Amsterdam",area:"Oud-West",cats:["take-away","bagel","brunch"],best:["öğlen","take-away","parkta yemek","brunch"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36430,lng:4.86680,conf:"high",
  web:"https://www.flosdeli.nl/",ig:"https://www.instagram.com/flos_appetizing_ams/",
- desc:"Elde sarılan bagel & NYC tarzı deli.",note:"<b>Senin notun:</b> Bagelci. Parkta yemek için sandviç alınabilir."},
+ desc:"Elde sarılan bagel & NYC tarzı deli.",note:""},
 {id:"deklos",hours:"16:30–23:00",garden:false,type:"Izgara / kaburga",tags:["akşam"],tip:"Sadece walk-in, sıra olur; 1971'den klasik spare-ribs.",name:"Café de Klos",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran"],best:["akşam"],src:"user",fav:false,resv:"no",walkIn:true,work:false,lat:52.36320,lng:4.88660,conf:"high",
  web:"https://cafedeklos.nl/",ig:"https://www.instagram.com/cafedeklos/",
- desc:"1971’den beri klasik spare-ribs & ızgara; sadece walk-in.",note:"<b>Senin notun:</b> Kaburgacı. Rezervasyon almıyor."},
+ desc:"1971’den beri klasik spare-ribs & ızgara; sadece walk-in.",note:""},
 {id:"barracuda",hours:"18:00–23:00",garden:false,type:"Deniz mahsulleri restoranı",tags:["akşam","deniz mahsulleri"],tip:"Rezervasyonla; adres/IG'yi kontrol et.",name:"Restaurant Barracuda",city:"Amsterdam",area:"Noord (Oud-Noord)",cats:["restoran","deniz mahsulleri"],best:["akşam","deniz mahsulleri"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.38900,lng:4.92160,conf:"medium",
  web:"https://www.barracuda.amsterdam/",ig:"https://www.instagram.com/restaurantbarracuda/",
- desc:"Açık mutfaklı, depo atmosferli rahat balık/deniz mahsulleri restoranı.",note:"<b>Araştırma ile eklendi</b> (senin verdiğin isimden). Adres/IG kontrol edilmeli."},
+ desc:"Açık mutfaklı, depo atmosferli rahat balık/deniz mahsulleri restoranı.",note:""},
 {id:"bouillon",hours:"12:00–23:00",garden:false,type:"Fransız bistro",tags:["öğlen","akşam"],tip:"Uygun fiyatlı klasik Fransız 'bouillon'; rezervasyon iyi olur.",name:"Bouillon d'Amsterdam",city:"Amsterdam",area:"Centrum",cats:["restoran"],best:["akşam","öğlen"],src:"user",fav:false,resv:"rec",walkIn:false,work:false,lat:52.37340,lng:4.89150,conf:"high",
  web:"https://www.bouillondamsterdam.nl/",ig:"https://www.instagram.com/bouillondamsterdam/",
- desc:"Paris usulü ‘bouillon’ — uygun fiyatlı klasik Fransız konfor mutfağı.",note:"<b>Araştırma ile eklendi</b> (senin verdiğin isimden)."},
+ desc:"Paris usulü ‘bouillon’ — uygun fiyatlı klasik Fransız konfor mutfağı.",note:""},
 
 {id:"saintjean",hours:"08:00–17:00",garden:false,type:"Fırın & kafe",tags:["kahve","kahvaltı","öğlen"],tip:"Bitki bazlı fırın + specialty kahve. Oturma az.",name:"Saint-Jean",city:"Amsterdam",area:"Jordaan",cats:["kafe","kahvaltı","take-away"],best:["kahve","kahvaltı","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.saintjean.nl/",ig:"https://www.instagram.com/saintjean.nl/",
- desc:"Bitki bazlı fırın & deli, specialty kahve, hamur işleri.",note:"Önceki araştırmandan."},
+ desc:"Bitki bazlı fırın & deli, specialty kahve, hamur işleri.",note:""},
 {id:"bocca",hours:"08:00–18:00",garden:false,type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"Hollanda specialty kahvenin öncüsü; laptop uygun, küçük olabilir.",name:"Bocca Coffee",city:"Amsterdam",area:"Centrum (Grachtengordel)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://bocca.nl/en",ig:"https://www.instagram.com/boccacoffee/",
- desc:"Hollanda specialty kahvenin öncüsü; amiral kafe.",note:"Önceki araştırmandan."},
+ desc:"Hollanda specialty kahvenin öncüsü; amiral kafe.",note:""},
 {id:"cafecito",hours:"08:00–17:00",garden:false,type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"Zuid'de sakin specialty kahve; kısa-orta süre laptop için uygun.",name:"Cafecito",city:"Amsterdam",area:"Oud-Zuid",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
  web:"https://cafecito.nl/",ig:"https://www.instagram.com/cafecito_nl/",
- desc:"Specialty kahve & matcha kavurucusu/espresso barı.",note:"Önceki araştırmandan."},
+ desc:"Specialty kahve & matcha kavurucusu/espresso barı.",note:""},
 {id:"scandi",hours:"08:00–17:00",garden:false,type:"Kafe (İskandinav)",tags:["kahve","kahvaltı","öğlen"],tip:"Çok küçük ama harika Nordic kahve; laptop için uygun değil.",name:"Scandinavian Embassy",city:"Amsterdam",area:"De Pijp",cats:["kafe","kahvaltı"],best:["kahve","öğlen","kahvaltı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"http://scandinavianembassy.nl/",ig:"https://www.instagram.com/scandinavianembassy/",
- desc:"İskandinav tarzı samimi kafe, Nordic kavurucu kahveleri.",note:"Önceki araştırmandan. Küçük mekan, çalışma için ideal değil."},
+ desc:"İskandinav tarzı samimi kafe, Nordic kavurucu kahveleri.",note:""},
 {id:"winkel43",hours:"08:00–19:00",garden:true,type:"Pastane (elmalı turta)",tags:["kahve","tatlı","öğlen"],tip:"Meşhur Hollanda elmalı turtası; sadece bunun için bile değer. Sıra olabilir.",name:"Winkel 43",city:"Amsterdam",area:"Jordaan",cats:["kafe"],best:["kahve","öğlen","tatlı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.winkel43.nl/en/",ig:"https://www.instagram.com/winkel43_applepie/",
- desc:"Noordermarkt’ta meşhur Hollanda elmalı turtası.",note:"Önceki araştırmandan: ‘sadece apple pie için’."},
+ desc:"Noordermarkt’ta meşhur Hollanda elmalı turtası.",note:""},
 {id:"ceppis",hours:"17:00–23:00",garden:true,type:"İtalyan trattoria",tags:["akşam","italyan"],tip:"Kanal kenarı sıcak İtalyan; rezervasyon iyi olur.",name:"Ceppi's Trattoria",city:"Amsterdam",area:"Centrum (Leidseplein)",cats:["restoran","italyan"],best:["akşam"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.ceppis.com/",ig:"https://www.instagram.com/trattoriaceppis/",
- desc:"Kanal kenarı sıcak İtalyan trattoria/pizzeria.",note:"Önceki araştırmandan: ‘italyan & şarküteri’."},
+ desc:"Kanal kenarı sıcak İtalyan trattoria/pizzeria.",note:""},
 {id:"fiko",hours:"12:00–23:00",garden:false,type:"İtalyan restoran",tags:["öğlen","akşam","italyan"],tip:"Vondelpark yakını İtalyan; glutensiz seçenek var.",name:"Fiko",city:"Amsterdam",area:"Oud-West (Vondelpark)",cats:["restoran","italyan"],best:["akşam","öğlen"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.fikoamsterdam.com/",ig:"https://www.instagram.com/fikoamsterdam/",
- desc:"Vondelpark yakını İtalyan; glutensiz seçenekler.",note:"Önceki araştırmandan."},
+ desc:"Vondelpark yakını İtalyan; glutensiz seçenekler.",note:""},
 {id:"alba",hours:"17:00–00:00",garden:false,type:"Restoran & şarap barı",tags:["akşam","şarap"],tip:"Modern Avrupa + natürel şarap; rezervasyonla.",name:"Alba Restaurant & Wijnbar",city:"Amsterdam",area:"Oost",cats:["restoran","wine bar"],best:["akşam","şarap"],src:"deck",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.alba-amsterdam.nl/",ig:"https://www.instagram.com/alba.amsterdam/",
- desc:"Wibautstraat’ta modern Avrupa mutfağı + natürel şarap barı.",note:"Önceki araştırmandan."},
+ desc:"Wibautstraat’ta modern Avrupa mutfağı + natürel şarap barı.",note:""},
 {id:"lottis",hours:"07:00–23:00",garden:true,type:"Tüm-gün kafe & grill",tags:["kahve","öğlen","akşam","brunch","çalışma"],tip:"Hoxton otelinde şık tüm-gün mekan; sabah laptopla çalışmaya uygun.",name:"Lotti's (The Hoxton)",city:"Amsterdam",area:"Centrum (9 Straatjes)",cats:["kafe","restoran","brunch"],best:["kahve","öğlen","akşam","brunch","çalışma"],src:"deck",fav:false,resv:"rec",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://thehoxton.com/amsterdam/herengracht/lottis-restaurant/",ig:"https://www.instagram.com/lottisamsterdam/",
- desc:"Hoxton otelinde şık tüm-gün kafe/bar/grill.",note:"Önceki araştırmandan: ‘Hoxton otelinin altında’."},
+ desc:"Hoxton otelinde şık tüm-gün kafe/bar/grill.",note:""},
 {id:"dignita",hours:"09:00–17:00",garden:true,type:"Brunch restoranı",tags:["kahvaltı","brunch","öğlen"],tip:"Bahçede cam serada brunch; hafta sonu dolar, rezervasyon iyi.",name:"Dignita Hoftuin",city:"Amsterdam",area:"Plantage",cats:["brunch","kahvaltı","kafe"],best:["brunch","kahvaltı","öğlen"],src:"deck",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://eatwelldogood.nl/en/dignita-hoftuin/",ig:"https://www.instagram.com/dignita_restaurants/",
- desc:"Sessiz bahçede cam-sera brunch restoranı; sosyal girişim.",note:"Önceki araştırmandan."},
+ desc:"Sessiz bahçede cam-sera brunch restoranı; sosyal girişim.",note:""},
 {id:"bakers",hours:"08:30–16:00",garden:false,type:"Brunch",tags:["kahvaltı","brunch"],tip:"Popüler brunch; hafta sonu uzun sıra, erken git.",name:"Bakers & Roasters",city:"Amsterdam",area:"De Pijp",cats:["brunch","kahvaltı"],best:["brunch","kahvaltı"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://bakersandroasters.com/",ig:"https://www.instagram.com/bakersandroasters/",
- desc:"Brezilya/Yeni Zelanda esintili popüler brunch; hafta sonu sıra olur.",note:"Önceki araştırmandan."},
+ desc:"Brezilya/Yeni Zelanda esintili popüler brunch; hafta sonu sıra olur.",note:""},
 {id:"coffeedistrict",hours:"08:00–18:00",garden:false,type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"Zuid'de mahalle kahvecisi; laptop uygun.",name:"The Coffee District",city:"Amsterdam",area:"Oud-Zuid (Vondelpark)",cats:["kafe"],best:["kahve","çalışma"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
  web:"https://coffeedistrict.nl/",ig:"https://www.instagram.com/thecoffeedistrict/",
- desc:"Zuid’da mahalle specialty kahve barı.",note:"Önceki araştırmandan: ‘Hendrik Jacobszstraat’."},
+ desc:"Zuid’da mahalle specialty kahve barı.",note:""},
 {id:"uncommon",hours:"08:00–17:00",garden:false,type:"Kavurucu kafe",tags:["kahve","çalışma","öğlen"],tip:"Vondelpark yakını; yaratıcı içecekler, laptop uygun.",name:"Uncommon",city:"Amsterdam",area:"Oud-West (Vondelpark)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://uncommonams.com/",ig:"https://www.instagram.com/uncommon.ams/",
- desc:"Vondelpark yakını kavurucu-kafe, yaratıcı imza içecekler.",note:"Önceki araştırmandan."},
+ desc:"Vondelpark yakını kavurucu-kafe, yaratıcı imza içecekler.",note:""},
 {id:"tij",hours:"14:00–00:00",garden:true,type:"Bira evi",tags:["akşam","öğlen"],tip:"Yel değirmeni yanında organik bira; teras. Laptop için değil.",name:"Brouwerij 't IJ",city:"Amsterdam",area:"Oost (De Gooyer)",cats:["bar","market"],best:["akşam","öğlen"],src:"deck",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://www.brouwerijhetij.nl/",ig:"https://www.instagram.com/brouwerijhetij/",
- desc:"Yel değirmeni yanında ikonik organik bira fabrikası & tadım odası.",note:"Önceki araştırmandan (Bira Evleri)."},
+ desc:"Yel değirmeni yanında ikonik organik bira fabrikası & tadım odası.",note:""},
 
 {id:"monks",hours:"08:00–18:00",garden:false,type:"Kavurucu kafe",tags:["kahve","çalışma","öğlen"],tip:"En güvenli çalışma kafelerinden; priz + wifi, sabah sakin.",name:"Monks Coffee Roasters",city:"Amsterdam",area:"Oud-West",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:52.3712151,lng:4.8702463,conf:"high",
  web:"https://monkscoffee.nl/",ig:"https://www.instagram.com/monkscoffee/",
- desc:"Sevilen kavurucu-kafe; harika kahve, fırın ürünleri, priz & wifi.",note:"Ek araştırma. <b>Çalışma:</b> en güvenli tercihlerden; sabah daha sakin."},
+ desc:"Sevilen kavurucu-kafe; harika kahve, fırın ürünleri, priz & wifi.",note:""},
 {id:"whitelabel",hours:"08:00–17:00",garden:false,type:"Specialty kahveci",tags:["kahve","çalışma"],tip:"De Baarsjes'te sakin; birkaç saat laptop için ideal.",name:"White Label Coffee",city:"Amsterdam",area:"De Baarsjes",cats:["kafe"],best:["kahve","çalışma"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://www.whitelabelcoffee.nl/",ig:"https://www.instagram.com/whitelabelcoffee/",
- desc:"De Baarsjes’te sakin specialty kavurucu-kafe.",note:"Ek araştırma. <b>Çalışma:</b> birkaç saatlik laptop için ideal, sakin."},
+ desc:"De Baarsjes’te sakin specialty kavurucu-kafe.",note:""},
 {id:"coffeeroom",hours:"08:00–18:00",garden:false,type:"Kahve barı",tags:["kahve","çalışma","öğlen"],tip:"Geniş, öğrenci/uzaktan çalışan dostu; uzun oturmaya uygun.",name:"Coffee Room",city:"Amsterdam",area:"Oud-West (Da Costabuurt)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"http://www.coffeeroom.nl/",ig:"https://www.instagram.com/coffeeroomamsterdam/",
- desc:"Geniş mahalle kahve barı; öğrenci & uzaktan çalışan dostu.",note:"Ek araştırma. <b>Çalışma:</b> laptopla uzun oturmaya uygun."},
+ desc:"Geniş mahalle kahve barı; öğrenci & uzaktan çalışan dostu.",note:""},
 {id:"kanarie",hours:"10:00–01:00",garden:false,type:"Grand cafe",tags:["öğlen","akşam","kahve","çalışma"],tip:"Wifi + priz var ama öğle/akşam kalabalık & gürültülü olabilir — çalışmak için sabahı seç.",name:"De Kanarie Club",city:"Amsterdam",area:"Oud-West (De Hallen)",cats:["kafe","restoran","bar"],best:["çalışma","öğlen","kahve","akşam"],src:"extra",fav:false,resv:"rec",walkIn:true,work:true,lat:null,lng:null,conf:"high",
  web:"https://kanarieclub.nl/",ig:"https://www.instagram.com/kanarieclub/",
- desc:"Eski tramvay deposunda büyük tüm-gün grand cafe; hızlı wifi, bol priz.",note:"Ek araştırma. <b>Çalışma:</b> en çok önerilen laptop kafelerinden; gündüz sosyal-kalabalık."},
+ desc:"Eski tramvay deposunda büyük tüm-gün grand cafe; hızlı wifi, bol priz.",note:""},
 {id:"espressofabriek",hours:"08:00–18:00",garden:true,type:"Kavurucu kafe",tags:["kahve","çalışma","park"],tip:"Westergas'ta park kenarı; güneşli teras. Çalış + yürüyüş kombinasyonu.",name:"Espressofabriek Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["kafe","park"],best:["kahve","çalışma","park"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
  web:"https://espressofabriek.nl/",ig:"https://www.instagram.com/espressofabriek/",
- desc:"Westergas’ta kendi kavurucusu; güneşli teras, park kenarı.",note:"Ek araştırma. <b>Çalışma + yürüyüş</b> kombinasyonu için harika."},
+ desc:"Westergas’ta kendi kavurucusu; güneşli teras, park kenarı.",note:""},
 {id:"coffeevirus",hours:"08:00–17:00",garden:false,type:"Espresso bar",tags:["kahve","çalışma","öğlen"],tip:"Yaratıcı hub binasında; Noord günüyle birleştir.",name:"The Coffee Virus (A Lab)",city:"Amsterdam",area:"Noord (A Lab)",cats:["kafe"],best:["kahve","çalışma","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"medium",
  web:"https://thecoffeevirus.nl/",ig:"https://www.instagram.com/thecoffeevirus/",
- desc:"Yaratıcı hub binasında lunchroom-espresso barı.",note:"Ek araştırma. <b>Çalışma:</b> Noord günü ile birleştir."},
+ desc:"Yaratıcı hub binasında lunchroom-espresso barı.",note:""},
 {id:"glouglou",hours:"16:00–00:00",garden:false,type:"Natürel şarap barı",tags:["akşam","şarap"],tip:"Amsterdam'ın ilk natürel şarap barı; küçük atıştırmalık.",name:"GlouGlou",city:"Amsterdam",area:"De Pijp",cats:["wine bar","bar"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://glouglou.nl/",ig:"https://www.instagram.com/glouglou_amsterdam/",
- desc:"Amsterdam’ın ilk natürel şarap barı; katkısız şaraplar, küçük atıştırmalıklar.",note:"Ek araştırma."},
+ desc:"Amsterdam’ın ilk natürel şarap barı; katkısız şaraplar, küçük atıştırmalıklar.",note:""},
 {id:"barcentraal",hours:"17:00–01:00",garden:false,type:"Natürel şarap barı",tags:["akşam","şarap"],tip:"Mum ışığı + düşük-müdahale şarap.",name:"Bar Centraal",city:"Amsterdam",area:"Oud-West (Ten Katemarkt)",cats:["wine bar","bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"high",
  web:"https://barcentraal.nl/",ig:"https://www.instagram.com/barcentraal/",
- desc:"Mum ışığında düşük-müdahale şarap barı, harika küçük tabaklar (GlouGlou’nun kardeşi).",note:"Ek araştırma."},
+ desc:"Mum ışığında düşük-müdahale şarap barı, harika küçük tabaklar (GlouGlou’nun kardeşi).",note:""},
 {id:"fabus",hours:"17:00–00:00",garden:false,type:"Şarap barı & mutfak",tags:["akşam","şarap"],tip:"Natürel şarap + Levanten tabaklar; adresini kontrol et.",name:"Fabus Wijnbar",city:"Amsterdam",area:"Oud-West",cats:["wine bar","restoran"],best:["şarap","akşam"],src:"extra",fav:false,resv:"rec",walkIn:false,work:false,lat:null,lng:null,conf:"low",
  web:"https://www.fabuswijnbar.nl/",ig:"https://www.instagram.com/fabus.amsterdam/",
- desc:"Kadın liderliğinde, az bilinen bölgelerden natürel şaraplar + Levanten mutfak.",note:"Ek araştırma. Adres kontrol edilmeli."},
+ desc:"Kadın liderliğinde, az bilinen bölgelerden natürel şaraplar + Levanten mutfak.",note:""},
 {id:"lusconi",hours:"12:00–00:00",garden:true,type:"İtalyan bar-restoran",tags:["öğlen","akşam","italyan"],tip:"Meydan terası, odun fırını pizza.",name:"Bar Lusconi",city:"Amsterdam",area:"De Baarsjes (Mercatorplein)",cats:["restoran","italyan","bar"],best:["akşam","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"medium",
  web:"https://barlusconi.nl/",ig:"https://www.instagram.com/barlusconi/",
- desc:"Rahat İtalyan bar-restoran; odun fırını pizza, antipasti, kokteyl; meydan terası.",note:"Ek araştırma."},
+ desc:"Rahat İtalyan bar-restoran; odun fırını pizza, antipasti, kokteyl; meydan terası.",note:""},
 {id:"september",hours:"09:00–23:00",garden:false,type:"Tüm-gün restoran",tags:["öğlen","akşam","brunch"],tip:"Mevsimsel, yerel ürün; adresini kontrol et.",name:"Restaurant September",city:"Amsterdam",area:"Oud-Zuid",cats:["restoran","brunch","kafe"],best:["akşam","öğlen","brunch"],src:"extra",fav:false,resv:"rec",walkIn:true,work:false,lat:null,lng:null,conf:"low",
  web:"https://restaurantseptember.nl/",ig:"https://www.instagram.com/restaurant_september/",
- desc:"Mevsimsel, yerel ürün odaklı çağdaş tüm-gün restoran.",note:"Ek araştırma. Adres kontrol edilmeli."},
+ desc:"Mevsimsel, yerel ürün odaklı çağdaş tüm-gün restoran.",note:""},
 {id:"hartering",hours:"18:00–23:00",garden:false,type:"Bistro (tadım menüsü)",tags:["akşam","şarap"],tip:"Kanal kenarı; her gün değişen tadım menüsü. Rezervasyon şart.",name:"Gebr. Hartering",city:"Amsterdam",area:"Centrum/Oost",cats:["restoran","wine bar"],best:["akşam","şarap"],src:"extra",fav:false,resv:"req",walkIn:false,work:false,lat:null,lng:null,conf:"low",
  web:"https://gebroedershartering.nl/",ig:"https://www.instagram.com/gebr.hartering/",
- desc:"Kanal kenarı samimi bistro; her gün değişen tadım menüsü. Gerçek bir yerel favori.",note:"Ek araştırma. Rezervasyon şart; adres kontrol edilmeli."},
+ desc:"Kanal kenarı samimi bistro; her gün değişen tadım menüsü. Gerçek bir yerel favori.",note:""},
 {id:"ceuvel",hours:"11:00–00:00",garden:true,type:"Kafe (su kenarı)",tags:["öğlen","kahve","park","akşam"],tip:"Eski tersanede su kenarı; rahat, dış mekan. Sakin saatte laptop olabilir.",name:"Café de Ceuvel",city:"Amsterdam",area:"Noord (De Ceuvel)",cats:["kafe","restoran","park"],best:["öğlen","kahve","park","akşam"],src:"extra",fav:false,resv:"no",walkIn:true,work:true,lat:null,lng:null,conf:"low",
  web:"https://deceuvel.nl/en/",ig:"https://www.instagram.com/cafedeceuvel/",
- desc:"Eski tersanede sürdürülebilir kafe, su kenarı terası; rahat yerel kalabalık.",note:"Ek araştırma."},
+ desc:"Eski tersanede sürdürülebilir kafe, su kenarı terası; rahat yerel kalabalık.",note:""},
 {id:"troost",hours:"12:00–01:00",garden:true,type:"Bira evi",tags:["akşam","park","öğlen"],tip:"Westergas'ta craft bira; geniş teras. Laptop için değil.",name:"Brouwerij Troost Westergas",city:"Amsterdam",area:"Westerpark (Westergas)",cats:["bar","park"],best:["akşam","park","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:null,lng:null,conf:"low",
  web:"https://brouwerijtroost.nl/",ig:"https://www.instagram.com/brouwerijtroost/",
- desc:"Westergas’ta yerel craft bira fabrikası & taproom; park kenarı geniş teras.",note:"Ek araştırma."},
+ desc:"Westergas’ta yerel craft bira fabrikası & taproom; park kenarı geniş teras.",note:""},
 {id:"westerpark",hours:"24 saat",garden:true,type:"Park",tags:["park","parkta yemek","öğlen"],tip:"Westergas'a bitişik; piknik çayırı + kafeler/bira.",name:"Westerpark",city:"Amsterdam",area:"Westerpark",cats:["park"],best:["park","parkta yemek","öğlen"],src:"extra",fav:false,resv:"no",walkIn:true,work:false,lat:52.3865,lng:4.8760,conf:"high",
  web:"https://westergas.nl/",ig:"",
- desc:"Westergas kültür parkına bitişik canlı park; piknik çayırları + kafeler/bira fabrikaları.",note:"Ek araştırma."}
+ desc:"Westergas kültür parkına bitişik canlı park; piknik çayırları + kafeler/bira fabrikaları.",note:""}
 ];
 /* ===== GEZİLECEK YERLER (POI) — kategorize + entegre (koordinat/link model bilgisi, conf:low) ===== */
 V=V.concat([
@@ -979,8 +977,28 @@ function gmaps(v){const q=encodeURIComponent(v.name+" "+(v.area||"")+" "+(v.city
  return"https://www.google.com/maps/search/?api=1&query="+q;}
 function gmapsRoute(list){const pts=list.map(v=>encodeURIComponent(v.name+" "+(v.city||"Amsterdam"))).join("/");
  return"https://www.google.com/maps/dir/"+pts;}
-const RESV={req:{t:"Rezervasyon gerekli",c:"req"},rec:{t:"Rezervasyon önerilir",c:"rec"},no:{t:"Walk-in / rezervasyon yok",c:"no"},unknown:{t:"Rezervasyon: kontrol et",c:"rec"}};
-const SRCLBL={user:"Benim listem",deck:"Önceki araştırmam",extra:"Ek araştırma",audio:"Ses kaydı",poi:"Gezilecek yer"};
+const RESV={req:{t:"Rezervasyon gerekli",c:"req"},rec:{t:"Rezervasyon önerilir",c:"rec"},no:{t:"Walk-in / rezervasyon yok",c:"no"},unknown:{t:"Rezervasyon bilgisi yok",c:"rec"}};
+const SRCLBL={user:"Editör seçimi",deck:"Editör seçimi",extra:"Editör seçimi",audio:"Editör seçimi",poi:"Gezilecek yer"};
+// WP7: kaynak grupları kamuya açık iki ada indirgenir (editoryal liste / gezilecek yer).
+function srcGroup(s){ return s==="poi"?"poi":"editor"; }
+// WP7 (5/n): kamuya yalnız v.tip gösterilir (venues.note yalnız yönetim panelinde, sitede asla). publicNote eski editoryal
+// önekleri siler, yapılacak işleri okur diline çevirir (içerik uydurulmaz) ve düz metin döndürür (çağıran esc() eder).
+function publicNote(t){
+ let x=String(t==null?"":t);
+ x=x.replace(/(<b>\s*)?(Senin\s+notun|Edit[öo]r\s+notu)\s*:\s*(<\/b>)?\s*/gi,"");
+ x=x.replace(/❤️?\s*(\(?Öncelikli\)?\s*)?[Ff]avori\.\s*/g,"");
+ x=x.replace(/(<b>)?\s*Araştırma\s+ile\s+eklendi\s*(<\/b>)?\s*\(senin\s+verdiğin\s+isimden\)\.?\s*/gi,"").replace(/^\s*(<b>)?\s*(Ek|Önceki)\s+araştırma(m|ndan)?\s*[.:]?\s*(<\/b>)?\s*/i,"");
+ x=x.replace(/\(Araştırmada\s+bazı\s+kaynaklar/g,"(Bazı kaynaklar").replace(/[(]Araştırma\s*:\s*/g,"(Bazı kaynaklara göre: ");
+ x=x.replace(/Rezervasyon\s+durumunu\s+kontrol\s+et\./g,"Rezervasyon bilgisi henüz doğrulanmadı.");
+ x=x.replace(/\s*—\s*kontrol\s+et\./g,"; bu bilgi henüz doğrulanmadı.");
+ x=x.replace(/Hâlâ\s+açık\s+mı\s+mutlaka\s+kontrol\s+et\./g,"Hâlâ açık olup olmadığı henüz doğrulanmadı.");
+ x=x.replace(/([;,]\s*)adres\/IG['’]yi\s+kontrol\s+et\./g,"$1adres ve Instagram bilgisi henüz doğrulanmadı.").replace(/[Aa]dres\/IG['’]yi\s+kontrol\s+et\./g,"Adres ve Instagram bilgisi henüz doğrulanmadı.");
+ x=x.replace(/([;,]\s*)adresini\s+kontrol\s+et\./g,"$1adres bilgisi henüz doğrulanmadı.").replace(/[Aa]dresini\s+kontrol\s+et\./g,"Adres bilgisi henüz doğrulanmadı.");
+ x=x.replace(/[Aa]dres\/IG\s+kontrol\s+edilmeli\./g,"Adres ve Instagram bilgisi henüz doğrulanmadı.").replace(/[Aa]dres\s+kontrol\s+edilmeli\./g,"Adres bilgisi henüz doğrulanmadı.");
+ x=x.replace(/(kontrol|teyit)\s+edilmeli/gi,"henüz doğrulanmadı").replace(/(kontrol|teyit)\s+et(meli)?\b/gi,"henüz doğrulanmadı");
+ x=x.replace(/<\/?[a-z][^>]*>/gi,"");
+ return x.replace(/\s{2,}/g," ").trim();
+}
 function byId(id){return V.find(v=>v.id===id);}
 function winopen(u){if(!u)return;try{const w=window.open(u,"_blank","noopener");if(!w)location.href=u;}catch(e){location.href=u;}}
 
@@ -997,7 +1015,7 @@ function winopen(u){if(!u)return;try{const w=window.open(u,"_blank","noopener");
    asa_session ve Supabase auth anahtarları bu katmanın DIŞINDADIR. Kopenhag (cph) anahtarları burada okunmaz. */
 window.ASA_ST=(function(){
   var CODE="ams", LIB=window.AsaStorage||null, LS=null, mode="ok", rep=null, other="", extra=[], seen=false, adopted=false, unsaved=false, readFp=null;
-  var NAMES={fav:"Favoriler",plan:"Gün planı notları",dayven:"Günlük mekân listeleri",cal:"Takvim notları",calphoto:"Takvim fotoğrafları",trip:"Seyahat bilgileri",plan_prefs:"Plan tercihleri"};
+  var NAMES={fav:"Listem",plan:"Plan notların",dayven:"Günlük mekân listeleri",cal:"Kendi notların",calphoto:"Takvim fotoğrafları",trip:"Seyahat bilgileri",plan_prefs:"Plan tercihleri"};
   try{ LS=window.localStorage; }catch(e){ LS=null; }
   if(!LIB||typeof LIB.reconcile!=="function"||!LS) mode="unavailable";
   else { var pc=null; try{ pc=LIB.cityCodeFromLabel(CITY); }catch(e){} if(pc!==CODE){ mode="locked"; other=String(CITY||"").slice(0,64); } }
@@ -1013,8 +1031,8 @@ window.ASA_ST=(function(){
   function notice(){
     var box=document.getElementById("asaStoreNotice"); if(!box)return;
     var msgs=[], ackC=false, ackM=null, st=stranded();
-    if(!seen&&mode==="unavailable") msgs.push("Kayıtlı favori, plan ve seyahat bilgilerin şu an yüklenemedi; bu açılışta yapılan değişiklikler kaydedilmeyecek. Mevcut kayıtların silinmedi — sayfayı yenilemeyi dene.");
-    if(!seen&&mode==="locked") msgs.push("Bu sayfa Amsterdam rehberidir. “"+other+"” için açılan bu görünümde Amsterdam’a ait kayıtlı favori, plan ve seyahat bilgilerin gösterilmiyor; buradaki değişiklikler bu cihaza kaydedilmiyor.");
+    if(!seen&&mode==="unavailable") msgs.push("Listen, plan ve seyahat bilgilerin şu an yüklenemedi; bu açılışta yapılan değişiklikler kaydedilmeyecek. Mevcut kayıtların silinmedi — sayfayı yenilemeyi dene.");
+    if(!seen&&mode==="locked") msgs.push("Bu sayfa Amsterdam rehberidir. “"+other+"” için açılan bu görünümde Amsterdam’a ait listen, plan ve seyahat bilgilerin gösterilmiyor; buradaki değişiklikler bu cihaza kaydedilmiyor.");
     if(!seen&&rep&&rep.conflicts&&rep.conflicts.length){ ackC=true; msgs.push("Bu cihazda şu kayıtların iki farklı kopyası bulundu: "+rep.conflicts.map(function(c){return NAMES[c.domain]||c.domain;}).join(", ")+". Yeni kayıt kullanılıyor; eski kopya silinmedi ve bu cihazda saklanmaya devam ediyor. Eski kopya, sitenin önceki sürümünün açık kalmış bir sekmesinden gelmiş olabilir."); }
     if(!seen&&rep&&rep.mismatch&&!rep.mismatch.acknowledged){ ackM=rep.mismatch.fp; msgs.push("Bu cihazdaki kayıtlı seyahat planın "+(rep.mismatch.cityLabel||"başka bir şehir")+" için. Amsterdam planı olarak gösterilmiyor; o kayıt silinmedi."); }
     if(st.length) msgs.push("Bu cihazda kayıtlı plan tercihlerin var; eski seyahat kaydın "+(st[0].cityLabel||"başka bir şehir")+" için işaretli olduğundan Amsterdam planına bağlanmadı. Bu tercihleri Amsterdam rehberinde kaydettiysen Amsterdam planına aktarabilirsin. Aktarmazsan Amsterdam planında kullanılmaz; eski kayıt silinmez.");
@@ -1051,13 +1069,12 @@ let favSet=new Set();
     if(Array.isArray(favRaw.value)) favRaw.value.forEach(function(id){ if(typeof id==="string"&&id) favSet.add(id); });
     return;
   }
-  if(!ASA_ST.writable()) return;   // depolama kapalı/kilitli: seed yazılmaz
-  V.forEach(function(v){ if(v&&v.fav&&typeof v.id==="string"&&v.id) favSet.add(v.id); });
-  ASA_ST.set("fav", Array.from(favSet));
+  // WP7 (5/n): yeni ziyaretçinin Listem'i BOŞ başlar. Editörün seçimleri (v.fav) kullanıcının listesine kopyalanmaz;
+  // kullanıcı kalbe dokunana kadar asa:ams:fav yazılmaz (eski kayıtlar okunur, silinmez).
 })();
 function isFav(id){return favSet.has(id);}
 function toggleFav(id){const had=favSet.has(id);if(had)favSet.delete(id);else favSet.add(id);
- if(!ASA_ST.set("fav",[...favSet])&&ASA_ST.writable()){ if(had)favSet.add(id);else favSet.delete(id); ASA_ST.full("Favorin kaydedilemedi: cihaz depolaması dolu. Değişiklik geri alındı."); return; }   // WP3: kaydedilmeyen değişiklik ekranda kalmaz
+ if(!ASA_ST.set("fav",[...favSet])&&ASA_ST.writable()){ if(had)favSet.add(id);else favSet.delete(id); ASA_ST.full("Listen güncellenemedi: cihaz depolaması dolu. Değişiklik geri alındı."); return; }   // WP3: kaydedilmeyen değişiklik ekranda kalmaz
  renderCards();if(MAP.map)drawMarkers();
  if(window.ASA){ASA.onFav(id,favSet.has(id));}}
 
@@ -1087,7 +1104,7 @@ function goBack(){
   location.href="/";
 }
 function isMember(){return !!(window.ASA&&window.ASA.session);}
-function gateCard(msg){return '<div class="gate"><div class="gate-i">🔒</div><div class="gate-t">'+(msg||"Devamı üyelere özel")+'</div><div class="gate-d">Ücretsiz üyelikle tüm sonuçları gör, favorilerini buluta kaydet, seviyeni yükselt.</div><button class="gate-b" onclick="go(\'member\')">Üye ol / Giriş yap</button></div>';}
+function gateCard(msg){return '<div class="gate"><div class="gate-i">🔒</div><div class="gate-t">'+(msg||"Devamı üyelere özel")+'</div><div class="gate-d">Ücretsiz üyelikle tüm sonuçları gör, listeni hesabına kaydet, seviyeni yükselt.</div><button class="gate-b" onclick="go(\'member\')">Üye ol / Giriş yap</button></div>';}
 const TEASER_MAX=10;
 function favView(){ return typeof activeChips!=="undefined" && activeChips.has("fav"); }
 function cityCatalogIds(){
@@ -1105,9 +1122,9 @@ function paywallGateHtml(hidden){
   const extra=hidden>0?('<div class="gate-d">+'+hidden+' mekân daha üyeler için</div>'):"";
   return '<div class="gate"><div class="gate-t">Devamı üyeler için</div>'
     +extra
-    +'<div class="gate-d">Tam listeye üye olunca ulaşırsın. Favorilerin bu cihazda kalır; istersen girişten sonra taşırsın.</div>'
+    +'<div class="gate-d">Tam listeye üye olunca ulaşırsın. Listen bu cihazda kalır; istersen girişten sonra hesabına taşırsın.</div>'
     +'<div class="gate-actions"><button type="button" class="gate-b" onclick="go(\'member\')">Üye ol veya giriş yap</button>'
-    +'<button type="button" class="gate-sec" onclick="setOnlyChip(\'fav\')">Favorilerime git</button></div></div>';
+    +'<button type="button" class="gate-sec" onclick="setOnlyChip(\'fav\')">Listeme git</button></div></div>';
 }
 function syncMapTeaserAria(){
   const el=document.getElementById("mapTeaserAria"); if(!el) return;
@@ -1120,7 +1137,7 @@ function refreshGated(){try{renderCards();}catch(e){}try{if(typeof drawMarkers==
 /* ===== DASHBOARD CTA ===== */
 const CTAS=[
  {e:"📍",l:"Yakınımdakiler",d:"Konuma göre sırala",act:()=>{go("list");document.getElementById("fSort").value="dist";applyFilters();}},
- {e:"❤️",l:"Favorilerim",d:"Öncelikli yerler",act:()=>{go("list");setOnlyChip("fav");}},
+ {e:"❤️",l:"Listem",d:"Eklediğin yerler",act:()=>{go("list");setOnlyChip("fav");}},
  {e:"💻",l:"Çalışmaya uygun",d:"Laptop kafeleri",act:()=>{go("list");setOnlyChip("work");}},
  {e:"🍷",l:"Wine bar",d:"Akşam şarabı",act:()=>{go("list");setOnlyChip("şarap");}},
  {e:"🥪",l:"Hızlı öğle",d:"Sandviç / take-away",act:()=>{go("list");setOnlyChip("bagel");}},
@@ -1153,7 +1170,7 @@ const SCN=[
  {id:"friends",t:"Arkadaşlarla akşam planı",m:"Sosyal · canlı",stops:["coba","escobar","pllek","glouglou"]},
  {id:"spontane",t:"Rezervasyonsuz spontane gün",m:"Walk-in",stops:["binnenvisser","flos","glouglou","deklos"]},
  {id:"garanti",t:"Rezervasyonlu garanti akşam",m:"Önceden ayarla",stops:["barpif","csnoord","alba","bouillon"]},
- {id:"fav-rota",t:"Favori mekanlardan kısa rota",m:"En sevdiklerin",stops:["chun","barpif","pllek","oeuf"]},
+ {id:"fav-rota",t:"Editörün favorilerinden kısa rota",m:"Editör seçimi",stops:["chun","barpif","pllek","oeuf"]},
  {id:"lokal",t:"Az turistik lokal Amsterdam günü",m:"Gerçek mahalle hissi",stops:["whitelabel","oficina","ceuvel","barcentraal"]}
 ];
 function stopHtml(v,i){if(!v)return"";
@@ -1186,7 +1203,7 @@ function openScenario(id){go("pano");const el=document.getElementById("scnGrid")
 
 /* ===== LIST / FILTERS ===== */
 const CHIP_DEFS=[
- {k:"fav",l:"❤️ Favori",cls:"fav"},{k:"work",l:"💻 Çalışma"},{k:"walkin",l:"✅ Rezervasyonsuz"},
+ {k:"fav",l:"❤️ Listem",cls:"fav"},{k:"work",l:"💻 Çalışma"},{k:"walkin",l:"✅ Rezervasyonsuz"},
  {k:"resv",l:"📅 Rezervasyonlu"},{k:"near",l:"📍 Yakınımda"},
  {k:"kahve",l:"☕ Kahve"},{k:"öğlen",l:"🥪 Öğlen"},{k:"akşam",l:"🍽️ Akşam"},
  {k:"brunch",l:"🥞 Brunch"},{k:"şarap",l:"🍷 Wine bar"},{k:"gece",l:"🌙 Gece"},
@@ -1235,7 +1252,7 @@ function currentList(){
  let list=V.filter(v=>{
    if(v.city!==CITY)return false;
    if(area&&v.area!==area)return false;
-   if(src&&v.src!==src)return false;
+   if(src&&srcGroup(v.src)!==src)return false;
    if(q){const blob=(v.name+" "+v.area+" "+v.cats.join(" ")+" "+v.best.join(" ")+" "+v.desc).toLowerCase();if(!blob.includes(q))return false;}
    for(const k of activeChips){if(!matchChip(v,k))return false;}
    return true;
@@ -1246,44 +1263,32 @@ function currentList(){
  else list.sort((a,b)=>{const s=x=>(isFav(x.id)?-4:0)+(x.src==="user"?-2:0)+(x.conf==="high"?-1:0);return s(a)-s(b);});
  return list;
 }
-const CATIMG={
- coffee:"https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=520&q=65&auto=format&fit=crop",
- food:"https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=520&q=65&auto=format&fit=crop",
- wine:"https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=520&q=65&auto=format&fit=crop",
- brunch:"https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=520&q=65&auto=format&fit=crop",
- bar:"https://images.unsplash.com/photo-1436076863939-06870fe779c2?w=520&q=65&auto=format&fit=crop",
- park:"https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=520&q=65&auto=format&fit=crop",
- culture:"https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=520&q=65&auto=format&fit=crop",
- shop:"https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=520&q=65&auto=format&fit=crop"
-};
 function venueImg(v){
  const real=(v.photo_url||v.photo||v.img||"").trim();
  if(real)return real;
- const t=((v.tags||[]).join(" ")+" "+(v.cats||[]).join(" ")+" "+(v.type||"")).toLowerCase();
- if(/kahve|coffee|kafe|kavurucu/.test(t))return CATIMG.coffee;
- if(/şarap|sarap|wine|natürel|naturel/.test(t))return CATIMG.wine;
- if(/kahvaltı|kahvalti|brunch/.test(t))return CATIMG.brunch;
- if(/bira|bar|kokteyl|cocktail/.test(t))return CATIMG.bar;
- if(/park|doğa|doga|yürüyüş|yuruyus/.test(t))return CATIMG.park;
- if(/müze|muze|kültür|kultur|sanat|galeri/.test(t))return CATIMG.culture;
- if(/mağaza|magaza|alışveriş|alisveris|konsept|dükkan|dukkan/.test(t))return CATIMG.shop;
- return CATIMG.food;
+ return "";   // WP7 (§2.6): Unsplash kategori görseli mekân görseli olarak kullanılmaz; kart nötr yer tutucu gösterir
+}
+// WP7: mekânın kendi fotoğrafı varsa <img>, yoksa nötr yer tutucu (uydurma/kategori görseli yok)
+function venueMedia(v,cls){
+ const u=venueImg(v);
+ if(u) return '<img class="'+cls+'" src="'+esc(u)+'" loading="lazy" alt="">';
+ return '<div class="w-full h-full flex items-center justify-center" style="background:linear-gradient(135deg,#efe8da,#e3d8c2)" role="img" aria-label="Fotoğraf yok"><span class="msym text-[40px] text-on-surface-variant/60">storefront</span></div>';
 }
 function cardHtml(v){
  const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv]||RESV.unknown;
  const badges=[];
- badges.push('<span class="badge src-'+v.src+'">'+SRCLBL[v.src]+'</span>');
+ badges.push('<span class="badge src-'+srcGroup(v.src)+'">'+(SRCLBL[v.src]||SRCLBL.user)+'</span>');
  if(isWork(v))badges.push('<span class="badge work">💻 Çalışma</span>');
- if(v.conf==="low")badges.push('<span class="badge warn">kontrol et</span>');
+ if(v.conf==="low")badges.push('<span class="badge warn">bilgi doğrulanmadı</span>');
  (v.tags||v.best||[]).slice(0,3).forEach(b=>badges.push('<span class="badge">'+b+'</span>'));
  const kick=(v.type||'').toUpperCase();
  const distTxt=(km<100)?('≈'+km.toFixed(1)+' km · '+bikeMin(km)+' dk'):'';
- const noteTxt=v.tip||v.note||'';
+ const noteTxt=publicNote(v.tip||'');   // WP7 (5/n): venues.note sitede gösterilmez
  const abtn='rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors';
  return '<div class="flex flex-col group" data-venue-id="'+v.id+'">'+
    '<div class="relative aspect-[16/10] rounded-lg overflow-hidden bg-surface-container mb-4 shadow-sm cursor-pointer" onclick="openVenue(\''+v.id+'\')">'+
-     '<img class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" src="'+venueImg(v)+'" loading="lazy">'+
-     '<button class="absolute top-3 right-3 w-10 h-10 rounded-full bg-surface/95 backdrop-blur flex items-center justify-center shadow-md active:scale-90 transition" onclick="event.stopPropagation();toggleFav(\''+v.id+'\')"><span class="msym text-[22px] text-secondary">'+(isFav(v.id)?"favorite":"favorite_border")+'</span></button>'+
+     venueMedia(v,"w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]")+
+     '<button class="absolute top-3 right-3 w-10 h-10 rounded-full bg-surface/95 backdrop-blur flex items-center justify-center shadow-md active:scale-90 transition" aria-label="Listeme ekle" aria-pressed="'+(isFav(v.id)?"true":"false")+'" onclick="event.stopPropagation();toggleFav(\''+v.id+'\')"><span class="msym text-[22px] text-secondary" aria-hidden="true">'+(isFav(v.id)?"favorite":"favorite_border")+'</span></button>'+
    '</div>'+
    '<div class="font-kicker text-kicker text-on-surface-variant uppercase mb-1.5">'+kick+'</div>'+
    '<h3 class="font-headline-md text-[20px] leading-tight text-primary mb-1 cursor-pointer hover:text-secondary transition-colors" onclick="openVenue(\''+v.id+'\')">'+v.name+'</h3>'+
@@ -1293,7 +1298,7 @@ function cardHtml(v){
      (distTxt?'<span class="inline-flex items-center gap-1"><span class="msym text-[16px]">pedal_bike</span>'+distTxt+'</span>':'')+
      (v.hours?'<span class="inline-flex items-center gap-1"><span class="msym text-[16px]">schedule</span>'+v.hours+'</span>':'')+
    '</div>'+
-   (noteTxt?'<div class="bg-surface-container-low rounded-sm p-3 flex items-start gap-2.5 text-on-surface-variant text-[13px] leading-relaxed mb-4"><span class="msym text-[18px] text-primary mt-0.5 shrink-0">chat_bubble</span><span>'+noteTxt+'</span></div>':'')+
+   (noteTxt?'<div class="bg-surface-container-low rounded-sm p-3 flex items-start gap-2.5 text-on-surface-variant text-[13px] leading-relaxed mb-4"><span class="msym text-[18px] text-primary mt-0.5 shrink-0">chat_bubble</span><span>'+esc(noteTxt)+'</span></div>':'')+
    '<div class="flex flex-wrap gap-2 mt-auto pt-1">'+
      '<button class="inline-flex items-center gap-1 rounded-full bg-primary text-on-primary font-button text-button px-4 py-2 hover:opacity-90 transition-opacity" onclick="winopen(\''+gmaps(v)+'\')"><span class="msym text-[16px]">place</span> Google</button>'+
      '<button class="'+abtn+'" onclick="showOnMap(\''+v.id+'\')">Haritada</button>'+
@@ -1312,10 +1317,10 @@ function renderCards(){
  const hidden=allow?Math.max(0,full.length-list.length):0;
  let _h="";
  if(!list.length){
-   if(fav && !V.some(v=>v&&v.city===CITY&&isFav(v.id))) _h='<div class="note" style="grid-column:1/-1">Henüz favorin yok. Mekânlar’dan kalp ile ekle.</div>';
+   if(fav && !V.some(v=>v&&v.city===CITY&&isFav(v.id))) _h='<div class="note" style="grid-column:1/-1">Listen henüz boş. Mekânlar’da kalbe dokunarak listene ekle.</div>';
    else _h='<div class="note" style="grid-column:1/-1">Bu filtrelerle sonuç yok. Bir filtreyi kaldır.</div>';
  } else {
-   if(!member&&fav) _h='<div class="note" style="grid-column:1/-1">Favorilerin bu cihazda. Üye olursan hesabına taşıyabilirsin.</div>';
+   if(!member&&fav) _h='<div class="note" style="grid-column:1/-1">Listen bu cihazda. Üye olursan hesabına taşıyabilirsin.</div>';
    _h+=list.map(cardHtml).join("");
    if(hidden>0){
      _h+='<p class="note" style="grid-column:1/-1">İlk 10 mekân gösteriliyor.</p>';
@@ -1337,7 +1342,7 @@ function applyFilters(){renderCards();}
 /* ===== LEAFLET / OpenStreetMap MAP ===== */
 const CITY_VIEW={Amsterdam:[52.370,4.895,12]};if(!CITY_VIEW[CITY])CITY_VIEW[CITY]=CC.view;
 const MAP={city:CITY,map:null,layer:null,userMarker:null,ready:false,pickMode:false};
-function hexColor(v){if(isFav(v.id))return"#c25a52";return v.src==="user"?"#5b7a96":v.src==="deck"?"#5a9a93":v.src==="extra"?"#7d9a5a":"#8a6fa3";}
+function hexColor(v){if(isFav(v.id))return"#c25a52";return srcGroup(v.src)==="editor"?"#5b7a96":"#8a6fa3";}
 function initMap(){
  if(typeof L==="undefined"){setTimeout(initMap,250);return;}
  if(!MAP.ready){
@@ -1361,7 +1366,7 @@ function popupHtml(v){const c=coordsOf(v);const km=distKm(v);const r=RESV[v.resv
  return '<div style="min-width:190px"><b style="font-size:14px">'+v.name+(isFav(v.id)?" ❤️":"")+'</b><br>'+
   '<span style="color:#666;font-size:11.5px">📍 '+v.area+(c.approx?" · ~konum":"")+' · ≈'+km.toFixed(1)+' km · 🚲 '+bikeMin(km)+' dk</span><br>'+
   '<span style="font-size:11.5px">🏷️ '+(v.type||v.cats.join(", "))+' · '+r.t+'</span>'+
-  (v.tip?'<div style="font-size:11px;color:#5a6b3f;margin-top:3px">💡 '+v.tip+'</div>':'')+
+  (v.tip?'<div style="font-size:11px;color:#5a6b3f;margin-top:3px">💡 '+esc(publicNote(v.tip))+'</div>':'')+
   '<div style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap">'+
    '<button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google (saat & yorum)</button>'+
    '<button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button>'+
@@ -1381,7 +1386,7 @@ function drawMarkers(){
      if(allow&&!allow.has(v.id))return;
      if(!member&&favOnly&&!isFav(v.id))return;
      if(cat&&!(v.cats||[]).includes(cat))return;
-     if(src&&v.src!==src)return;
+     if(src&&srcGroup(v.src)!==src)return;
      const c=coordsOf(v);const fav=isFav(v.id);
      const m=L.circleMarker([c.lat,c.lng],{radius:fav?9:6.5,color:"#fff",weight:2,fillColor:hexColor(v),fillOpacity:.95});
      m.asaVenueId=v.id;
@@ -1633,7 +1638,7 @@ var PSET=(function(){
        pickBlock("mustSee","Mutlaka görmek istediklerim","Envanterden seç → must_see_ids olarak saklanır.")+
        pickBlock("avoid","Gitmek istemediklerim","Envanterden seç → avoid_ids olarak saklanır (must-see ile çakışamaz).")+
        '<div class="mb-2"><label class="'+LBL+'">Mevcut rezervasyonlar</label><div class="bg-surface-container rounded-lg p-3 flex flex-col gap-2"><select class="'+INP+'" aria-label="Rezervasyon mekânı" onchange="PSET.setDraft(\'id\',this.value)">'+invOpt(s.resDraft.id)+'</select><div class="grid grid-cols-2 gap-2"><input type="date" class="'+INP+'" aria-label="Rezervasyon tarihi" value="'+esc(s.resDraft.date)+'" onchange="PSET.setDraft(\'date\',this.value)"><input type="time" class="'+INP+'" aria-label="Başlangıç saati" value="'+esc(s.resDraft.start)+'" onchange="PSET.setDraft(\'start\',this.value)"></div><input type="time" class="'+INP+'" aria-label="Bitiş saati (opsiyonel)" value="'+esc(s.resDraft.end)+'" onchange="PSET.setDraft(\'end\',this.value)"><button type="button" class="rounded-lg bg-primary text-on-primary font-button text-button py-2.5" onclick="PSET.addRes()">+ Rezervasyon ekle</button></div><div class="text-[10.5px] text-on-surface-variant mt-1">Rezervasyonlu durak otomatik <b>kilitli/sabit</b> kabul edilir. Tarih seyahat aralığında olmalı.</div>'+(rl?'<div class="flex flex-wrap gap-2 mt-2">'+rl+'</div>':'')+'</div>'+
-       '<div class="mb-1"><label class="'+LBL+'">Diğer not (serbest)</label><textarea id="ps-note" class="'+INP+'" style="min-height:60px" placeholder="Motorun karar veremeyeceği özel bir durum…" oninput="PSET.setNote(this.value)"></textarea><div class="text-[10.5px] text-on-surface-variant mt-1">⚠️ Bu metin plan motorunun kararına <b>katılmaz</b>; yalnızca not olarak saklanır.</div></div>'+
+       '<div class="mb-1"><label class="'+LBL+'">Kendi notun (serbest)</label><textarea id="ps-note" class="'+INP+'" style="min-height:60px" placeholder="Motorun karar veremeyeceği özel bir durum…" oninput="PSET.setNote(this.value)"></textarea><div class="text-[10.5px] text-on-surface-variant mt-1">⚠️ Bu metin plan motorunun kararına <b>katılmaz</b>; yalnızca kendi notun olarak saklanır.</div></div>'+
      '</details>'+
      '<div class="text-[12px] font-medium mt-4 mb-1" style="color:'+(c.ok?"#4f6b3f":"#a6601f")+'">'+esc(c.m)+'</div>'+
      '<button type="button" id="planPrimaryCta" data-cta="primary" class="w-full rounded-full font-button text-button py-3.5 '+(c.ok?"bg-primary text-on-primary hover:opacity-90":"bg-outline-variant text-on-surface-variant cursor-not-allowed")+'" '+(c.ok?"":"disabled")+' onclick="PSET.submit()">Planımı oluştur</button>'+
@@ -1828,14 +1833,34 @@ function renderDay(d){
  x+='<div id="dayFilterRow" class="flex flex-wrap gap-2 mb-3"></div>';
  x+='<div id="daySuggest" class="flex flex-col gap-2"></div></div>';
  x+='<div class="mb-4"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">📝 Plan notu</div><textarea id="dayPlan" class="w-full bg-surface-container rounded-lg p-3 text-body-sm text-on-surface min-h-20 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Bugünün akışı, saatler, fikirler…">'+escT(planVal)+'</textarea></div>';
- x+='<div class="mb-4"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">🗒️ Kişisel not</div><textarea id="dayNote" class="w-full bg-surface-container rounded-lg p-3 text-body-sm text-on-surface min-h-16 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Rezervasyon, hatırlatma…">'+escT(calNotes[d]||"")+'</textarea></div>';
+ x+='<div class="mb-4"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">🗒️ Kendi notun</div><textarea id="dayNote" class="w-full bg-surface-container rounded-lg p-3 text-body-sm text-on-surface min-h-16 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Rezervasyon, hatırlatma…">'+escT(calNotes[d]||"")+'</textarea><div class="flex flex-wrap items-center gap-3 mt-2"><button type="button" id="dayNoteSave" class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 hover:bg-surface-container transition-colors" onclick="saveDayNoteNow(\''+d+'\')">Notumu kaydet</button><span id="dayNoteStatus" role="status" aria-live="polite" class="text-[12.5px] text-on-surface-variant"></span></div></div>';
  x+='<div class="mb-2"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">📷 Fotoğraflar</div><div class="flex flex-wrap gap-2">'+phs.map((src,i)=>'<span class="relative w-20 h-20 rounded-lg overflow-hidden"><img class="w-full h-full object-cover" src="'+src+'"><button class="absolute top-1 right-1 w-5 h-5 rounded-full bg-surface/90 text-on-surface text-[12px] flex items-center justify-center" title="Sil" onclick="delPhoto(\''+d+'\','+i+')">✕</button></span>').join("")+'</div><label class="inline-flex items-center gap-1 mt-2 rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 cursor-pointer hover:bg-surface-container"><span class="msym text-[16px]">photo_camera</span> Fotoğraf ekle<input type="file" accept="image/*" class="hidden" id="dayPhotoInput"></label></div>';
  document.getElementById("dayBody").innerHTML=x;
  renderDayFilter(d);
  wireDayDrag(d);
- const pt=document.getElementById("dayPlan");if(pt)pt.addEventListener("input",()=>{calPlans[d]=pt.value;saveLS("plan",calPlans);});
- const nt=document.getElementById("dayNote");if(nt)nt.addEventListener("input",()=>{calNotes[d]=nt.value;saveLS("cal",calNotes);});
+ const pt=document.getElementById("dayPlan");if(pt)pt.addEventListener("input",()=>{calPlans[d]=pt.value;asaNoteDirty();saveLS("plan",calPlans);});
+ const nt=document.getElementById("dayNote");if(nt)nt.addEventListener("input",()=>{calNotes[d]=nt.value;asaNoteDirty();saveLS("cal",calNotes);});
  const pi=document.getElementById("dayPhotoInput");if(pi)pi.addEventListener("change",ev=>addPhoto(d,ev));
+}
+// WP7 (5/n): üyenin TripSync rozeti not yazımından sonra "Notun kaydedildi" der (yalnız sunucu yazımı başarılıysa).
+function asaNoteDirty(){ try{ if(window.TripSync)window.TripSync.noteDirty=true; }catch(e){} }
+// WP7 (5/n): "Notumu kaydet" — yeni anahtar/yol YOK: mevcut saveLS("cal") (asa:ams:cal) + seyahati olan üyede TripSync.flush().
+// "Notun kaydedildi" yalnız yazım gerçekten başarılıysa gösterilir; aksi halde düz bir hata satırı.
+async function saveDayNoteNow(d){
+ const nt=document.getElementById("dayNote"), st=document.getElementById("dayNoteStatus"), b=document.getElementById("dayNoteSave");
+ if(!nt||!st)return false;
+ if(b)b.disabled=true; st.textContent="Kaydediliyor…";
+ let local=false, synced=null;
+ try{
+   calNotes[d]=nt.value; asaNoteDirty();
+   local=saveLS("cal",calNotes,true)===true;
+   if(local&&window.TRIP&&window.TripStore&&window.TripSync){ clearTimeout(window.TripSync._t); await window.TripSync.flush(); synced=(window.TripSync.status==="saved"); }
+ }catch(e){ if(synced===null&&local)synced=false; }
+ const ok=local&&synced!==false;
+ if(ok) st.textContent=(synced===true)?"Notun kaydedildi.":"Notun kaydedildi (bu cihazda).";
+ else st.textContent=local?"Notun bu cihazda duruyor ama hesabına kaydedilemedi. Biraz sonra tekrar dene.":"Notun kaydedilemedi: bu cihazın depolaması şu an kullanılamıyor ya da dolu.";
+ if(b)b.disabled=false;
+ return ok;
 }
 
 function renderTrips(){ return; }
@@ -1921,7 +1946,7 @@ window.DecisionEngine=(function(){
   function matchGarden(v,g){if(g==='Fark etmez')return true;if(g==='Bahçeli')return v.garden===true;if(g==='Bahçesiz')return v.garden===false;return true;}
   function cmp(a,b){if(a.km!==b.km)return a.km-b.km;var ca=CONF_RANK[a.v.conf]||0,cb=CONF_RANK[b.v.conf]||0;if(ca!==cb)return cb-ca;return String(a.v.id)<String(b.v.id)?-1:(String(a.v.id)>String(b.v.id)?1:0);}
   function distTxt(km){return km<1?('~'+Math.round(km*1000)+' m'):('~'+km.toFixed(1)+' km');}
-  function build(x,f,fav){var v=x.v,km=x.km,why=[],flags=[];why.push('Sana '+distTxt(km));why.push(f.mode+' filtrenle eşleşiyor');var ow=slotOpen(v,f.time);if(ow===true)why.push(f.time+' saatlerinde açık');else if(ow===null){flags.push('hours_unverified');why.push('⚠ Saat bilgisini kontrol et');}if(f.resv==='Yok'&&v.resv==='no')why.push('Rezervasyon gerekmiyor');if(f.garden==='Bahçeli'&&v.garden===true)why.push('Bahçesi var');if(fav&&fav.indexOf(v.id)>-1)why.push('Favorilerinde');return{v:v,km:km,why:why,flags:flags,unmet:[]};}
+  function build(x,f,fav){var v=x.v,km=x.km,why=[],flags=[];why.push('Sana '+distTxt(km));why.push(f.mode+' filtrenle eşleşiyor');var ow=slotOpen(v,f.time);if(ow===true)why.push(f.time+' saatlerinde açık');else if(ow===null){flags.push('hours_unverified');why.push('⚠ Saat bilgisi doğrulanmadı');}if(f.resv==='Yok'&&v.resv==='no')why.push('Rezervasyon gerekmiyor');if(f.garden==='Bahçeli'&&v.garden===true)why.push('Bahçesi var');if(fav&&fav.indexOf(v.id)>-1)why.push('Listende');return{v:v,km:km,why:why,flags:flags,unmet:[]};}
   function decide(o){o=o||{};var loc=o.loc,city=o.city,inv=o.inventory||[],fav=o.favIds||[],target=o.targetCount||5;
     var f={mode:o.filters&&o.filters.mode,time:o.filters&&o.filters.time,resv:(o.filters&&o.filters.resv)||'Fark etmez',garden:(o.filters&&o.filters.garden)||'Fark etmez'};
     if(VALID_MODE.indexOf(f.mode)<0||VALID_TIME.indexOf(f.time)<0)return{status:'invalid_filters',reference:null,full:[],alternatives:[]};
@@ -1969,7 +1994,7 @@ function deRenderLocBar(){
   else if(deLocState==='granted'&&deLoc){ el.style.cssText=base+'background:#eaf3ea;color:#2e5c2e'; el.innerHTML='<span class="msym">my_location</span> 📍 Mevcut konumuna göre sonuçlar <button class="btn" style="margin-left:auto" onclick="deRefreshLoc()">Konumumu yenile</button>'; }
   else if(deLocState==='denied'){ el.style.cssText=base+'background:#fbecea;color:#8a2b1e'; el.innerHTML='Yakınındaki yerleri gösterebilmemiz için konum izni gerekiyor. <button class="btn primary" style="margin-left:auto" onclick="deRequestLoc()">Konum iznini etkinleştir</button>'; }
   else if(deLocState==='out_of_area'){ el.style.cssText=base+'background:#f4efe2;color:#5a4a2a'; el.innerHTML='<span class="msym">my_location</span> 📍 Konumun alındı, ancak '+CITY+' kapsama alanı dışında. <button class="btn" style="margin-left:auto" onclick="deRefreshLoc()">Konumumu yenile</button>'; }
-  else if(deLocState==='error'){ el.style.cssText=base+'background:#fbecea;color:#8a2b1e'; el.innerHTML='Konumun alınamadı. Cihazının konum servislerini kontrol et. <button class="btn" style="margin-left:auto" onclick="deRequestLoc()">Tekrar dene</button>'; }
+  else if(deLocState==='error'){ el.style.cssText=base+'background:#fbecea;color:#8a2b1e'; el.innerHTML='Konumun alınamadı. Cihazının konum servislerinin açık olduğundan emin ol. <button class="btn" style="margin-left:auto" onclick="deRequestLoc()">Tekrar dene</button>'; }
   else { el.style.cssText='display:none'; el.innerHTML=''; }
 }
 function deRequestLoc(){
@@ -2003,7 +2028,7 @@ function deCard(r,isAlt){
     unmet+
     '<div style="margin:6px 0">'+why+'</div>'+
     (v.desc?'<div class="tagline" style="margin:5px 0">'+esc(v.desc)+'</div>':'')+
-    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');runDE()">'+(isFav(v.id)?'❤️ Kayıtlı':'🤍 Kaydet')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><button class="btn primary" onclick="winopen(\''+gmaps(v)+'\')">📍 Google</button><button class="btn" onclick="showOnMap(\''+v.id+'\')">🗺️ Haritamızda</button><button class="btn" onclick="toggleFav(\''+v.id+'\');runDE()">'+(isFav(v.id)?'❤️ Listemde':'🤍 Listeme ekle')+'</button><button class="btn" onclick="openVenue(\''+v.id+'\')">💬 Yorum</button></div>'+
   '</div></div>';
 }
 function deRenderResults(res){
@@ -2311,7 +2336,7 @@ const ASA = (function(){
     const toAdd=local.filter(id=>!cloud.includes(id)).map(id=>({email,venue_id:id,city:CITY}));
     if(toAdd.length){ try{ await db.from("favorites").upsert(toAdd,{onConflict:"user_id,venue_id",ignoreDuplicates:true}); }catch(e){} }
     favSet=new Set(union);
-    if(!ASA_ST.set("fav",[...favSet])&&ASA_ST.writable()) ASA_ST.say("Hesabındaki favoriler bu cihaza kaydedilemedi: cihaz depolaması dolu. Bu oturumda gösteriliyor; bu cihazdaki kayıtlı favorilerin değişmedi.");   // WP3: birleşim asa:ams:fav'a yazılır (ams_fav dokunulmaz)
+    if(!ASA_ST.set("fav",[...favSet])&&ASA_ST.writable()) ASA_ST.say("Hesabındaki liste bu cihaza kaydedilemedi: cihaz depolaması dolu. Bu oturumda gösteriliyor; bu cihazdaki listen değişmedi.");   // WP3: birleşim asa:ams:fav'a yazılır (ams_fav dokunulmaz)
     // PUAN: favori sayısından DEĞİL; members.points güvenli aksiyon RPC'leriyle güncellenir.
     member={uid,email,display_name:m.display_name,tier:m.tier||"Kaşif",points:m.points||0};
     session={uid,email,display_name:m.display_name};
@@ -2442,7 +2467,7 @@ const ASA = (function(){
       }
       h+='<div id="asaErr" class="text-error text-[13px] mb-2 empty:mb-0"></div>'
         +'<button class="w-full rounded-full bg-primary text-on-primary font-button text-button py-3 hover:opacity-90 transition-opacity" id="asaAuthBtn">'+(su?"Kayıt ol":"Giriş yap")+'</button>'
-        +'<p class="text-on-surface-variant text-[12.5px] leading-relaxed mt-3">'+(su?"Kendi şifreni belirliyorsun; cinsiyet ve şehir zorunlu. Girince favorilerin buluta kaydolur, tüm cihazlarında görünür.":"E-posta ve şifrenle giriş yap. Hesabın yoksa ‘Kayıt ol’ sekmesine geç.")+'</p>'
+        +'<p class="text-on-surface-variant text-[12.5px] leading-relaxed mt-3">'+(su?"Kendi şifreni belirliyorsun; cinsiyet ve şehir zorunlu. Girince listen hesabına kaydolur, tüm cihazlarında görünür.":"E-posta ve şifrenle giriş yap. Hesabın yoksa ‘Kayıt ol’ sekmesine geç.")+'</p>'
         +'</div>';
       box.innerHTML=h;
       const b=el("asaAuthBtn");
@@ -2463,7 +2488,7 @@ const ASA = (function(){
     el("asaLogout").onclick=()=>logout();
     renderSeg();
   }
-  const SEGS=[["passport","Kart"],["points","Puan & Seviye"],["likes","Beğeniler"],["posts","Paylaşımlarım"],["taste","Zevk Grupları"],["prefs","E-posta Tercihleri"]];
+  const SEGS=[["passport","Kart"],["points","Puan & Seviye"],["likes","Listem"],["posts","Paylaşımlarım"],["taste","Zevk Grupları"],["prefs","E-posta Tercihleri"]];
   function seg(s){ curSeg=s; render(); }
   function renderSeg(){
     const b=el("segBody"); if(!b) return;
@@ -2581,8 +2606,8 @@ const ASA = (function(){
   }
   function likesHtml(){
     const ids=[...favSet];
-    if(!ids.length) return '<div class="seg-card"><p class="asahint">Henüz bir yeri kaydetmedin. Mekanlar sekmesinden ya da 💬 panelinden ❤ ile ekle.</p></div>';
-    return '<div class="seg-card"><div class="seg-h">Kaydettiklerin ('+ids.length+')</div><div class="likelist">'+ids.map(id=>{const v=byId(id);const nm=v?v.name:id;const ar=v?v.area:"";return '<div class="likerow"><div class="lk-i" onclick="VEN.open(\''+id+'\')"><b>'+esc(nm)+'</b><span>'+esc(ar)+'</span></div><button class="lk-x" title="Kaldır" onclick="ASA.removeFav(\''+id+'\')">✕</button></div>';}).join("")+'</div></div>';
+    if(!ids.length) return '<div class="seg-card"><p class="asahint">Listen henüz boş. Mekânlar sekmesinde ya da 💬 panelinde kalbe dokunarak listene ekle.</p></div>';
+    return '<div class="seg-card"><div class="seg-h">Listem ('+ids.length+')</div><div class="likelist">'+ids.map(id=>{const v=byId(id);const nm=v?v.name:id;const ar=v?v.area:"";return '<div class="likerow"><div class="lk-i" onclick="VEN.open(\''+id+'\')"><b>'+esc(nm)+'</b><span>'+esc(ar)+'</span></div><button class="lk-x" title="Listemden çıkar" aria-label="Listemden çıkar" onclick="ASA.removeFav(\''+id+'\')">✕</button></div>';}).join("")+'</div></div>';
   }
   function removeFav(id){ try{toggleFav(id);}catch(e){} curSeg="likes"; render(); }
   function postsHtml(){ return '<div class="seg-card"><div class="seg-h">Yorumların & fotoğrafların</div><div id="segPosts" class="asahint">Yükleniyor…</div></div>'; }
@@ -2593,13 +2618,13 @@ const ASA = (function(){
     e2.innerHTML=list.map(c=>{const v=byId(c.venue_id);const nm=v?v.name:c.venue_id;return '<div class="march"><div class="marchh">📍 '+esc(nm)+' <button class="lk-x" style="float:right" title="Sil" onclick="ASA.delPost('+c.id+')">✕</button></div>'+(c.body?'<div class="marchb">'+esc(c.body)+'</div>':'')+(c.photo_url?'<img class="marchp" src="'+c.photo_url+'">':'')+'</div>';}).join("");
   }
   async function delPost(id){ try{ await db.rpc("delete_comment_with_points",{p_comment_id:id}); }catch(e){} try{ const {data}=await db.from("comments").select("id,photo_url").eq("user_id",session.uid); postCount=(data||[]).length; photoCount=(data||[]).filter(x=>x.photo_url).length; }catch(e){} loadPosts(); }
-  function tasteHtml(){ return '<div class="seg-card"><div class="seg-h">Zevk grupların</div><p class="asahint" style="margin-top:0">Ortak beğenilere göre sana en yakın üyeler. Onların kaydettiklerinden yeni yerler keşfet.</p><div id="segTaste">Hesaplanıyor…</div></div>'; }
+  function tasteHtml(){ return '<div class="seg-card"><div class="seg-h">Zevk grupların</div><p class="asahint" style="margin-top:0">Listesi seninkine en çok benzeyen üyeler. Onların listelerinden yeni yerler keşfet.</p><div id="segTaste">Hesaplanıyor…</div></div>'; }
   async function loadTaste(){
     const e2=el("segTaste"); if(!e2)return;
-    const my=[...favSet]; if(!my.length){ e2.innerHTML="Önce birkaç yer kaydet; sonra kaydettiğin yerleri kaç kişinin daha sevdiğini görelim."; return; }
+    const my=[...favSet]; if(!my.length){ e2.innerHTML="Önce listene birkaç yer ekle; sonra listendeki yerleri kaç kişinin daha sevdiğini görelim."; return; }
     // Aynı Beyin — anonim: yalnız toplam eşleşme sayısı (kimlik/e-posta/liste sızdırmaz; <3 gizli)
     let rows=[]; try{ const {data}=await db.rpc("similar_brains",{p_venue_ids:my.slice(0,50)}); rows=data||[]; }catch(e){}
-    if(!rows.length){ e2.innerHTML="Şu an yeterli örtüşme yok. Sen ve diğer üyeler kaydettikçe, kaydettiğin yerleri kaç kişinin daha sevdiğini burada göreceksin."; return; }
+    if(!rows.length){ e2.innerHTML="Şu an yeterli örtüşme yok. Sen ve diğer üyeler listelerine ekledikçe, listendeki yerleri kaç kişinin daha sevdiğini burada göreceksin."; return; }
     rows.sort((a,b)=>b.others-a.others);
     e2.innerHTML=rows.map(r=>{const v=byId(r.venue_id);const nm=v?v.name:r.venue_id;return '<div class="tasterow"><div class="tm-h"><b>'+esc(nm)+'</b><span class="tm-c">❤️ '+r.others+' kişi de burayı sevdi</span></div></div>';}).join("");
   }
@@ -2647,8 +2672,8 @@ const VEN=(function(){
 
   function renderHead(v){
     const s=sess();
-    const km=distKm(v);const noteTxt=v.tip||v.note||'';
-    let h='<div class="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-surface-container mb-5"><img class="w-full h-full object-cover" src="'+venueImg(v)+'"></div>'
+    const km=distKm(v);const noteTxt=publicNote(v.tip||'');   // WP7 (5/n): venues.note sitede gösterilmez
+    let h='<div class="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-surface-container mb-5">'+venueMedia(v,"w-full h-full object-cover")+'</div>'
       +'<div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">'+esc((v.type||'').toUpperCase())+'</div>'
       +'<h3 class="font-headline-lg text-[28px] leading-tight text-primary mb-2">'+esc(v.name)+'</h3>'
       +(v.desc?'<p class="font-body-lg text-body-lg text-on-surface/90 mb-4">'+esc(v.desc)+'</p>':'')
@@ -2660,7 +2685,7 @@ const VEN=(function(){
       +(noteTxt?'<div class="bg-surface-container-low rounded-sm p-3 flex items-start gap-2.5 text-on-surface-variant text-[14px] leading-relaxed mb-4"><span class="msym text-[18px] text-primary mt-0.5 shrink-0">chat_bubble</span><span>'+esc(noteTxt)+'</span></div>':'')
       +'<div class="flex flex-wrap gap-2 mb-5">'
       +'<button class="inline-flex items-center gap-1 rounded-full bg-primary text-on-primary font-button text-button px-4 py-2.5 hover:opacity-90 transition-opacity" onclick="winopen(\''+gmaps(v)+'\')"><span class="msym text-[16px]">place</span> Google</button>'
-      +'<button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2.5 hover:bg-surface-container transition-colors" id="vFav" onclick="VEN.fav()">'+(isFav(v.id)?"❤️ Kayıtlı":"🤍 Kaydet")+'</button>'
+      +'<button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2.5 hover:bg-surface-container transition-colors" id="vFav" onclick="VEN.fav()">'+(isFav(v.id)?"❤️ Listemde":"🤍 Listeme ekle")+'</button>'
       +'<button class="rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2.5 hover:bg-surface-container transition-colors" onclick="VEN.close();showOnMap(\''+v.id+'\')">Haritada</button>'
       +'</div>';
     h+='<div class="vcomposer">';
@@ -2674,7 +2699,7 @@ const VEN=(function(){
     document.getElementById("venueBody").innerHTML=h;
   }
 
-  function fav(){ if(curVenue){ toggleFav(curVenue.id); const b=document.getElementById("vFav"); if(b)b.innerHTML=isFav(curVenue.id)?"❤️ Kayıtlı":"🤍 Kaydet"; } }
+  function fav(){ if(curVenue){ toggleFav(curVenue.id); const b=document.getElementById("vFav"); if(b)b.innerHTML=isFav(curVenue.id)?"❤️ Listemde":"🤍 Listeme ekle"; } }
 
   function photo(ev){ const f=ev.target.files&&ev.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=()=>{const img=new Image();img.onload=()=>{const mx=900;let w=img.width,h=img.height;if(w>mx){h=Math.round(h*mx/w);w=mx;}const cv=document.createElement("canvas");cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h);pendingPhoto=cv.toDataURL("image/jpeg",0.7);var pn=document.getElementById("vPhotoName");if(pn)pn.textContent="✓ fotoğraf hazır";};img.src=rd.result;};rd.readAsDataURL(f); }
 

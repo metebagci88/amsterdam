@@ -323,8 +323,12 @@ test("both pages load lib/asa-name exactly once, pinned to sha256(16) of the fil
     assert.ok(html.search(/<script>\s*\/\* ASALOCAL TripStore/) > html.indexOf(tag), name + ": before the first inline script");
   }
   for (const p of ["kopenhag/index.html", "amsterdam.html", "amsterdam_index_UID.html", "admin.html", "CDP3B/admin.html"]) {
+    if (p === "amsterdam_index_UID.html" && !existsSync(join(REPO, p))) continue; // retired in WP7 (301 to /amsterdam/)
     const h = read(p);
     assert.equal(/asa_name|asa-name|ASA_NAME|member_set_name/.test(h), false, p + " does not load WP5");
+    // WP7 (6/n): CDP3B/admin.html's venue editor gets WP7 labels (and the e-mail module may change in its own PR), so it is
+    // no longer pinned to the WP5 parent; it still must not load WP5 (checked above).
+    if (p === "CDP3B/admin.html") continue;
     const prev = show(PARENT, p);
     if (prev !== null) assert.equal(h, prev, p + " byte-identical to " + PARENT);
   }

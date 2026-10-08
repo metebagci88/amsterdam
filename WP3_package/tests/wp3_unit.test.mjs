@@ -141,6 +141,7 @@ test("lifecycle: old tab writes legacy after migration → conflict → acknowle
   assert.equal(s.getItem("asa:ams:dayven"), '{"g1":["a"]}');
 });
 
+// WP7 (5/n): seeding stopped; this predicate now only decides whether a stored list (new or legacy key) is read.
 test("favorite seed precondition: present means new OR legacy key exists (any form)", () => {
   const present = (seed) => asa.get(mem(seed), "ams", "fav").source !== "missing";
   assert.equal(present({}), false);

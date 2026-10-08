@@ -163,19 +163,20 @@ const LEGACY_SEED = {
 const scenarios = [];
 const sc = (name, fn, opts = {}) => scenarios.push({ name, fn, opts });
 
-sc("fresh user: favorites seeded once into asa:ams:fav only", async ({ page, origin, vp, t }) => {
+// WP7 (5/n): seeding stopped — a fresh visitor's Listem starts empty; asa:ams:fav is written only when the user adds a venue.
+sc("fresh user: no favourites seeded; the first heart writes asa:ams:fav only", async ({ page, origin, vp, t }) => {
   await seedStorage(page, origin, {});
   await openCity(page, origin);
   const d1 = await dump(page);
-  const fav = JSON.parse(d1["asa:ams:fav"] || "null");
-  t("seeded array with barpif", Array.isArray(fav) && fav.includes("barpif") && new Set(fav).size === fav.length);
+  t("no asa:ams:fav written at load", !("asa:ams:fav" in d1));
+  t("no favourite in memory", !(await page.evaluate(() => V.some((v) => isFav(v.id)))));
   t("no legacy key written", LEGACY.every((k) => !(k in d1)));
   const m = JSON.parse(d1["asa:ams:_migrated"] || "null");
   t("marker v1 verified", m && m.v === 1 && m.verified === true && m.legacy_kept === true);
   t("notice hidden", !(await notice(page)).visible);
   await page.evaluate(() => toggleFav("barpif"));
   const afterToggle = (await dump(page))["asa:ams:fav"];
-  t("toggle removed barpif", !JSON.parse(afterToggle).includes("barpif"));
+  t("toggle added barpif (WP7: list starts empty)", JSON.stringify(JSON.parse(afterToggle)) === JSON.stringify(["barpif"]));
   await openCity(page, origin);
   const d2 = await dump(page);
   t("reload does not reseed", d2["asa:ams:fav"] === afterToggle);
@@ -183,6 +184,7 @@ sc("fresh user: favorites seeded once into asa:ams:fav only", async ({ page, ori
   t("no overflow", await noOverflow(page, vp));
 });
 
+// WP7 (5/n): seeding is gone; this still guards that a corrupt legacy value is kept byte-identical and nothing is written over it.
 sc("seed guard: an unreadable legacy favorites value is 'not empty' — no seed, legacy kept", async ({ page, origin, t }) => {
   await seedStorage(page, origin, { ams_fav: "{bozuk" });
   await openCity(page, origin);
@@ -223,7 +225,8 @@ sc("conflict (legacy != new): banner shown, new authoritative, nothing overwritt
   const n = await notice(page);
   t("notice visible", n.visible);
   t("notice is a polite status region", n.role === "status" && n.live === "polite");
-  t("notice names Favoriler + Takvim notları in Turkish", /iki farklı kopyası/.test(n.text) && /Favoriler/.test(n.text) && /Takvim notları/.test(n.text) && /eski kopya silinmedi/.test(n.text));
+  // WP7 (5/n): storage names follow the public vocabulary (fav → "Listem", cal → "Kendi notların").
+  t("notice names Listem + Kendi notların in Turkish", /iki farklı kopyası/.test(n.text) && /Listem/.test(n.text) && /Kendi notların/.test(n.text) && /eski kopya silinmedi/.test(n.text));
   const ui = await page.evaluate(() => ({ chun: isFav("chun"), barpif: isFav("barpif"), g1: calNotes.g1 }));
   t("new value used", ui.chun && !ui.barpif && ui.g1 === "yeni");
   const d = await dump(page);
@@ -249,7 +252,7 @@ sc("conflict from an old tab writing legacy after migration", async ({ page, ori
   await page.evaluate(() => { localStorage.setItem("ams_plan", JSON.stringify({ g1: "eski sekme" })); });
   await openCity(page, origin);
   const n = await notice(page);
-  t("notice for Gün planı notları", n.visible && /Gün planı notları/.test(n.text));
+  t("notice for Plan notların", n.visible && /Plan notların/.test(n.text));   // WP7 (5/n): plan → "Plan notların"
   t("page uses new value", (await page.evaluate(() => calPlans.g1)) === "ilk");
 });
 
@@ -321,12 +324,22 @@ sc("unknown-city trip (Paris) migrated by policy A is refused on Amsterdam", asy
   t("banner hidden + sample calendar", await page.evaluate(() => document.getElementById("tripBanner").classList.contains("hide") && CAL.sample === true));
 });
 
-sc("?city=Kopenhag on the Amsterdam page: storage locked, nothing read or written", async ({ page, origin, t }) => {
+// WP7 beta: ?city=Kopenhag no longer renders a Kopenhag view on the Amsterdam page; it goes to the honest stub.
+sc("?city=Kopenhag on the Amsterdam page → /kopenhag/ stub (WP7), storage unchanged", async ({ page, origin, t }) => {
   await seedStorage(page, origin, Object.assign({}, LEGACY_SEED, { "asa:cph:fav": JSON.stringify(["cph-x"]) }));
   const before = await dump(page);
-  await openCity(page, origin, "?city=Kopenhag");
+  await Promise.all([page.waitForURL(/\/kopenhag\/$/, { timeout: 10000 }), page.goto(origin + "/amsterdam/?city=Kopenhag", { waitUntil: "commit" })]);
+  t("redirected to the stub", new URL(page.url()).pathname === "/kopenhag/", page.url());
+  t("storage unchanged (no migration, no writes)", JSON.stringify(await dump(page)) === JSON.stringify(before));
+});
+
+// The storage lock for a foreign ?city= label still holds for any other (unopened) city.
+sc("?city=Paris on the Amsterdam page: storage locked, nothing read or written", async ({ page, origin, t }) => {
+  await seedStorage(page, origin, Object.assign({}, LEGACY_SEED, { "asa:cph:fav": JSON.stringify(["cph-x"]) }));
+  const before = await dump(page);
+  await openCity(page, origin, "?city=Paris");
   const n = await notice(page);
-  t("locked notice", n.visible && /Amsterdam rehberidir/.test(n.text) && /Kopenhag/.test(n.text));
+  t("locked notice", n.visible && /Amsterdam rehberidir/.test(n.text) && /Paris/.test(n.text));
   t("Amsterdam favorites not shown", !(await page.evaluate(() => isFav("barpif"))));
   await page.evaluate(() => toggleFav("barpif"));
   const after = await dump(page);
@@ -430,10 +443,12 @@ sc("homepage: Trip Policy A (Amsterdam→ams, Kopenhag→cph, Paris→none), no 
   await page.waitForFunction(() => window.AsaStorage && document.getElementById("countrySel").options.length > 1);
   await page.selectOption("#countrySel", "fr");
   await page.selectOption("#citySel", "Paris");
-  await page.click("#goBtn");
+  // WP7 beta: a "yakında" city has a disabled button and no interest/save promise (was: "ilgimi bırak" + no write).
+  t("Paris: button disabled, no interest promise", await page.isDisabled("#goBtn") && !/İlgin kaydedildi/.test(await page.content()));
+  await page.evaluate(() => document.getElementById("goBtn").click());
   await page.waitForTimeout(150);
   let d = await dump(page);
-  t("Paris interest writes no trip key", !Object.keys(d).some((k) => /^asa:(ams|cph):trip$/.test(k)) && d.asa_trip === oldTrip);
+  t("Paris writes no trip key", !Object.keys(d).some((k) => /^asa:(ams|cph):trip$/.test(k)) && d.asa_trip === oldTrip);
   await page.goto(origin + "/", { waitUntil: "load" });
   await page.waitForFunction(() => document.getElementById("countrySel").options.length > 1);
   await page.selectOption("#countrySel", "nl");
@@ -657,7 +672,7 @@ sc("real quota ~45% photos (review #2/#3): no duplicate at load; delete and add 
   t("legacy photos kept byte-identical", d.ams_calphoto === blob && JSON.parse(d["asa:ams:_migrated"]).keys.ams_calphoto.state === "superseded");
   await fillToFull(page);
   await page.evaluate(() => toggleFav("winkel43"));
-  t("refused favorite: message", await waitDialog(page, dialogs, /Favorin kaydedilemedi/), JSON.stringify(dialogs));
+  t("refused favorite: message", await waitDialog(page, dialogs, /Listen güncellenemedi/), JSON.stringify(dialogs));   // WP7 (5/n): Listem wording
   t("refused favorite: undone on screen", !(await page.evaluate(() => isFav("winkel43"))));
   await page.evaluate(() => localStorage.removeItem("wp3_fill"));
   await openCity(page, origin);

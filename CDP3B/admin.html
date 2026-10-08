@@ -296,7 +296,7 @@ async function renderOzet(){
   const v=DATA.venues, act=v.filter(x=>x.active).length, ck=v.filter(x=>x.conf==="low").length;
   const staticCards='<div class="cards">'+stat(v.length,"Mekan")+stat(act,"Aktif mekan")
     +stat(DATA.cities.filter(c=>c.status==="active").length+"/"+DATA.cities.length,"Aktif/Toplam şehir")
-    +stat(DATA.ads.filter(a=>a.active).length,"Aktif reklam")+stat(ck,"Kontrol gereken")+'</div>';
+    +stat(DATA.ads.filter(a=>a.active).length,"Aktif reklam")+stat(ck,"Teyit bekleyen")+'</div>';   // WP7 (6/n): conf=low sayısı
   const skel='<div class="cards">'+Array(6).fill('<div class="stat skel" style="height:64px"></div>').join("")+'</div>';
   shell('<div id="ozetBody">'+staticCards+skel+'</div>');
   if(!(await isPrivAuthed())){ $("ozetBody").innerHTML=staticCards+privLoginHTML(); wirePrivLogin(()=>renderOzet()); return; }
@@ -401,7 +401,7 @@ function renderVenues(){
     +'<span class="muted">'+list.length+' / '+DATA.venues.length+'</span></div>'
     +'<div class="tablewrap"><table><thead><tr><th>Ad</th><th>Şehir · Semt</th><th>Tür</th><th>Etiketler</th><th>Saat</th><th>Durum</th><th></th></tr></thead><tbody>'
     +list.map(v=>'<tr>'
-      +'<td><b>'+esc(v.name)+'</b>'+(v.conf==="low"?' <span class="pill soon">kontrol</span>':'')+(v.sponsored?' <span class="pill sp">sponsor</span>':'')+'</td>'
+      +'<td><b>'+esc(v.name)+'</b>'+(v.conf==="low"?' <span class="pill soon">Teyit et</span>':'')+(v.sponsored?' <span class="pill sp">sponsor</span>':'')+'</td>'
       +'<td>'+esc(v.city)+'<div class="muted">'+esc(v.area||"")+'</div></td>'
       +'<td>'+esc(v.type||"")+'</td>'
       +'<td class="muted">'+esc((v.tags||[]).join(", "))+'</td>'
@@ -427,13 +427,20 @@ function editVenue(id){
   const ta=(k,l,val)=>'<div class="fld" style="flex:1 1 100%"><label>'+l+'</label><textarea id="f_'+k+'">'+esc(val)+'</textarea></div>';
   const chk=(k,l,val)=>'<div class="fld check"><input type="checkbox" id="f_'+k+'" '+(val?"checked":"")+'><label>'+l+'</label></div>';
   const self=(k,l,val,opts)=>'<div class="fld"><label>'+l+'</label><select id="f_'+k+'">'+opts.map(o=>'<option'+(val===o?" selected":"")+'>'+o+'</option>').join("")+'</select></div>';
+  // WP7 (6/n): etiketli seçim [kod, etiket]; kayıtlı değer AYNEN korunur — listede olmayan kod "(diğer: kod)" olarak seçili
+  // gösterilir ve kaydet aynı kodu geri yazar (asla yeniden yazılmaz); boş değer emptyLbl ile seçili kalır (kaydet → null).
+  const lsel=(k,l,val,opts,emptyLbl)=>{ val=(val==null?"":String(val)); const all=opts.some(o=>o[0]===val)?opts:[[val,val===""?(emptyLbl||"(boş)"):"(diğer: "+val+")"]].concat(opts);
+    return '<div class="fld"><label>'+l+'</label><select id="f_'+k+'">'+all.map(o=>'<option value="'+esc(o[0])+'"'+(o[0]===val?" selected":"")+'>'+esc(o[1])+'</option>').join("")+'</select></div>'; };
+  // WP7 (6/n): Güven — 'medium' (11 mekân) ve eski 'med' ikisi de "Orta"; açıp kaydetmek artık sessizce 'high' yazmaz.
+  const confOpts=[["high","Yüksek"],[v.conf==="med"?"med":"medium","Orta"],["low","Düşük"]];
+  const SRC_OPTS=[["user","Editör seçimi"],["deck","Araştırma notu · önceki"],["extra","Araştırma notu · ek"],["audio","Sesli not"],["poi","Gezilecek yer"]];
   $("sheet").innerHTML='<h2>'+(isNew?"Yeni mekan":"Mekanı düzenle")+'</h2>'
     +'<div class="frow">'+f("id","ID (kısa, benzersiz)",v.id)+f("name","Ad",v.name||"")+'</div>'
     +'<div class="frow">'+f("city","Şehir",v.city||"")+f("area","Semt",v.area||"")+f("type","Tür",v.type||"")+'</div>'
     +'<div class="frow">'+f("tags","Etiketler (virgülle)",(v.tags||[]).join(", "))+'</div>'
     +'<div class="frow">'+f("cats","Kategoriler (virgülle)",(v.cats||[]).join(", "))+f("best","Best (virgülle)",(v.best||[]).join(", "))+'</div>'
-    +'<div class="frow">'+f("hours","Çalışma saatleri",v.hours||"")+self("resv","Rezervasyon",v.resv||"unknown",["no","rec","req","unknown"])+self("conf","Güven",v.conf||"high",["high","med","low"])+'</div>'
-    +'<div class="frow">'+f("lat","Enlem (lat)",v.lat==null?"":v.lat)+f("lng","Boylam (lng)",v.lng==null?"":v.lng)+f("src","Kaynak",v.src||"")+'</div>'
+    +'<div class="frow">'+f("hours","Çalışma saatleri",v.hours||"")+self("resv","Rezervasyon",v.resv||"unknown",["no","rec","req","unknown"])+lsel("conf","Güven",isNew?(v.conf||"high"):v.conf,confOpts)+'</div>'
+    +'<div class="frow">'+f("lat","Enlem (lat)",v.lat==null?"":v.lat)+f("lng","Boylam (lng)",v.lng==null?"":v.lng)+lsel("src","Kaynak",v.src,SRC_OPTS,"(seçilmedi)")+'</div>'
     +'<div class="fld" style="flex:1 1 100%"><label>Harita — tıkla veya pini sürükle; lat/lng kutuları otomatik güncellenir</label><div id="venueMap"></div><div class="muted" id="vcoordmsg" style="font-size:12px;margin-top:4px"></div></div>'
     +'<div class="frow"><div class="fld"><label>Geçici kapanış</label><select id="f_closure_type" onchange="vClosureTypeChange()">'
         +'<option value="open"'+(ctype==="open"?" selected":"")+'>Açık</option>'
@@ -443,16 +450,16 @@ function editVenue(id){
       +'<div class="fld" id="f_cu_wrap"><label>Kapalı — bu tarihe kadar (YYYY-MM-DD)</label><input type="date" id="f_closed_until" value="'+esc(v.closed_until?String(v.closed_until).slice(0,10):"")+'" oninput="vClosureTypeChange()"></div>'
       +'<div class="fld"><label>&nbsp;</label><button type="button" class="btn sm" onclick="vCloseWeek()">1 hafta kapat</button></div></div>'
     +'<div class="frow">'+f("web","Web",v.web||"")+f("ig","Instagram",v.ig||"")+'</div>'
-    +'<div class="fld" style="flex:1 1 100%"><label>Fotoğraf (boşsa kategori görseli kullanılır)</label>'
+    +'<div class="fld" style="flex:1 1 100%"><label>Fotoğraf (boşsa sitede nötr yer tutucu gösterilir)</label>'
       +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
         +'<input id="f_photo_url" value="'+esc(v.photo_url||"")+'" oninput="venuePhotoPrev()" placeholder="Foto URL (veya soldan yükle)" style="flex:1;min-width:220px">'
         +'<label class="btn" style="cursor:pointer">Fotoğraf yükle<input type="file" accept="image/*" hidden onchange="venuePhotoUpload(event)"></label>'
         +'<span id="f_upmsg" class="muted" style="font-size:12px"></span>'
       +'</div>'
       +'<div id="vPhotoPrev" style="margin-top:8px"></div></div>'
-    +ta("tip","Yerli tüyosu (tip)",v.tip||"")
-    +ta("description","Açıklama",v.description||"")
-    +ta("note","Not",v.note||"")
+    +ta("tip","Yerli tüyosu (sitede görünür)",v.tip||"")
+    +ta("description","Açıklama (sitede görünür)",v.description||"")
+    +ta("note","Editör notu (sitede gösterilmez)",v.note||"")
     +'<div class="frow">'+chk("garden","Bahçeli / dış mekan",v.garden)+chk("walk_in","Rezervasyonsuz girilebilir",v.walk_in)+chk("work","Çalışmaya uygun",v.work)+chk("sponsored","Sponsorlu",v.sponsored)+chk("active","Aktif (yayında)",v.active)+'</div>'
     +'<div class="err" id="verr"></div>'
     +'<div class="foot"><button class="btn" onclick="closeModal()">Vazgeç</button>'+(isNew?"":'<button class="btn danger" onclick="delVenue(\''+esc(v.id)+'\')">Sil</button>')+'<button class="btn primary" id="vsave">Kaydet</button></div>';
@@ -508,7 +515,8 @@ async function saveVenue(isNew){
   else if(ctype==="manual"){ temporarily_closed=true; }
   const row={id, name:g("name").trim(), city:g("city").trim()||"Amsterdam", area:g("area").trim(), type:g("type").trim(),
     tags:arr(g("tags")), cats:arr(g("cats")), best:arr(g("best")), hours:g("hours").trim()||null,
-    resv:g("resv"), conf:g("conf"), src:g("src").trim()||null, web:g("web").trim()||null, ig:g("ig").trim()||null, photo_url:g("photo_url").trim()||null,
+    resv:g("resv"), conf:g("conf")||null, src:g("src")||null,   // WP7 (6/n): seçimler kayıtlı kodu aynen döndürür
+    web:g("web").trim()||null, ig:g("ig").trim()||null, photo_url:g("photo_url").trim()||null,
     tip:g("tip").trim()||null, description:g("description").trim()||null, note:g("note").trim()||null,
     lat:latV, lng:lngV,
     garden:gc("garden"), walk_in:gc("walk_in"), work:gc("work"), sponsored:gc("sponsored"), active:gc("active"),

@@ -476,6 +476,16 @@ sc("Yeni seyahat: country+city only → no trip is saved; with both dates → ex
   const v = ins[0] && ins[0].value;
   t("insert row: own user, city, both dates", v && v.user_id === UID && v.city === "Amsterdam" && v.start_date === s && v.end_date === e, JSON.stringify(v));
   t("both dates → city page with ?trip=<id>", /\/amsterdam\/\?trip=\d+&city=Amsterdam$/.test(page.url()), page.url());
+  // WP7 beta: Kopenhag is "hazırlanıyor" — even a member with both dates gets the stub and NO server trip.
+  const before = inserts().length;
+  await openHome(page, origin, { member: true });
+  await page.selectOption("#countrySel", "dk");
+  await page.selectOption("#citySel", "Kopenhag");
+  await page.fill("#dStart", s);
+  await page.fill("#dEnd", e);
+  t("Kopenhag CTA says hazırlanıyor", /hazırlanıyor/.test(await page.textContent("#goBtn")), await page.textContent("#goBtn"));
+  await Promise.all([page.waitForURL(/\/kopenhag\//, { timeout: 10000 }), page.click("#goBtn")]);
+  t("Kopenhag (hazırlanıyor) → no trips insert, stub opened", inserts().length === before && /\/kopenhag\//.test(page.url()), JSON.stringify(inserts().slice(before)));
 }, { supa: memberSupa({ trips: [] }) });
 
 sc("XSS: HTML in display_name / trip city renders as text, never as markup", async ({ page, origin, vp, t, localHits }) => {

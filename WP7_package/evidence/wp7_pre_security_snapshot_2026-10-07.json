@@ -1,0 +1,826 @@
+{
+ "captured_utc": "2026-10-07T21:30Z",
+ "data": {
+  "wp7_01": [
+   {
+    "flags": {
+     "allowlist_active": 0,
+     "app_privacy_anon_ttl_set": false,
+     "email_provider": {
+      "essential_enabled": false,
+      "public_go_live": false,
+      "reply_to_md5": "63b149350d6d31a9eab40bdc7f7a8c21",
+      "service_enabled": false
+     },
+     "marketing": {
+      "controller_set": false,
+      "marketing_capture_enabled": false,
+      "marketing_enabled": false
+     },
+     "service_pref_defaults": [
+      {
+       "k": "trip_created_confirmation",
+       "on": null
+      },
+      {
+       "k": "trip_updated_confirmation",
+       "on": null
+      },
+      {
+       "k": "trip_start_minus_7_days",
+       "on": null
+      },
+      {
+       "k": "trip_start_minus_1_day",
+       "on": null
+      },
+      {
+       "k": "plan_saved_confirmation",
+       "on": null
+      },
+      {
+       "k": "plan_reminder",
+       "on": null
+      },
+      {
+       "k": "welcome_service_email",
+       "on": true
+      }
+     ]
+    }
+   }
+  ],
+  "wp7_03": [],
+  "wp7_04": [
+   {
+    "non_internal_http_triggers": 0
+   }
+  ],
+  "wp7_05": [
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "admin_access_log",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "admin_rate_events",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "admin_roles",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "admin_settings",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "admin_users",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "admin_write_log",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "admin_write_ops",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 1,
+    "anon_select_grant": true,
+    "anon_write_grant": true,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 2,
+    "relkind": "r",
+    "relname": "ads",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "anon_consent_current",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "anon_consent_events",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "anon_consent_subject",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "app_privacy_config",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "audit_log",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "behavior_event_log",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 1,
+    "anon_select_grant": true,
+    "anon_write_grant": true,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 2,
+    "relkind": "r",
+    "relname": "cities",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 1,
+    "relkind": "r",
+    "relname": "comment_reactions",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 4,
+    "relkind": "r",
+    "relname": "comments",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "consent_purpose_doc",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "consent_text_approvals",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "consent_text_versions",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "consent_write_ops",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "contact_suppression_current",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "contact_suppression_events",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "controller_identity_versions",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "email_assets",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "email_outbox",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "email_provider_config",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "email_send_allowlist",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "email_send_events",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "email_template_versions",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "email_templates",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "email_version_assets",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 1,
+    "relkind": "r",
+    "relname": "favorites",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "legal_notice_events",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "marketing_config",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "member_admin_metadata",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "member_consent_current",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "member_consent_events",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "member_ref",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "member_service_pref_current",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "member_service_pref_events",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 3,
+    "relkind": "r",
+    "relname": "members",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 1,
+    "relkind": "r",
+    "relname": "point_catalog",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": true,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 1,
+    "relkind": "r",
+    "relname": "point_events",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "readiness_attestations",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "segments",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "service_pref_defaults",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 1,
+    "anon_select_grant": true,
+    "anon_write_grant": true,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 2,
+    "relkind": "r",
+    "relname": "site_content",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": true,
+    "anon_write_grant": true,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "site_content_versions",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 2,
+    "relkind": "r",
+    "relname": "trip_plan_versions",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 4,
+    "relkind": "r",
+    "relname": "trips",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": true,
+    "policies": 0,
+    "relkind": "r",
+    "relname": "unsubscribe_tokens",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 1,
+    "anon_select_grant": true,
+    "anon_write_grant": true,
+    "auth_write_grant": true,
+    "force_rls": false,
+    "policies": 2,
+    "relkind": "r",
+    "relname": "venues",
+    "rls": true
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": false,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "v",
+    "relname": "behavior_events",
+    "rls": false
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": true,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "v",
+    "relname": "comment_reaction_counts",
+    "rls": false
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": true,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "v",
+    "relname": "comments_public",
+    "rls": false
+   },
+   {
+    "anon_or_public_policies": 0,
+    "anon_select_grant": true,
+    "anon_write_grant": false,
+    "auth_write_grant": false,
+    "force_rls": false,
+    "policies": 0,
+    "relkind": "v",
+    "relname": "member_public",
+    "rls": false
+   }
+  ],
+  "wp7_06": [],
+  "wp7_07": [
+   {
+    "rls_off_tables": 0,
+    "rls_off_with_anon_grant": 0,
+    "total": 53
+   }
+  ],
+  "wp7_08": [
+   {
+    "writable_views_for_anon_or_auth": 0
+   }
+  ],
+  "wp7_09": [
+   {
+    "anon_exec": 0,
+    "auth_exec": 23,
+    "no_search_path": 0,
+    "total_secdef": 143
+   }
+  ],
+  "wp7_10": [],
+  "wp7_11": [
+   {
+    "id": "email-assets-draft",
+    "objects": 0,
+    "public": false
+   },
+   {
+    "id": "email-assets-public",
+    "objects": 0,
+    "public": true
+   },
+   {
+    "id": "media",
+    "objects": 0,
+    "public": true
+   }
+  ],
+  "wp7_12": [
+   {
+    "cmd": "DELETE",
+    "policyname": "media anon delete",
+    "roles": [
+     "service_role"
+    ]
+   },
+   {
+    "cmd": "INSERT",
+    "policyname": "media anon insert",
+    "roles": [
+     "service_role"
+    ]
+   },
+   {
+    "cmd": "SELECT",
+    "policyname": "media anon read",
+    "roles": [
+     "public"
+    ]
+   },
+   {
+    "cmd": "UPDATE",
+    "policyname": "media anon update",
+    "roles": [
+     "service_role"
+    ]
+   }
+  ],
+  "wp7_23": [
+   {
+    "name": "wp5_member_private_name",
+    "version": "20261007184033"
+   },
+   {
+    "name": "sec_public_views_readonly",
+    "version": "20261007175734"
+   },
+   {
+    "name": "sec_media_close_anon_write",
+    "version": "20261007150508"
+   },
+   {
+    "name": "admin_rate_check_media_upload_token",
+    "version": "20260930202808"
+   },
+   {
+    "name": "wse_welcome_service_email_inert",
+    "version": "20260930155253"
+   },
+   {
+    "name": "cdp3d_resend_service_infra",
+    "version": "20260920210337"
+   },
+   {
+    "name": "cdp3c_consent_v9_search_path_hardening",
+    "version": "20260909132039"
+   },
+   {
+    "name": "cdp3c_consent_v9",
+    "version": "20260909111712"
+   }
+  ],
+  "wp7_24": [
+   {
+    "anon_exec": false,
+    "proname": "create_comment_with_points",
+    "prosecdef": true,
+    "src_md5": "327073c2c846b7d428ae91231a6b2d57"
+   },
+   {
+    "anon_exec": false,
+    "proname": "log_behavior_event",
+    "prosecdef": true,
+    "src_md5": "f34d7b0fb7414662800414de35ddc18e"
+   },
+   {
+    "anon_exec": false,
+    "proname": "log_city_view",
+    "prosecdef": true,
+    "src_md5": "5e83cd5a153cadc07d2f99523d2784d2"
+   },
+   {
+    "anon_exec": false,
+    "proname": "member_upsert_profile",
+    "prosecdef": false,
+    "src_md5": "ef472f2ed6dd8398be7c3ed54007ec8a"
+   },
+   {
+    "anon_exec": false,
+    "proname": "similar_brains",
+    "prosecdef": true,
+    "src_md5": "f567e676b94f4dd94a9b170d18f48b0d"
+   }
+  ]
+ },
+ "matrix_md5": "79e1b1e3c001a83a9cd2997a2992e27a",
+ "source": "one read-only execute_sql batch (aggregates, booleans, md5 only)"
+}

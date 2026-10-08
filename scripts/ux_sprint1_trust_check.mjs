@@ -1,6 +1,6 @@
 // UX Sprint 1 acceptance checks. Requires jsdom (not a production dependency).
 //   NODE_PATH=/tmp/uxcheck/node_modules node scripts/ux_sprint1_trust_check.mjs
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -33,7 +33,9 @@ function checkSyntax(name, html) {
 
 const home = read("index.html");
 const city = read("amsterdam/index.html");
-const uid = read("amsterdam_index_UID.html");
+// WP7: the legacy personal UID page is retired (deleted + 301 to /amsterdam/ in _redirects)
+const uidRetired = !existsSync(join(repo, "amsterdam_index_UID.html"));
+const uid = uidRetired ? "" : read("amsterdam_index_UID.html");
 const admin = read("CDP3B/admin.html");
 const cph = read("kopenhag/index.html");
 
@@ -42,17 +44,22 @@ checkSyntax("city", city);
 checkSyntax("admin", admin);
 
 ok("pw property removed from home/city", !/\bpw\s*:/.test(home) && !/\bpw\s*:/.test(city) && !/\bpw\s*:/.test(uid));
+ok("legacy UID page retired with a 301 to /amsterdam/", uidRetired && /^\/amsterdam_index_UID\.html\s+\/amsterdam\/\s+301$/m.test(read("_redirects")));
 ok("footer copyright", home.includes("© 2026 ASALOCAL · yerel gibi"));
 ok("footer has no placeholder links", !/<footer[\s\S]*?href\s*=\s*"#"/.test(home));
-ok("ilgimi birak live region and 4s", /id="goNote"[^>]*aria-live="polite"/.test(home) && home.includes("setTimeout(r,4000)") && home.includes("interestFlight"));
+// WP7 beta: no "ilgimi bırak / İlgin kaydedildi" promise (nothing was stored); "yakında" cities have a disabled button.
+ok("goNote live region; no false interest confirmation", /id="goNote"[^>]*aria-live="polite"/.test(home) && !home.includes("İlgin kaydedildi") && !home.includes("ilgimi bırak") && home.includes("interestFlight"));
 ok("cph stub unchanged marker", /data-asa-city-state\s*=\s*"stub"/.test(cph) && cph.includes("Kopenhag içerikleri hazırlanıyor") && !/<script\b/i.test(cph));
 // WP4: the live consent_get_my_state returns 'not_configured' for a missing row; 'config_pending' stays accepted (older name).
 ok("wse ui predicate intact", city.includes('const pending=(v==="not_configured"||v==="config_pending"); const on=(v===true);'));
 ok("home prefs: not_configured is never shown as Kapalı", /function prefState\(v\)\{ if\(v===true\)return "on"; if\(v===false\)return "off"; if\(v==="not_configured"\|\|v==="config_pending"\)return "unset"; return "unknown"; \}/.test(home) && home.includes('unset:"Varsayılan belirlenmedi"'));
 ok("teaser contract", city.includes("const TEASER_MAX=10") && city.includes(".slice(0,TEASER_MAX)") && city.includes("ids.sort()"));
-ok("paywall copy", ["Devamı üyeler için", "İlk 10 mekân gösteriliyor.", "Üye ol veya giriş yap", "Favorilerime git", "Harita ile liste aynı 10 mekânı gösterir.", "Tam listeye üye olunca ulaşırsın."].every((s) => city.includes(s)));
-ok("fav copy", city.includes("Henüz favorin yok. Mekânlar’dan kalp ile ekle.") && city.includes("Favorilerin bu cihazda. Üye olursan hesabına taşıyabilirsin."));
-ok("seed only when new and legacy fav keys are missing", /const favRaw=ASA_ST\.read\("fav"\);\s*if\(favRaw\.present\)\{[\s\S]{0,200}return;\s*\}\s*if\(!ASA_ST\.writable\(\)\) return;/.test(city));
+// WP7 (5/n): the heart feature is "Listem" — paywall button "Favorilerime git" → "Listeme git".
+ok("paywall copy", ["Devamı üyeler için", "İlk 10 mekân gösteriliyor.", "Üye ol veya giriş yap", "Listeme git", "Harita ile liste aynı 10 mekânı gösterir.", "Tam listeye üye olunca ulaşırsın."].every((s) => city.includes(s)));
+// WP7 (5/n): list copy renamed (empty state + anon device note).
+ok("fav copy", city.includes("Listen henüz boş. Mekânlar’da kalbe dokunarak listene ekle.") && city.includes("Listen bu cihazda. Üye olursan hesabına taşıyabilirsin."));
+// WP7 (5/n): seeding STOPPED — initFav only reads what is stored (new or legacy key) and never copies the editor's picks.
+ok("no seed: initFav reads stored favourites only and never copies v.fav", /const favRaw=ASA_ST\.read\("fav"\);\s*if\(favRaw\.present\)\{[\s\S]{0,200}return;\s*\}[\s\S]{0,400}?\}\)\(\);/.test(city) && !/v&&v\.fav&&typeof v\.id==="string"&&v\.id\) favSet\.add/.test(city));
 ok("accommodation is not a hard CTA block", !city.includes("konaklama noktanı seçmelisin") && city.includes("(Önerilir)"));
 ok("one primary plan cta", (city.match(/data-cta="primary"/g) || []).length === 1);
 ok("admin login a11y", admin.includes('<label for="le">E-posta</label>') && admin.includes('<label for="lp">Şifre</label>') && admin.includes('id="aerr" role="alert"'));
@@ -113,8 +120,9 @@ ok("anon list ids == deterministic teaser", cards().slice().sort().join("|") ===
 ok("teaser is sorted prefix", teaser.join("|") === catalog.slice().sort().join("|").split("|").slice(0, teaser.length).join("|") || teaser.join("|") === catalog.slice(0, 10).join("|"));
 ok("gate when catalog exceeds 10", catalog.length <= 10 || w.document.body.textContent.includes("İlk 10 mekân gösteriliyor."));
 const seeded = JSON.parse(w.localStorage.getItem("asa:ams:fav") || "null");
-ok("empty storage seeded once", Array.isArray(seeded) && new Set(seeded).size === seeded.length && seeded.includes("barpif") && !seeded.includes("poi_noorderkerk"));
-ok("seed writes no legacy key", w.localStorage.getItem("ams_fav") === null);
+// WP7 (5/n): a fresh visitor's list starts empty — nothing is written until the user taps a heart.
+ok("empty storage: no favourites seeded", seeded === null && w.eval("favSet.size") === 0 && !w.isFav("barpif"));
+ok("no seed: no legacy key written", w.localStorage.getItem("ams_fav") === null);
 
 w.setActiveView("map");
 await new Promise((r) => setTimeout(r, 120));
@@ -133,7 +141,7 @@ ok("non-empty storage not reseeded", kept.w.localStorage.getItem("asa:ams:fav") 
 ok("default list hides outside id", !cardsOf(kept.w).includes(outside));
 kept.w.setOnlyChip("fav");
 ok("favorilerim shows outside id", cardsOf(kept.w).includes(outside));
-ok("favorilerim local note", kept.w.document.body.textContent.includes("Favorilerin bu cihazda. Üye olursan hesabına taşıyabilirsin."));
+ok("favorilerim local note", kept.w.document.body.textContent.includes("Listen bu cihazda. Üye olursan hesabına taşıyabilirsin."));   // WP7 (5/n): Listem copy
 kept.w.ASA = { session: { uid: "member-1", email: "a@b.c" } };
 const favChip = [...kept.w.document.querySelectorAll("#chips button")].find((b) => b.dataset.k === "fav");
 if (favChip) favChip.click();
@@ -146,7 +154,7 @@ function cardsOf(win) { return [...win.document.querySelectorAll("[data-venue-id
 const cleared = boot(city, { ams_fav: "[]" });
 ok("explicit empty array stays empty", cleared.w.localStorage.getItem("asa:ams:fav") === "[]" && cleared.w.localStorage.getItem("ams_fav") === "[]");
 cleared.w.setOnlyChip("fav");
-ok("empty favorites copy", cleared.w.document.body.textContent.includes("Henüz favorin yok. Mekânlar’dan kalp ile ekle."));
+ok("empty favorites copy", cleared.w.document.body.textContent.includes("Listen henüz boş. Mekânlar’da kalbe dokunarak listene ekle."));   // WP7 (5/n): Listem copy
 cleared.dom.window.close();
 
 const dup = boot(city, { ams_fav: JSON.stringify(["barpif", "barpif", "chun"]) });
@@ -185,17 +193,19 @@ hw.document.getElementById("citySel").value = "Paris";
 hw.document.getElementById("citySel").onchange({ target: hw.document.getElementById("citySel") });
 const go = hw.document.getElementById("goBtn");
 const note = hw.document.getElementById("goNote");
-ok("interest cta", go.textContent.includes("ilgimi bırak"));
-go.click();
-ok("disabled while in flight", go.disabled === true);
+ok("yakında city: disabled button, honest note", go.disabled === true && go.textContent.includes("yakında") && note.textContent.includes("henüz açılmadı") && note.textContent.includes("Amsterdam"));
 go.click();
 await new Promise((r) => setTimeout(r, 20));
-ok("success message", note.textContent.includes("İlgin kaydedildi"));
-ok("stays disabled during the hold", go.disabled === true);
-await new Promise((r) => setTimeout(r, 3500));
-ok("still visible before 4s", note.textContent.includes("İlgin kaydedildi") && go.disabled === true);
-await new Promise((r) => setTimeout(r, 800));
-ok("enabled after 4s", go.disabled === false);
+ok("yakında city: click does nothing, no save claim", !note.textContent.includes("İlgin kaydedildi") && go.disabled === true);
+hw.document.getElementById("countrySel").value = "dk";
+hw.document.getElementById("countrySel").onchange({ target: hw.document.getElementById("countrySel") });
+hw.document.getElementById("citySel").value = "Kopenhag";
+hw.document.getElementById("citySel").onchange({ target: hw.document.getElementById("citySel") });
+ok("Kopenhag: 'hazırlanıyor' CTA, not an active city", go.disabled === false && go.textContent.includes("hazırlanıyor") && !go.textContent.includes("keşfet") && note.textContent.includes("hazırlanıyor"));
+ok("Kopenhag option labelled (hazırlanıyor)", [...hw.document.getElementById("citySel").options].some((o) => o.textContent === "Kopenhag (hazırlanıyor)"));
+ok("Kopenhag card says hazırlanıyor and links to the stub", [...hw.document.querySelectorAll("#destGrid a")].some((a) => a.getAttribute("href") === "/kopenhag/" && a.textContent.includes("Hazırlanıyor")));
+ok("beta badge", (hw.document.getElementById("betaBadge") || {}).textContent === "Beta");
+ok("canonical www", (hw.document.querySelector('link[rel="canonical"]') || {}).href === "https://www.asalocal.club/");
 homeBoot.dom.window.close();
 
 const adminBoot = boot(admin, {});
