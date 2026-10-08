@@ -29,8 +29,9 @@
 //   sync (WP6)  plan / trip sync integrity on the QA member's QA trip: a browsing reference (List neighbourhood) never rewrites
 //               the saved accommodation · revision conflict between two devices (device B saves; the stale device edits →
 //               newer server plan kept, #tripSyncNotice + kept local copy in asa:ams:plan_sync, upload only via explicit
-//               "Bu cihazdaki sürümü geri yükle") and between two tabs of one browser (stale tab never wins; "Sunucudaki planla
-//               devam et" writes nothing) · trip_save never overlaps on one page · a new trip (2099-03-10..12) opened on the
+//               "Bu cihazdaki sürümü geri yükle") and between two tabs of one browser (stale tab never wins; the first tab's memory
+//               follows the other tab's write; round 2: the stale tab moves onto this device's own save and saves the merge —
+//               both tabs' edits on the server, no conflict copy, also for alternating edits) · trip_save never overlaps on one page · a new trip (2099-03-10..12) opened on the
 //               device of the QA trip starts empty locally and on the server (forced flush), then archived via the UI · guest
 //               search overlapping the QA trip with other dates + city login adopts the DB trip (dates kept, user told, nothing
 //               pushed, no duplicate; a ?trip= page never runs the guest import) · device storage full while opening the trip
@@ -811,12 +812,16 @@ async function syncConflict(wp, memberTrip) {
   }
 }
 
-// D1 (critic 1) · two tabs of ONE browser (shared localStorage): the stale tab must not overwrite the other tab's save
+// D1 (critic 1 · fixer round 2) · two tabs of ONE browser (shared localStorage): the stale tab must not overwrite the other tab's
+// save. Round 2: the other tab's save is this device's own save (asa:ams:plan_sync.synced = server content + revision) and the
+// shared storage is built on it, so the stale tab moves onto that revision and sends the merge once (its own day on top of the
+// other tab's save): both edits reach the server, no conflict copy, no notice. Alternating edits keep doing so (no copy per edit).
+// (Discarding a kept version is covered by the unit tests D1.4 / Q3.3; a same-device tab no longer produces one here.)
 async function syncTwoTabs(W, wp, memberTrip) {
-  const [d1, d2] = QA_TRIP.days;
+  const [d1, d2, d3] = QA_TRIP.days;
   const s0 = await srv(wp, memberTrip);
-  const n1 = cnt(s0 && s0.dayven, d1), n2 = cnt(s0 && s0.dayven, d2);
-  if (!(n1 > 0 && n2 > 0)) { rec("sync/two-tabs-stale-tab-does-not-overwrite", false, `precondition: day1=${n1} day2=${n2} stops`); return; }
+  const n1 = cnt(s0 && s0.dayven, d1), n2 = cnt(s0 && s0.dayven, d2), n3 = cnt(s0 && s0.dayven, d3);
+  if (!(n1 > 0 && n2 > 0 && n3 > 0)) { rec("sync/two-tabs-stale-tab-does-not-overwrite", false, `precondition: day1=${n1} day2=${n2} day3=${n3} stops`); return; }
   const t2 = await openPage(W);
   try {
     await gotoAms(t2.page, { qs: `&trip=${memberTrip}`, member: true });
@@ -824,25 +829,29 @@ async function syncTwoTabs(W, wp, memberTrip) {
     await removeFirstStop(t2.page, d1);
     const ok2 = await serverDayIs(t2.page, memberTrip, d1, n1 - 1);
     if (!ok2.ok) { rec("sync/two-tabs-stale-tab-does-not-overwrite", false, `second tab's edit did not reach the server (day1 ${n1}->${ok2.got})`); return; }
+    // the first tab's memory follows the other tab's write ("storage" event), before it edits anything itself
+    const memD1 = await wp.evaluate((d) => ((typeof dayVenues !== "undefined" && dayVenues[d]) || []).length, d1);
+    rec("sync/two-tabs-memory-follows-other-tab", memD1 === n1 - 1, `first tab's in-memory day1 ${n1}->${memD1} (tab 2 removed one)`);
     await wp.bringToFront().catch(() => {});
-    await removeFirstStop(wp, d2);           // first tab: stale memory, same device storage
-    await wp.waitForFunction(() => window.TripSync && window.TripSync.status === "conflict", null, { timeout: T.server }).catch(() => {});
+    await removeFirstStop(wp, d2);           // first tab: its TRIP revision is stale (tab 2 saved), same device storage
+    const r1 = await poll(wp, async ({ id, ds, want }) => { const t = await window.TripStore.get(id); const dv = (t && t.plan && t.plan.dayven) || {}; const got = ds.map((d) => (Array.isArray(dv[d]) ? dv[d].length : 0)); return { ok: JSON.stringify(got) === JSON.stringify(want) && window.TripSync && window.TripSync.status !== "saving", got }; }, { id: memberTrip, ds: [d1, d2, d3], want: [n1 - 1, n2 - 1, n3] });
     await wp.waitForTimeout(1500);
-    const s1 = await srv(wp, memberTrip);
     const u = await syncUi(wp, memberTrip);
-    rec("sync/two-tabs-stale-tab-does-not-overwrite", !!s1 && cnt(s1.dayven, d1) === n1 - 1 && cnt(s1.dayven, d2) === n2 && u.vis && u.reason === "conflict",
-      `server day1 ${n1}->${s1 && cnt(s1.dayven, d1)} (tab 2 removed one) day2 ${n2}->${s1 && cnt(s1.dayven, d2)} (stale tab must not win) notice=${u.vis}/${u.reason} status=${u.status}`);
-    if (u.discard) {
-      const r0 = s1 && s1.rev;
-      await press(wp, "#tripSyncDiscard");
-      await wp.waitForTimeout(2000);
-      const s2 = await srv(wp, memberTrip), a = await syncUi(wp, memberTrip);
-      rec("sync/two-tabs-discard-keeps-server-plan", !!s2 && s2.rev === r0 && a.mine === 0 && a.focus === "tripSyncClose", `rev ${r0}->${s2 && s2.rev} keptLeft=${a.mine} focus=${a.focus}`);
-      await press(wp, "#tripSyncClose").catch(() => {});
-    }
+    rec("sync/two-tabs-stale-tab-does-not-overwrite", r1.ok && !u.vis && u.mine === 0 && u.status === "saved",
+      `server day1 ${n1}->${r1.got && r1.got[0]} (tab 2 removed one; kept) day2 ${n2}->${r1.got && r1.got[1]} (tab 1 removed one; merged) day3 ${n3}->${r1.got && r1.got[2]} notice=${u.vis}/${u.reason} copies=${u.mine} status=${u.status}`);
+    // alternating: tab 2 (now stale itself) edits again → it too moves onto tab 1's save; tab 1's day is not reverted, no copy
+    await t2.page.bringToFront().catch(() => {});
+    const memD2 = await t2.page.evaluate((d) => ((typeof dayVenues !== "undefined" && dayVenues[d]) || []).length, d2);
+    await removeFirstStop(t2.page, d3);
+    const r2 = await poll(t2.page, async ({ id, ds, want }) => { const t = await window.TripStore.get(id); const dv = (t && t.plan && t.plan.dayven) || {}; const got = ds.map((d) => (Array.isArray(dv[d]) ? dv[d].length : 0)); return { ok: JSON.stringify(got) === JSON.stringify(want) && window.TripSync && window.TripSync.status !== "saving", got }; }, { id: memberTrip, ds: [d1, d2, d3], want: [n1 - 1, n2 - 1, n3 - 1] });
+    await t2.page.waitForTimeout(1500);
+    const u2 = await syncUi(t2.page, memberTrip);
+    rec("sync/two-tabs-alternating-edits-no-copy", r2.ok && memD2 === n2 - 1 && !u2.vis && u2.mine === 0 && u2.status === "saved",
+      `tab 2 memory day2=${memD2} (want ${n2 - 1}); server ${JSON.stringify(r2.got)} (want ${JSON.stringify([n1 - 1, n2 - 1, n3 - 1])}) notice=${u2.vis}/${u2.reason} copies=${u2.mine} status=${u2.status}`);
   } finally {
     techChecks("sync-second-tab", [t2.mon]);
     await t2.page.close().catch(() => {});
+    await wp.bringToFront().catch(() => {});
   }
 }
 
