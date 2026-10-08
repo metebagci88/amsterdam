@@ -325,6 +325,9 @@ test("both pages load lib/asa-name exactly once, pinned to sha256(16) of the fil
   for (const p of ["kopenhag/index.html", "amsterdam.html", "amsterdam_index_UID.html", "admin.html", "CDP3B/admin.html"]) {
     const h = read(p);
     assert.equal(/asa_name|asa-name|ASA_NAME|member_set_name/.test(h), false, p + " does not load WP5");
+    // CDP3B/admin.html is changed after WP5 by the CDP-3B save-draft fix (PR A); for it the permanent WP5 invariant is the
+    // "does not load WP5" check above, not byte-identity to WP5's parent.
+    if (p === "CDP3B/admin.html") continue;
     const prev = show(PARENT, p);
     if (prev !== null) assert.equal(h, prev, p + " byte-identical to " + PARENT);
   }

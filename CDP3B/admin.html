@@ -250,11 +250,8 @@ async function loadAll(){
   try{ const {data}=await db.from("site_content").select("*").order("key"); DATA.content=data||[]; }catch(e){}
 }
 
-function shell(body){
-  $("app").innerHTML=
-   '<div class="topbar"><div><div class="b"><b>asa</b>local · Yönetim</div><div class="s">Merkezi kontrol paneli</div></div><button class="logout" id="lo">Çıkış</button></div>'
-   +'<div class="wrap"><div class="nav" id="nav"></div><div id="body"></div></div>';
-  $("lo").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} resetCaps(); seg="ozet"; renderLogin(); };
+// Sekme listesi YALNIZ CAPS'ten türetilir; shell() ve F9 hash-geri-yükleme AYNI listeyi kullanır (yeni UI yüzeyi YOK).
+function navSegs(){
   const segs=[["ozet","Özet"]];
   if(CAPS.venues){ segs.push(["venues","Mekanlar"]); segs.push(["tags","Etiketler"]); }
   if(CAPS.cities)   segs.push(["cities","Şehirler"]);
@@ -267,11 +264,22 @@ function shell(body){
   if(CAPS.crm)      segs.push(["email","E-posta"]);   // CDP-3B
   if(CAPS.crm||CAPS.members) segs.push(["consent","İzin Görünümü"]);   // CDP-3C (salt-okunur)
   if(CAPS.superadmin) segs.push(["changelog","Değişiklik Günlüğü"]);
+  return segs;
+}
+function shell(body){
+  $("app").innerHTML=
+   '<div class="topbar"><div><div class="b"><b>asa</b>local · Yönetim</div><div class="s">Merkezi kontrol paneli</div></div><button class="logout" id="lo">Çıkış</button></div>'
+   +'<div class="wrap"><div class="nav" id="nav"></div><div id="body"></div></div>';
+  $("lo").onclick=async()=>{ try{await authClient.auth.signOut();}catch(e){} resetCaps(); seg="ozet"; renderLogin(); };
+  const segs=navSegs();
   if(!segs.some(s=>s[0]===seg)) seg=segs[0][0];
   $("nav").innerHTML=segs.map(s=>'<button class="'+(seg===s[0]?"on":"")+'" onclick="go(\''+s[0]+'\')">'+s[1]+'</button>').join("");
   $("body").innerHTML=body;
 }
-function go(s){ seg=s; render(); }
+// F9: seçili sekme URL hash'inde (#email) tutulur -> yenilemede aynı sekme. Depolama YOK.
+function go(s){ seg=s; try{ history.replaceState(null,"","#"+s); }catch(e){ try{ location.hash="#"+s; }catch(_){} } render(); }
+// Hash YALNIZ CAPS-türevli sekme listesindeyse kabul edilir (ör. crm yetkisi olmayan için #segments/#email -> yok sayılır).
+function hashSeg(){ let h=""; try{ h=decodeURIComponent(String(location.hash||"").replace(/^#/,"")); }catch(e){ return null; } return navSegs().some(x=>x[0]===h)?h:null; }
 function render(){
   const need={venues:'venues',tags:'venues',cities:'cities',dhealth:'cities',content:'content',ads:'ads',comments:'moderate',members:'members',changelog:'superadmin',email:'crm'};
   if(need[seg] && !CAPS[need[seg]]) seg='ozet';   // yetkisiz sekme → Özet (UI koruması; RLS/sunucu asıl kapı)
@@ -1571,6 +1579,7 @@ $("modal").onclick=e=>{ if(e.target===$("modal"))closeModal(); };
 async function boot(){
   $("app").innerHTML='<div class="wrap"><p class="muted" style="padding:40px;text-align:center">Yükleniyor…</p></div>';
   await loadAll();
+  const hs=hashSeg(); if(hs) seg=hs;   // F9: geçerli hash -> sekme (render()'daki need[]/CAPS kapısı ayrıca geçerli)
   render();
 }
 bootGate();
@@ -1598,68 +1607,275 @@ function loadGrapes(){ return new Promise((res,rej)=>{ if(_gjsLoaded&&window.gra
 let _emEditor=null, _emMode=null, _emCurId=null, _emSourceType=null, _emAssets=[];
 /* STABİL idempotency key'leri: op başarıyla bitene kadar korunur (retry aynı key'i kullanır) */
 let _emCreateIdem=null, _emSaveIdem=null, _emPublishIdem=null, _emHostIdem=null; const _emRowIdem={};
+let _emBusy=false;   // F8: kaydet/yayınla uçuştayken ikinci tıklama/çağrı yok sayılır (stabil idem semantiği DEĞİŞMEZ)
+/* Yarış koruması: _emGen her editör değişiminde (emPanel / renderEmail) artar. Kaydet/yayınla, şablon kimliğini, kaynak türünü,
+   adı ve nesli İLK await'ten ÖNCE sabitler; editör bu arada değişirse istekler yine ilk şablona gider ve sonuç yeni editöre YAZILMAZ
+   (liste durum satırında ad ile bildirilir). Uçuştayken editör/listeyi değiştiren eylemler (Aç, Çoğalt, Arşivle, yeni editör) reddedilir. */
+let _emGen=0, _emCurName=null;
 function _rowIdem(id,op){ const k=id+'|'+op; if(!_emRowIdem[k])_emRowIdem[k]=newId(); return _emRowIdem[k]; }
 function _clrRow(id,op){ delete _emRowIdem[id+'|'+op]; }
 function emVal(id){ const e=document.getElementById(id); return e?e.value:''; }
 const EM_VARS=['first_name','city_name','trip_start_date','trip_end_date','days_until_trip','unsubscribe_url'];
 function emVarSel(){ return '<select id="em_var" onchange="emInsertVar(this.value)"><option value="">+ Değişken</option>'+EM_VARS.map(v=>'<option value="'+v+'">'+v+'</option>').join('')+'</select>'; }
-function emFields(){ return '<input id="em_name" placeholder="Şablon adı (iç)"><input id="em_desc" placeholder="Açıklama"><select id="em_class"><option value="marketing">Marketing</option><option value="transactional">Transactional</option></select>'
-  +'<input id="em_subject" placeholder="Konu satırı"><input id="em_preview" placeholder="Önizleme metni"><input id="em_sender" placeholder="Gönderen adı"><input id="em_reply" placeholder="Reply-to (e-posta)">'+emVarSel(); }
+function emFields(){ return '<input id="em_name" placeholder="Şablon adı (iç)" maxlength="120"><input id="em_desc" placeholder="Açıklama" maxlength="500"><select id="em_class" aria-label="E-posta sınıfı"><option value="" selected disabled>Sınıf seç…</option><option value="marketing">Marketing</option><option value="transactional">Transactional</option></select>'
+  +'<input id="em_subject" placeholder="Konu satırı" maxlength="200"><input id="em_preview" placeholder="Önizleme metni" maxlength="200"><input id="em_sender" placeholder="Gönderen adı" maxlength="100"><input id="em_reply" placeholder="Reply-to (e-posta)" maxlength="200">'+emVarSel()
+  +'<div class="muted" style="flex-basis:100%">Marketing seçilirse abonelikten çıkış bağlantısı ({{unsubscribe_url}}) zorunludur.</div>'; }
 const EM_SAMPLE='<table style="width:100%;background:#f4f4f4"><tr><td><table style="max-width:600px;margin:0 auto;background:#fff"><tr><td style="padding:20px;text-align:center"><img src="https://cdn.asalocal.club/logo.png" alt="ASALOCAL" style="width:140px"/></td></tr><tr><td style="padding:24px"><h1 style="font-family:Arial;font-size:24px">Merhaba {{first_name}}!</h1><p style="font-family:Arial;color:#444">{{city_name}} planın için {{days_until_trip}} gün kaldı.</p><p style="text-align:center"><a href="https://asalocal.club/amsterdam" style="background:#c8102e;color:#fff;padding:12px 22px;text-decoration:none;font-family:Arial">Keşfet</a></p></td></tr><tr><td style="padding:16px;text-align:center;color:#999;font-size:12px;font-family:Arial"><a href="{{unsubscribe_url}}" style="color:#999">Abonelikten çık</a></td></tr></table></td></tr></table>';
 function emResetIdem(){ _emCreateIdem=null; _emSaveIdem=null; _emPublishIdem=null; _emHostIdem=null; _emAssets=[]; }
+function emBumpGen(){ _emGen++; emResetIdem(); }   // editör değişti: eski editörün bekleyen anahtarları/asset listesi yeni editöre TAŞINMAZ
+/* ---- TEK kod -> cümle tablosu (istemci ön-kontrolleri, sanitizer hata/uyarı/temizlik kayıtları, Edge HttpErr ve RPC bilinen kodları).
+   Ham kod, RPC adı, servis adı veya yığın izi DOM'a / alert'e ASLA basılmaz; bilinmeyen kod -> genel cümle. ---- */
+const EM_MSG_ASSET_URL='İçerikte izin verilmeyen görsel bağlantısı var; "Görselleri barındır" ile yeniden dene.';
+const EM_MSG_RETRY='İstek eksik veya geçersiz oluşturuldu; sayfayı yenileyip tekrar dene.';
+const EM_MSG_ASSET_NOT_READY='Şablondaki bir görsel yayına hazır değil; görseli yeniden yükleyip kaydet.';
+const EM_MSG_FILE_TOO_LARGE='Görsel çok büyük (en fazla 2 MB).';
+const EM_MSG={
+  // istemci ön-kontrolleri (istek GÖNDERİLMEZ)
+  class_required:'E-posta sınıfını seç (Marketing / Transactional).',
+  class_locked:'Bu şablonun sınıfı değiştirilemez; doğru sınıfla "+ HTML içe aktar" ile yeni şablon oluştur.',
+  name_required:'Şablon adı gerekli.',
+  name_too_long:'Şablon adı en fazla 120 karakter olabilir.',
+  desc_too_long:'Açıklama en fazla 500 karakter olabilir.',
+  subject_too_long:'Konu satırı en fazla 200 karakter olabilir.',
+  preview_too_long:'Önizleme metni en fazla 200 karakter olabilir.',
+  sender_too_long:'Gönderen adı en fazla 100 karakter olabilir.',
+  reply_bad:'Reply-to boş bırakılmalı ya da geçerli bir e-posta adresi olmalı (en fazla 200 karakter).',
+  html_too_large:'HTML çok büyük (en fazla 400.000 karakter).',
+  sample_content:'Bu, editörün örnek içeriği. Kaydetmek için kendi HTML\'ini yapıştır.',
+  editor_load_failed:'Görsel editör yüklenemedi; sayfayı yenileyip tekrar dene.',
+  publish_role:'Yayınlama yalnız süper yönetici yetkisiyle yapılabilir.',
+  archive_role:'Arşivleme yalnız süper yönetici yetkisiyle yapılabilir.',
+  edit_role:'Düzenleme için CRM veya süper yönetici yetkisi gerekir.',
+  file_unreadable:'Dosya okunamadı.',
+  not_validated:'Kaydedilmedi: içerik doğrulamadan geçmedi.',
+  unexpected:'Beklenmeyen bir sorun oldu; sayfayı yenileyip tekrar dene.',
+  busy:'Kaydetme sürüyor; bitince tekrar dene.',
+  meta_locked:'Ad ve açıklama, şablon oluşturulduktan sonra bu ekrandan değiştirilemez.',
+  created_not_saved:'Şablon boş bir taslak olarak oluşturuldu ve listeye eklendi; içerik henüz kaydedilmedi. Sorunu giderip "Taslak kaydet" ile yeniden dene.',
+  // sanitizer hataları (validation_report.errors)
+  empty_html:'HTML içeriği boş.',
+  missing_unsubscribe_url_variable:function(){ return 'Marketing e-postasında abonelikten çıkış bağlantısı ({{unsubscribe_url}}) yok. '+(emClassLocked()?EM_MSG.class_locked:'Bu bir hizmet e-postasıysa sınıfı kontrol et.'); },
+  unknown_variable:function(a){ return 'Tanınmayan değişken: '+String(a||'').split(',').filter(Boolean).join(', ')+'. İzinli: '+EM_VARS.join(', ')+'.'; },
+  // sanitizer uyarıları (validation_report.warnings)
+  remote_image_not_allowlisted:function(h){ return 'Görsel izinli alan adında değil: '+(h||'?')+' (gönderimde görünmeyebilir; "Görselleri barındır" veya "Görsel yükle" kullan).'; },
+  relative_url:'Göreli veya değişkenli bağlantı var (ör. {{unsubscribe_url}}); değişken değilse tam adres (https://…) kullan.',
+  img_missing_alt:'Bazı görsellerde alternatif metin (alt) yok.',
+  tracking_pixel_suspect:'İzleme pikseli olabilecek çok küçük bir görsel var.',
+  marketing_legal_footer_missing:'Marketing e-postasında abonelik/yasal alt bilgi metni bulunamadı.',
+  img_base64_too_large:'Gömülü (base64) görsel çok büyük; "Görsel yükle" ile yükle.',
+  local_image_needs_rehost:'Yerel dosyaya işaret eden görsel var; "Görsel yükle" ile yükle.',
+  protocol_relative_image_rehost:'"//" ile başlayan görsel adresi kaldırıldı; tam adres (https://…) kullan.',
+  // sanitizer temizlik kayıtları (validation_report.removed) -> özet cümle parçaları
+  'removed:style':'<style> bloğu (mobil kurallar dahil) kaldırıldı',
+  'removed:meta':'meta etiketleri kaldırıldı',
+  'removed:tags':function(t){ return t+' etiketleri içerikleriyle birlikte kaldırıldı'; },
+  'removed:unknown':function(t){ return 'desteklenmeyen etiketler kaldırıldı, içerikleri korundu: '+t; },
+  'removed:attr':function(a){ return 'izin verilmeyen öznitelikler kaldırıldı: '+a; },
+  'removed:style-prop':function(p){ return p+' stilleri kaldırıldı'; },
+  'removed:style-decl':function(p){ return 'güvensiz stil kuralları kaldırıldı ('+p+')'; },
+  'removed:img-data':'görsel olmayan gömülü (data:) kaynak kaldırıldı',
+  'removed:img-proto':'güvensiz görsel adresi kaldırıldı',
+  'removed:bad-proto':function(a){ return 'güvensiz bağlantı adresleri kaldırıldı ('+a+')'; },
+  'removed:other':'izin verilmeyen diğer içerik kaldırıldı',
+  // Edge HttpErr + RPC bilinen kodları
+  validation_failed:'Kaydedilmedi: içerik doğrulamadan geçmedi.',
+  bad_enum:'E-posta sınıfı geçersiz; listeden seç.',
+  'bad_field:html':'HTML çok büyük (en fazla 400.000 karakter).',
+  'bad_field:internal_name':'Şablon adı en fazla 120 karakter olabilir.',
+  'bad_field:description':'Açıklama en fazla 500 karakter olabilir.',
+  bad_field:'Bir alan geçersiz veya çok uzun; alanları kontrol et.',
+  builder_json_too_large:'Görsel editör içeriği çok büyük.',
+  bad_uuid:'Şablon bulunamadı; sayfayı yenileyip yeniden aç.',
+  not_found:'Şablon bulunamadı; sayfayı yenileyip yeniden aç.',
+  payload_too_large:'İçerik çok büyük.',
+  draft_asset_url_in_content:EM_MSG_ASSET_URL,
+  unmanaged_asset_url:EM_MSG_ASSET_URL,
+  no_draft_version:'Bu şablonun düzenlenebilir taslağı yok; "Yeni sürüm oluştur" kullan.',
+  admin_writes_disabled:'Yönetim yazma işlemleri şu an kapalı.',
+  missing_unsubscribe:'Yayınlanamaz: marketing şablonunda abonelikten çıkış bağlantısı yok.',
+  validation_not_ok:'Yayınlanamaz: kaydedilen içerik doğrulamadan geçmemiş; önce düzeltip kaydet.',
+  empty_sanitized_html:'Yayınlanamaz: kaydedilen içerik boş; önce içerik ekleyip kaydet.',
+  already_published:'Bu sürüm zaten yayında.',
+  draft_exists:'Bu şablonun zaten bir taslağı var; listeden "Aç" ile düzenle.',
+  asset_not_found:EM_MSG_ASSET_NOT_READY, asset_not_promoted:EM_MSG_ASSET_NOT_READY,
+  content_hash_mismatch:EM_MSG_ASSET_NOT_READY, bad_public_path:EM_MSG_ASSET_NOT_READY,
+  asset_promotion_failed:'Görseller yayına kopyalanamadı; şablon yayınlanmadı. Biraz sonra tekrar dene.',
+  version_template_mismatch:'Sürüm bu şablona ait değil; sayfayı yenileyip yeniden aç.',
+  forbidden_origin:'Bu işlem yalnız asalocal.club yönetim panelinden yapılabilir.',
+  request_id_required:EM_MSG_RETRY, idem_uuid_required:EM_MSG_RETRY, idem_required:EM_MSG_RETRY,
+  bad_json:EM_MSG_RETRY, method_not_allowed:EM_MSG_RETRY, unknown_action:EM_MSG_RETRY,
+  unknown_field:'İstek beklenmeyen bir alan içeriyor; sayfayı yenileyip tekrar dene.',
+  no_ids:'Önizlenecek görsel yok.',
+  asset_lookup_failed:'Görsel kayıtları okunamadı; biraz sonra tekrar dene.',
+  bad_base64_size:EM_MSG_FILE_TOO_LARGE, bad_size:EM_MSG_FILE_TOO_LARGE,
+  bad_base64:'Görsel dosyası okunamadı.',
+  bad_mime_content:'Desteklenmeyen görsel türü; PNG, JPEG, GIF veya WebP yükle.',
+  bad_dimensions:'Görselin boyutu okunamadı; başka bir dosya dene.',
+  upload_failed:'Görsel depoya yazılamadı; biraz sonra tekrar dene.',
+  exists_but_unreadable:'Görsel depoya yazılamadı; biraz sonra tekrar dene.',
+  storage_hash_conflict:'Depoda aynı adla farklı bir görsel var; yükleme durduruldu.'
+};
+// kod -> cümle (tam anahtar, sonra ':' öncesi önek). Yalnız kendi anahtarları (prototype anahtarı eşleşmez). Bilinmeyen -> fallback.
+function emCodeText(code, fallback){ code=String(code||''); const i=code.indexOf(':'), base=i<0?code:code.slice(0,i), arg=i<0?'':code.slice(i+1);
+  const own=function(k){ return Object.prototype.hasOwnProperty.call(EM_MSG,k); };
+  const v=own(code)?EM_MSG[code]:(own(base)?EM_MSG[base]:null);
+  if(v==null) return fallback;
+  return typeof v==='function'?v(own(code)?'':arg):v; }
+function emClassLocked(){ const c=document.getElementById('em_class'); return !!(c&&c.disabled); }
+function emLockClass(){ const c=document.getElementById('em_class'); if(c){ c.disabled=true; c.title='Sınıf, şablon oluşturulduktan sonra değiştirilemez.'; } }
+// save ad/açıklama GÖNDERMEZ -> mevcut şablonda bu alanlar salt-okunur (yanlış "yeniden adlandırıldı" izlenimi yok)
+function emLockMeta(){ ['em_name','em_desc'].forEach(function(i){ const e=document.getElementById(i); if(e){ e.readOnly=true; e.title=EM_MSG.meta_locked; } }); }
+// Uçuştayken editörü/listeyi değiştiren eylemler: düz mesaj + true (çağıran hemen döner). Mesaj kaydetme bitince temizlenir.
+function emBusyRefuse(target){ if(!_emBusy) return false; emShow('warn', EM_MSG.busy, target); const el=document.getElementById(target||'emStatus'); if(el) el.setAttribute('data-em-busy','1'); return true; }
+function emUniq(a){ return a.filter(function(x,i){ return a.indexOf(x)===i; }); }
+function emCap(a){ return a.length>8 ? a.slice(0,8).join(', ')+' … (+'+(a.length-8)+')' : a.join(', '); }
+function emRepErrLines(rep){ const e=(rep&&Array.isArray(rep.errors))?rep.errors:[]; return emUniq(e.map(function(c){ return emCodeText(c,'İçerik kuralı ihlali.'); })); }
+function emWarnLines(w){ w=Array.isArray(w)?w:[]; return emUniq(w.map(function(c){ return emCodeText(c,'İçerik uyarısı.'); })); }
+// validation_report.removed[] -> düz Türkçe özet (kayıtlar gruplanır; etiket/öznitelik adları kullanıcı içeriğidir, esc() ile basılır)
+function emRemovedLines(list){
+  const r=Array.isArray(list)?list.map(String):[]; const out=[], seen={};
+  const pick=function(pfx){ const v=[]; r.forEach(function(x){ if(!seen[x] && x.indexOf(pfx)===0){ seen[x]=1; const a=x.slice(pfx.length); if(v.indexOf(a)<0) v.push(a); } }); return v; };
+  if(r.indexOf('style')>=0){ seen['style']=1; out.push(emCodeText('removed:style')); }
+  const metaAttrs=pick('attr:meta.');
+  if(r.indexOf('meta')>=0||metaAttrs.length){ seen['meta']=1; out.push(emCodeText('removed:meta')); }
+  const tags=r.filter(function(x){ return !seen[x] && /^[a-z0-9]+$/.test(x); }); tags.forEach(function(x){ seen[x]=1; });
+  if(tags.length) out.push(EM_MSG['removed:tags'](emUniq(tags).map(function(t){ return '<'+t+'>'; }).join(', ')));
+  const unk=pick('unknown_tag:').concat(pick('unknown_custom_element:'));
+  if(unk.length) out.push(EM_MSG['removed:unknown'](emCap(unk.map(function(t){ return '<'+t+'>'; }))));
+  const attrs=pick('attr:'); if(attrs.length) out.push(EM_MSG['removed:attr'](emCap(attrs)));
+  const props=pick('style-prop-unlisted:').sort(); if(props.length) out.push(EM_MSG['removed:style-prop'](props.join('/')));
+  const denied=pick('style-decl-denied:').sort(); if(denied.length) out.push(EM_MSG['removed:style-decl'](denied.join('/')));
+  if(r.indexOf('img-data-nonimage')>=0){ seen['img-data-nonimage']=1; out.push(EM_MSG['removed:img-data']); }
+  if(r.indexOf('img-bad-proto')>=0){ seen['img-bad-proto']=1; out.push(EM_MSG['removed:img-proto']); }
+  const bp=emUniq(pick('bad-proto:').map(function(x){ return x.split(':')[0]; })); if(bp.length) out.push(EM_MSG['removed:bad-proto'](bp.join(', ')));
+  if(r.some(function(x){ return !seen[x]; })) out.push(EM_MSG['removed:other']);
+  return out;
+}
+// F7: TEK hata metni üreticisi. body.error ASLA basılmaz; yalnız tablo cümlesi / apiErrText / genel cümle döner (satırlar '\n').
+function emErrText(status, body, what){
+  const b=(body&&typeof body==='object')?body:{}; const code=(typeof b.error==='string')?b.error:'';
+  if(code==='validation_failed') return [EM_MSG.not_validated].concat(emRepErrLines(b.validation_report)).join('\n');
+  const t=code?emCodeText(code,null):null;
+  if(typeof t==='string' && t) return t;
+  if(status===401||status===403||status===429||status===503||status===0) return apiErrText(status);
+  if(status===409) return apiErrText(409);
+  if(status===413) return EM_MSG.payload_too_large;
+  return (what||'Kaydedilemedi')+' (hata '+(Number(status)||0)+'). '+(what?'Biraz sonra tekrar dene.':'Alanları kontrol edip tekrar dene.');
+}
+// Satır içi bildirim: #emStatus (veya verilen hedef). Hedef yoksa YALNIZ hata/uyarı alert() ile (düz metin).
+function emShow(kind, text, target){
+  const el=document.getElementById(target||'emStatus');
+  if(!el){ if(text && (kind==='err'||kind==='warn')) alert(String(text)); return; }
+  el.removeAttribute('data-em-busy');
+  el.innerHTML=text?'<div class="notice'+(kind==='err'?' err':kind==='warn'?' warn':'')+'">'+String(text).split('\n').map(esc).join('<br>')+'</div>':'';
+}
+function emManifest(){ return _emAssets.map(function(a){ return {asset_id:a.id, public_path:a.path}; }); }
+// F1: başarı satırı (alert YOK). content_hash yoksa özet parçası basılmaz.
+function emShowSaved(name, sb, rep){
+  const el=document.getElementById('emStatus'); if(!el) return;
+  el.removeAttribute('data-em-busy');
+  const d=new Date(), hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  const h8=String((sb&&sb.content_hash)||'').slice(0,8);
+  const rem=emRemovedLines(rep&&rep.removed), warns=emWarnLines(rep&&rep.warnings);
+  el.innerHTML='<div class="notice">Taslak kaydedildi: «'+esc(name)+'» · taslak (yayınlanmadı) · e-posta gönderilmedi · '+hm
+    +(h8?' <span class="muted">içerik özeti '+esc(h8)+'</span>':'')
+    +(rem.length?'<div class="muted">Kaydedilen sürüm temizlendi: '+esc(rem.join('; '))+'.</div>':'')
+    +(warns.length?'<div class="muted">Uyarılar: '+esc(warns.join(' '))+'</div>':'')+'</div>';
+}
+// F5: sunucu sınırlarının istemci aynası (hata -> düz mesaj, istek YOK). PG length() = karakter; Edge reqStr = UTF-16 .length.
+function emCheckFields(f, isNew){
+  const chars=function(x){ return Array.from(String(x||'')).length; };
+  if(isNew){
+    if(!String(f.name||'').trim()) return EM_MSG.name_required;
+    if(String(f.name).length>120) return EM_MSG.name_too_long;
+    if(String(f.desc||'').length>500) return EM_MSG.desc_too_long;
+  }
+  if(chars(f.subject)>200) return EM_MSG.subject_too_long;
+  if(chars(f.preview)>200) return EM_MSG.preview_too_long;
+  if(chars(f.sender)>100) return EM_MSG.sender_too_long;
+  if(f.reply && (chars(f.reply)>200 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.reply))) return EM_MSG.reply_bad;
+  return null;
+}
+function emCheckHtml(h){ if(!String(h||'').trim()) return EM_MSG.empty_html; if(String(h).length>400000) return EM_MSG.html_too_large; return null; }
 function emInsertVar(v){ if(!v)return; if(_emMode==='visual'&&_emEditor){ const sel=_emEditor.getSelected(); if(sel&&sel.get&&sel.get('type')==='text'){ sel.set('content',(sel.get('content')||'')+' {{'+v+'}}'); } else { _emEditor.addComponents('<span>{{'+v+'}}</span>'); } } else { const ta=document.getElementById('em_src'); if(ta) ta.value+=' {{'+v+'}}'; } const s=document.getElementById('em_var'); if(s)s.value=''; }
 async function renderEmail(){
+  emBumpGen();   // #emEditor boşaltılır -> uçuştaki kayıt sonucu buraya değil liste durum satırına yazılır
   shell('<div class="panel"><div class="toolbar"><h3 style="margin:0">E-posta · Şablonlar</h3>'
     +(CAPS.crm?'<button class="btn primary" onclick="emNewVisual()">+ Görsel editör</button> <button class="btn" onclick="emNewImport()">+ HTML içe aktar</button>':'')
-    +'</div><div id="emList"><span class="muted">Yükleniyor…</span></div></div>'
+    +'</div><div id="emListStatus" role="status" aria-live="polite"></div><div id="emList"><span class="muted">Yükleniyor…</span></div></div>'
     +'<div id="emEditor"></div>');
-  const r=await emailApi('list',{});
-  if(r.status!==200){ $("emList").innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+'</div>'; return; }
-  const t=(r.body&&r.body.templates)||[];
-  $("emList").innerHTML = t.length? '<table class="tbl"><thead><tr><th>Ad</th><th>Sınıf</th><th>Kaynak</th><th>Durum</th><th>Draft</th><th>Yayın</th><th></th></tr></thead><tbody>'
-    +t.map(x=>'<tr><td>'+esc(x.internal_name)+'</td><td>'+esc(x.email_class)+'</td><td>'+esc(x.source_type)+'</td><td>'+esc(x.status)+'</td><td>'+(x.current_draft_version??'–')+'</td><td>'+(x.published_version??'–')+'</td>'
-      +'<td><button class="btn sm" onclick="emOpen(\''+x.id+'\')">Aç</button> <button class="btn sm" onclick="emDuplicate(\''+x.id+'\')">Çoğalt</button>'
-      +(CAPS.superadmin?' <button class="btn sm" onclick="emArchive(\''+x.id+'\')">Arşivle</button>':'')+'</td></tr>').join('')+'</tbody></table>'
-    : '<span class="muted">Henüz şablon yok.</span>';
+  await emRefreshList();
 }
-function emPanel(html){ $("emEditor").innerHTML='<div class="panel">'+html+'</div>'; }
-async function emNewVisual(){ _emMode='visual'; _emCurId=null; _emSourceType='visual_builder'; emResetIdem();
+const EM_LBL={ email_class:{marketing:'Marketing',transactional:'Transactional'}, source_type:{html_import:'HTML içe aktarma',visual_builder:'Görsel editör'}, status:{draft:'Taslak',published:'Yayında',archived:'Arşivlendi'} };
+function emLbl(k,v){ const m=EM_LBL[k]||{}; return Object.prototype.hasOwnProperty.call(m,v)?m[v]:String(v==null?'':v); }
+// F2: yalnız #emList'i yeniler (editör AÇIK kalır). #emList yoksa hiçbir şey yapmaz; hiçbir zaman throw etmez.
+async function emRefreshList(){
+  try{
+    const r=await emailApi('list',{});
+    const el=document.getElementById('emList'); if(!el) return;
+    if(r.status!==200){ el.innerHTML='<div class="notice err">'+esc(emErrText(r.status,r.body,'Liste yüklenemedi'))+'</div>'; return; }
+    const t=(r.body&&r.body.templates)||[];
+    el.innerHTML = t.length? '<table class="tbl"><thead><tr><th>Ad</th><th>Sınıf</th><th>Kaynak</th><th>Durum</th><th>Draft</th><th>Yayın</th><th></th></tr></thead><tbody>'
+      +t.map(x=>'<tr><td>'+esc(x.internal_name)+'</td><td>'+esc(emLbl('email_class',x.email_class))+'</td><td>'+esc(emLbl('source_type',x.source_type))+'</td><td>'+esc(emLbl('status',x.status))+'</td><td>'+(x.current_draft_version??'–')+'</td><td>'+(x.published_version??'–')+'</td>'
+        +'<td><button class="btn sm" onclick="emOpen(\''+x.id+'\')">Aç</button> <button class="btn sm" onclick="emDuplicate(\''+x.id+'\')">Çoğalt</button>'
+        +(CAPS.superadmin?' <button class="btn sm" onclick="emArchive(\''+x.id+'\')">Arşivle</button>':'')+'</td></tr>').join('')+'</tbody></table>'
+      : '<span class="muted">Henüz şablon yok.</span>';
+  }catch(e){ /* asla throw etme (F2) */ }
+}
+function emPanel(html){ emBumpGen(); $("emEditor").innerHTML='<div class="panel">'+html+'</div>'; }
+async function emNewVisual(){ if(emBusyRefuse('emListStatus')) return false;
+  _emMode='visual'; _emCurId=null; _emCurName=null; _emSourceType='visual_builder'; _emEditor=null; emResetIdem();
   emPanel('<div class="frow" style="gap:8px;flex-wrap:wrap;align-items:center">'+emFields()
     +'<label class="btn sm" style="cursor:pointer">Görsel yükle<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="emAssetUpload(this)"></label>'
     +'<button class="btn sm" onclick="emDevice(\'Desktop\')">🖥️</button><button class="btn sm" onclick="emDevice(\'Mobile portrait\')">📱</button>'
     +'<button class="btn sm" onclick="emValidate()">Doğrula</button>'+(CAPS.crm?'<button class="btn sm" onclick="emSave()">Taslak kaydet</button>':'')+(CAPS.superadmin?'<button class="btn primary sm" onclick="emPublish()">Yayınla</button>':'')
-    +'</div><div id="gjs" style="border:1px solid var(--line);border-radius:8px;min-height:360px;margin-top:8px"></div><div id="emReport" style="margin-top:8px"></div>');
-  document.getElementById('em_name').value='Yaz Kampanyası'; document.getElementById('em_subject').value='Amsterdam';
-  try{ await loadGrapes(); }catch(e){ $("emReport").innerHTML='<div class="notice err">GrapesJS yüklenemedi (self-host /vendor, SRI doğrulaması).</div>'; return; }
+    +'</div><div id="gjs" style="border:1px solid var(--line);border-radius:8px;min-height:360px;margin-top:8px"></div><div id="emStatus" role="status" aria-live="polite" style="margin-top:8px"></div><div id="emReport" style="margin-top:8px"></div>');
+  const gen=_emGen;
+  try{ await loadGrapes(); }catch(e){ if(_emGen!==gen) return false; emShow('err', EM_MSG.editor_load_failed); return; }
+  if(_emGen!==gen) return false;   // yüklenirken editör değişti: başka bir panele editör KURULMAZ
   _emEditor=window.grapesjs.init({container:'#gjs',height:'380px',storageManager:false,plugins:['grapesjs-preset-newsletter'],deviceManager:{devices:[{name:'Desktop',width:''},{name:'Mobile portrait',width:'320px',widthMedia:'480px'}]}});
   _emEditor.setComponents(EM_SAMPLE);
+  return true;
 }
-function emNewImport(){ _emMode='import'; _emCurId=null; _emSourceType='html_import'; emResetIdem();
+function emNewImport(){ if(emBusyRefuse('emListStatus')) return false;
+  _emMode='import'; _emCurId=null; _emCurName=null; _emSourceType='html_import'; emResetIdem();
   emPanel('<div class="frow" style="gap:8px;flex-wrap:wrap;align-items:center">'+emFields()+'<label class="btn sm" style="cursor:pointer">.html seç<input type="file" accept=".html,text/html" style="display:none" onchange="emImportFile(this)"></label></div>'
     +'<textarea id="em_src" rows="8" style="width:100%;margin-top:8px" placeholder="Claude Design HTML yapıştır"></textarea>'
-    +'<div class="frow" style="gap:8px;margin-top:8px"><button class="btn sm" onclick="emHostImages()">Görselleri barındır (rehost)</button><button class="btn sm" onclick="emValidate()">Doğrula &amp; Sanitize</button>'+(CAPS.crm?'<button class="btn sm" onclick="emSave()">Taslak kaydet</button>':'')+(CAPS.superadmin?'<button class="btn primary sm" onclick="emPublish()">Yayınla</button>':'')+'</div><div id="emReport" style="margin-top:8px"></div>');
-  document.getElementById('em_name').value='Claude Design'; document.getElementById('em_subject').value='Merhaba'; document.getElementById('em_src').value=EM_SAMPLE;
+    +'<div class="frow" style="gap:8px;margin-top:8px"><button class="btn sm" onclick="emHostImages()">Görselleri barındır (rehost)</button><button class="btn sm" onclick="emValidate()">Doğrula &amp; Sanitize</button>'+(CAPS.crm?'<button class="btn sm" onclick="emSave()">Taslak kaydet</button>':'')+(CAPS.superadmin?'<button class="btn primary sm" onclick="emPublish()">Yayınla</button>':'')+'</div><div id="emStatus" role="status" aria-live="polite" style="margin-top:8px"></div><div id="emReport" style="margin-top:8px"></div>');
+  // F3: ad/konu/içerik ÖN-DOLDURULMAZ -> yer tutucular görünür (gizli demo içerik YOK)
+  return true;
 }
 function emImportFile(inp){ const f=inp.files&&inp.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{document.getElementById('em_src').value=r.result;}; r.readAsText(f); }
-async function emAssetUpload(inp){ const f=inp.files&&inp.files[0]; if(!f)return; if(f.size>2000000){alert('Görsel 2MB üstü reddedilir.');return;}
-  let b64; try{ b64=await new Promise((res,rej)=>{const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(f);}); }catch(e){ alert('Dosya okunamadı'); return; }
+async function emAssetUpload(inp){ const f=inp.files&&inp.files[0]; if(!f)return; if(emBusyRefuse()) return; if(f.size>2000000){ emShow('err', EM_MSG_FILE_TOO_LARGE); return; }
+  const gen=_emGen;   // yükleme sürerken editör değişirse görsel YENİ editöre eklenmez
+  let b64; try{ b64=await new Promise((res,rej)=>{const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(f);}); }catch(e){ emShow('err', EM_MSG.file_unreadable); return; }
   const u=await emailApi('asset_upload',{data_base64:b64, idem:newId(), request_id:newId()});
-  if(u.status!==200){ alert('Yükleme reddedildi: '+((u.body&&u.body.error)||apiErrText(u.status))); return; }
+  if(_emGen!==gen) return;
+  if(u.status!==200){ emShow('err', emErrText(u.status,u.body,'Görsel yüklenemedi')); return; }
   _emAssets.push({id:u.body.asset_id, path:u.body.path});   // server-approved asset (kalıcı referans = asset_id)
   var disp=_emPubUrl(u.body.asset_id), warn=false;          // fallback public (publish öncesi 404 olabilir)
   try{ var pv=await emailApi('asset_preview',{asset_ids:[u.body.asset_id], template_id:_emCurId||null});
        if(pv.status===200 && pv.body.previews && pv.body.previews[0]){ disp=pv.body.previews[0].url; } else { warn=true; } }catch(e){ warn=true; }
+  if(_emGen!==gen) return;
   if(_emMode==='visual' && _emEditor){ _emEditor.addComponents('<img data-asa-id="'+u.body.asset_id+'" src="'+disp+'" alt="" style="max-width:100%"/>'); }
   else { var ta=document.getElementById('em_src'); if(ta) ta.value+='\n<img src="'+_emPubUrl(u.body.asset_id)+'" alt=""/>'; }   // import: KALICI public URL
-  alert(warn ? 'Görsel yüklendi fakat taslak önizleme URL\'si alınamadı; kaydetmeden önce kontrol et.' : 'Görsel yüklendi (taslak editöründe hemen görünür).');
+  emShow(warn?'warn':'ok', warn ? 'Görsel yüklendi fakat taslak önizleme adresi alınamadı; kaydetmeden önce kontrol et.' : 'Görsel yüklendi (taslak editöründe hemen görünür).');
 }
-async function emHostImages(){ if(!_emHostIdem)_emHostIdem=newId();
-  const r=await emailApi('import_host_images',{email_class:emGetClass(), html:emVal('em_src'), idem:_emHostIdem, request_id:_emHostIdem});
-  if(r.status!==200){ alert(apiErrText(r.status)+' '+((r.body&&r.body.error)||'')); return; }
+async function emHostImages(){
+  if(emBusyRefuse()) return;
+  const cls=emGetClass(); if(!cls){ emShow('err', EM_MSG.class_required); return; }
+  if(!_emHostIdem)_emHostIdem=newId();
+  emShow('info','Görseller barındırılıyor…');
+  const gen=_emGen;   // istek sürerken editör değişirse yeniden yazılmış HTML YENİ editörün içeriğinin üzerine yazılmaz
+  const r=await emailApi('import_host_images',{email_class:cls, html:emVal('em_src'), idem:_emHostIdem, request_id:_emHostIdem});
+  if(_emGen!==gen) return;
+  if(r.status!==200){ emShow('err', emErrText(r.status,r.body,'Görseller barındırılamadı')); return; }
   _emHostIdem=null; document.getElementById('em_src').value=r.body.rewritten_html||emVal('em_src');
   (r.body.hosted||[]).forEach(h=>{ if(!_emAssets.some(a=>a.id===h.asset_id)) _emAssets.push({id:h.asset_id,path:h.path}); }); // dedupe
-  const man=r.body.needs_manual_upload||[]; if(man.length) alert('Allowlist dışı görseller barındırılmadı; manuel yükle:\n'+man.join('\n'));
-  emValidate();
+  const man=(r.body.needs_manual_upload||[]).map(function(x){ x=String(x); return /:storage_hash_conflict$/.test(x) ? x.replace(/:storage_hash_conflict$/,'')+' (depoda aynı adla farklı görsel var)' : x; });
+  if(man.length) emShow('warn','Şu görseller barındırılamadı (izinli alan adında değil ya da indirilemedi); "Görsel yükle" ile elle yükle:\n'+man.join('\n'));
+  else emShow('ok', ((r.body.hosted||[]).length ? (r.body.hosted||[]).length+' görsel barındırıldı.' : 'Barındırılacak uzak görsel yok.'));
+  emValidate({keepStatus:true});
 }
 function emDevice(d){ _emEditor&&_emEditor.setDevice(d); }
 function emGetHtml(){ if(_emMode==='visual'){ try{ return _emEditor.runCommand('gjs-get-inlined-html')||_emEditor.getHtml(); }catch(e){ return _emEditor.getHtml(); } } return document.getElementById('em_src').value; }
@@ -1692,7 +1908,9 @@ function emSerializeCanonical(){
 /* Reopen/refresh: managed img'lerin src'sini component MODELİNDE geçici signed URL'ye çevir (yeniden kurma YOK -> stil/props korunur). */
 async function emSwapToPreview(){
   if(_emMode!=='visual'||!_emEditor||!_emAssets.length) return;
+  const gen=_emGen;
   var pv=await emailApi('asset_preview',{asset_ids:_emAssets.map(function(a){return a.id;}), template_id:_emCurId||null});
+  if(_emGen!==gen) return;
   if(pv.status!==200){ if(document.getElementById('emReport'))document.getElementById('emReport').innerHTML='<div class="notice err">Bazı taslak görseller yüklenemedi (önizleme yetkisi/erişim). Boş görselle kaydetme.</div>'; return; }
   var map={}; (pv.body.previews||[]).forEach(function(p){ map[p.asset_id]=p.url; });
   _emManagedImgs().forEach(function(c){ var at=c.getAttributes()||{}; var cur=_emImgSrc(c);
@@ -1702,76 +1920,147 @@ async function emSwapToPreview(){
   if(miss.length && document.getElementById('emReport')) document.getElementById('emReport').innerHTML='<div class="notice err">Bazı taslak görseller yüklenemedi ('+miss.length+' adet). Kaydetmeden önce kontrol et.</div>';
 }
 function emGetClass(){ return document.getElementById('em_class').value; }
-async function emValidate(){
+async function emValidate(opts){
+  const cls=emGetClass(); if(!cls){ emShow('err', EM_MSG.class_required); return null; }
+  if(!(opts&&opts.keepStatus)) emShow('','');
   var ser=emSerializeCanonical();   // html + builder_json server-approved asset eşlemesinden kanonik (signed/temp YOK)
-  const r=await emailApi('validate',{email_class:emGetClass(), html:ser.html, builder_json:ser.builder_json, source_type:_emSourceType, asset_manifest:_emAssets.map(function(a){return {asset_id:a.id, public_path:a.path};})});
-  if(r.status!==200){ $("emReport").innerHTML='<div class="notice err">'+esc(apiErrText(r.status))+((r.body&&r.body.error)?' ('+esc(r.body.error)+')':'')+'</div>'; return null; }
-  const rep=r.body.validation_report||{};
-  /* Güvenli önizleme: server-sanitized HTML'den; managed public URL -> kısa-ömürlü signed URL swap;
-     CSP img-src YALNIZ Supabase Storage origin + izinli ASALOCAL CDN (keyfi uzak/tracker BLOKLANIR). innerHTML admin DOM'una BASILMAZ (sandbox iframe srcdoc). */
-  var sfx=(rep.sanitized_html||''), miss=[];
-  try{ var pv=await emailApi('asset_preview',{asset_ids:_emAssets.map(function(a){return a.id;}), template_id:_emCurId||null});
-       if(pv.status===200){ (pv.body.previews||[]).forEach(function(p){ var a=_emAssets.find(function(x){return x.id===p.asset_id;}); if(a){ sfx=sfx.split(_emPubUrl(a.id)).join(p.url); } }); miss=pv.body.unavailable_asset_ids||[]; } }catch(e){}
-  var stOrigin=(function(){ try{ return new URL(CFG.url).origin; }catch(e){ return CFG.url; } })();
-  const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src '+stOrigin+' https://cdn.asalocal.club; style-src \'unsafe-inline\'"><body style="margin:0">'+sfx+'</body>';
-  $("emReport").innerHTML='<div><b>'+(r.body.ok?'<span style="color:#0a7d33">GEÇTİ</span>':'<span style="color:#c0303a">ENGELLENDİ</span>')+'</b> content_hash='+esc((r.body.content_hash||'').slice(0,16))+'…'
-    +(miss.length?'<div class="err">Bazı taslak görseller önizlemede yüklenemedi ('+miss.length+' adet); boş görselle kaydetme.</div>':'')
-    +(rep.errors&&rep.errors.length?'<div class="err">Hata: '+esc(rep.errors.join(', '))+'</div>':'')
-    +(rep.warnings&&rep.warnings.length?'<div class="muted">Uyarı: '+esc(rep.warnings.join(', '))+'</div>':'')
-    +'</div><div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap"><iframe sandbox="" style="width:600px;height:320px;border:1px solid var(--line)" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe><iframe sandbox="" style="width:320px;height:380px;border:1px solid var(--line)" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe></div>'
-    +'<div class="muted" style="margin-top:6px"><b>Düz metin (server üretimi):</b></div><pre style="white-space:pre-wrap;font:11px/1.4 ui-monospace,monospace;background:#f6f6f6;border:1px solid var(--line);border-radius:8px;padding:8px;max-height:140px;overflow:auto">'+esc(rep.plain_text||'')+'</pre>';
+  const gen=_emGen;
+  const r=await emailApi('validate',{email_class:cls, html:ser.html, builder_json:ser.builder_json, source_type:_emSourceType, asset_manifest:emManifest()});
+  if(_emGen!==gen) return null;   // editör değişti: eski içeriğin raporu yeni editöre basılmaz
+  if(r.status!==200){ if(document.getElementById('emReport')) $("emReport").innerHTML=''; emShow('err', emErrText(r.status,r.body,'Doğrulanamadı')); return null; }
+  await emRenderReport(r.body);
   return r.body;
 }
-/* emSave: BOOLEAN döner (başarı=true). STABİL idem (create/save). asset_manifest gerçek yüklenen asset'lerden. */
+/* Rapor + önizleme (doğrula VE kaydet akışında aynı): GEÇTİ/ENGELLENDİ, hata cümleleri, removed[]/warnings[] düz Türkçe özeti.
+   Güvenli önizleme: server-sanitized HTML'den; managed public URL -> kısa-ömürlü signed URL swap;
+   CSP img-src YALNIZ Supabase Storage origin + izinli ASALOCAL CDN (keyfi uzak/tracker BLOKLANIR). innerHTML admin DOM'una BASILMAZ (sandbox iframe srcdoc). */
+async function emRenderReport(body){
+  if(!document.getElementById('emReport')) return;
+  const b=body||{}, rep=b.validation_report||{}, gen=_emGen;
+  var sfx=(rep.sanitized_html||''), miss=[];
+  if(_emAssets.length){   // F10: yönetilen görsel yoksa asset_preview ÇAĞRILMAZ (her doğrulamada 422 no_ids gürültüsü yok)
+    try{ var pv=await emailApi('asset_preview',{asset_ids:_emAssets.map(function(a){return a.id;}), template_id:_emCurId||null});
+         if(pv.status===200){ (pv.body.previews||[]).forEach(function(p){ var a=_emAssets.find(function(x){return x.id===p.asset_id;}); if(a){ sfx=sfx.split(_emPubUrl(a.id)).join(p.url); } }); miss=pv.body.unavailable_asset_ids||[]; } }catch(e){}
+    if(_emGen!==gen || !document.getElementById('emReport')) return;
+  }
+  var stOrigin=(function(){ try{ return new URL(CFG.url).origin; }catch(e){ return CFG.url; } })();
+  const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src '+stOrigin+' https://cdn.asalocal.club; style-src \'unsafe-inline\'"><body style="margin:0">'+sfx+'</body>';
+  const errs=emRepErrLines(rep), rem=emRemovedLines(rep.removed), warns=emWarnLines(rep.warnings), h16=String(b.content_hash||'').slice(0,16);
+  $("emReport").innerHTML='<div><b>'+(b.ok?'<span style="color:#0a7d33">GEÇTİ</span>':'<span style="color:#c0303a">ENGELLENDİ</span>')+'</b>'+(h16?' <span class="muted">içerik özeti '+esc(h16)+'…</span>':'')
+    +(miss.length?'<div class="err">Bazı taslak görseller önizlemede yüklenemedi ('+miss.length+' adet); boş görselle kaydetme.</div>':'')
+    +(errs.length?'<div class="err">'+errs.map(esc).join('<br>')+'</div>':'')
+    +(rem.length?'<div class="muted"><b>Temizlenen:</b> '+esc(rem.join('; '))+'. Önizleme, kaydedilecek temizlenmiş hâli gösterir.</div>':'')
+    +(warns.length?'<div class="muted"><b>Uyarılar:</b> '+esc(warns.join(' '))+'</div>':'')
+    +'</div><div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap"><iframe sandbox="" style="width:600px;height:320px;border:1px solid var(--line)" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe><iframe sandbox="" style="width:320px;height:380px;border:1px solid var(--line)" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe></div>'
+    +'<div class="muted" style="margin-top:6px"><b>Düz metin (server üretimi):</b></div><pre style="white-space:pre-wrap;font:11px/1.4 ui-monospace,monospace;background:#f6f6f6;border:1px solid var(--line);border-radius:8px;padding:8px;max-height:140px;overflow:auto">'+esc(rep.plain_text||'')+'</pre>';
+}
+/* emSave: BOOLEAN döner (başarı=true). STABİL idem (create/save). asset_manifest gerçek yüklenen asset'lerden.
+   F8: uçuştayken ikinci çağrı false döner; kaydet/yayınla/doğrula/barındır/yükle kontrolleri kilitlenir, finally'de açılır. */
+function emBusyButtons(){ const ed=document.getElementById('emEditor'); if(!ed) return [];
+  return Array.prototype.filter.call(ed.querySelectorAll('button,input[type=file]'), function(b){ return /^(emSave|emPublish|emValidate|emHostImages|emAssetUpload|emImportFile)\b/.test(String(b.getAttribute('onclick')||b.getAttribute('onchange')||'')); }); }
+function emBusyStart(msg){ _emBusy=true; const btns=emBusyButtons(); btns.forEach(function(b){ b.disabled=true; }); emShow('info', msg); return btns; }
+function emBusyEnd(btns){ btns.forEach(function(b){ b.disabled=false; }); _emBusy=false;
+  ['emListStatus','emStatus'].forEach(function(i){ const el=document.getElementById(i); if(el && el.getAttribute('data-em-busy')==='1'){ el.removeAttribute('data-em-busy'); el.innerHTML=''; } }); }
+// Kayıt/yayın sonucu: editör hâlâ aynıysa #emStatus; değiştiyse liste durum satırı (şablon adıyla) — yeni editöre ASLA yazılmaz.
+function emSay(gen, name, kind, text){ if(_emGen===gen) emShow(kind, text); else emShow(kind, '«'+name+'»: '+text, 'emListStatus'); }
 async function emSave(){
-  if(!CAPS.crm){ alert(apiErrText(403)); return false; }
-  if(_emCurId===null){ if(!_emCreateIdem)_emCreateIdem=newId();
-    const c=await emailApi('create',{internal_name:emVal('em_name'), description:emVal('em_desc')||null, email_class:emGetClass(), source_type:_emSourceType, idem:_emCreateIdem, request_id:_emCreateIdem});
-    if(c.status!==200){ alert(apiErrText(c.status)+' '+((c.body&&c.body.error)||'')); return false; }
-    _emCurId=c.body.template_id; _emCreateIdem=null; }
-  if(!_emSaveIdem)_emSaveIdem=newId();
+  if(_emBusy) return false;
+  const btns=emBusyStart('Kaydediliyor…');
+  try{ return !!(await _emSaveCore()); }
+  catch(e){ emShow('err', EM_MSG.unexpected); return false; }
+  finally{ emBusyEnd(btns); }
+}
+/* Başarıda {tid, gen, name}, aksi hâlde false döner. Şablon kimliği, kaynak türü, ad ve editör nesli İLK await'ten ÖNCE sabitlenir;
+   validate/create/save (ve emPublish'teki publish) YALNIZ bu anlık görüntüyü kullanır (uçuşta "Aç" başka şablonu açsa bile). */
+async function _emSaveCore(){
+  if(!CAPS.crm){ emShow('err', apiErrText(403)); return false; }
+  const cls=emGetClass(); if(!cls){ emShow('err', EM_MSG.class_required); return false; }            // F4: sınıf AÇIKÇA seçilmeli
+  const gen=_emGen, st=_emSourceType, isNew=(_emCurId===null); let tid=_emCurId;
+  const f={ name:emVal('em_name'), desc:emVal('em_desc'), subject:emVal('em_subject'), preview:emVal('em_preview'), sender:emVal('em_sender'), reply:emVal('em_reply') };
+  const name=isNew ? f.name : (_emCurName||f.name);   // save adı DEĞİŞTİRMEZ -> mevcut şablonda kayıtlı ad gösterilir
+  const here=function(){ return _emGen===gen; }, say=function(kind,text){ emSay(gen, name, kind, text); };
+  if(_emMode==='import' && emVal('em_src').trim()===EM_SAMPLE){ emShow('err', EM_MSG.sample_content); return false; }   // F3
+  const bad=emCheckFields(f, isNew); if(bad){ emShow('err', bad); return false; }                      // F5
   var _emSer=emSerializeCanonical();   // kalıcı html + builder_json: managed img'ler kanonik public URL; signed/draft/token/data-asa-* YOK
-  const s=await emailApi('save',{template_id:_emCurId, email_class:emGetClass(), source_type:_emSourceType,
-    subject:emVal('em_subject'), preview_text:emVal('em_preview'), sender_name:emVal('em_sender'), reply_to:emVal('em_reply')||null,
+  const hb=emCheckHtml(_emSer.html); if(hb){ emShow('err', hb); return false; }
+  const manifest=emManifest();
+  // F6: KAYDETMEDEN ÖNCE doğrula (salt-okunur; idem/DB yazımı YOK) -> başarısızsa create/save YOK (boş şablon kabuğu oluşmaz).
+  // Rapor + önizleme + removed[]/warnings[] özeti kaydedilecek içeriğin KENDİSİ için #emReport'ta kalır.
+  const v=await emailApi('validate',{email_class:cls, html:_emSer.html, builder_json:_emSer.builder_json, source_type:st, asset_manifest:manifest});
+  if(v.status!==200){ if(here() && document.getElementById('emReport')) $("emReport").innerHTML=''; say('err', emErrText(v.status,v.body)); return false; }
+  if(here()) await emRenderReport(v.body);
+  if(!v.body || v.body.ok!==true){ say('err', [EM_MSG.not_validated].concat(emRepErrLines(v.body&&v.body.validation_report)).join('\n')); return false; }
+  if(isNew){
+    let cidem; if(here()){ if(!_emCreateIdem)_emCreateIdem=newId(); cidem=_emCreateIdem; } else cidem=newId();   // stabil anahtar yalnız KENDİ editöründe tutulur
+    const c=await emailApi('create',{internal_name:f.name, description:f.desc||null, email_class:cls, source_type:st, idem:cidem, request_id:cidem});
+    if(c.status!==200){ say('err', emErrText(c.status,c.body)); return false; }
+    tid=c.body.template_id; if(_emCreateIdem===cidem) _emCreateIdem=null;
+    if(here()){ _emCurId=tid; _emCurName=name;   // F4: kilitlemeden ÖNCE create'e gönderilen anlık görüntü geri yazılır (uçuşta değişen sınıf/ad/açıklama kilitlenmez)
+      [['em_class',cls],['em_name',f.name],['em_desc',f.desc]].forEach(function(x){ const e=document.getElementById(x[0]); if(e) e.value=x[1]||''; });
+      emLockClass(); emLockMeta(); } }                                                                    // F4: sınıf (ve ad) oluşturma sonrası kilitli
+  let sidem; if(here()){ if(!_emSaveIdem)_emSaveIdem=newId(); sidem=_emSaveIdem; } else sidem=newId();
+  const s=await emailApi('save',{template_id:tid, email_class:cls, source_type:st,
+    subject:f.subject, preview_text:f.preview, sender_name:f.sender, reply_to:f.reply||null,
     html:_emSer.html, builder_json:_emSer.builder_json,
-    asset_manifest:_emAssets.map(a=>({asset_id:a.id, public_path:a.path})), idem:_emSaveIdem, request_id:_emSaveIdem});
-  if(s.status!==200){ alert(apiErrText(s.status)+' '+((s.body&&s.body.error)||'')); return false; }
-  _emSaveIdem=null; return true;
+    asset_manifest:manifest, idem:sidem, request_id:sidem});
+  if(s.status!==200){
+    say('err', emErrText(s.status,s.body)+(isNew?'\n'+EM_MSG.created_not_saved:''));
+    if(isNew) await emRefreshList();                         // oluşturulan boş taslak listede görünür; yeniden deneme aynı şablona kaydeder
+    return false; }
+  if(_emSaveIdem===sidem) _emSaveIdem=null;
+  if(here()) emShowSaved(name, s.body, v.body.validation_report);   // F1: başarı satırı (alert YOK)
+  else emShow('ok', 'Taslak kaydedildi: «'+name+'» · taslak (yayınlanmadı) · e-posta gönderilmedi.', 'emListStatus');
+  await emRefreshList();                                     // F2: liste yenilenir, editör AÇIK kalır (renderEmail DEĞİL)
+  return {tid:tid, gen:gen, name:name};
 }
 async function emPublish(){
-  if(!CAPS.superadmin){ alert('Yayınlama yalnız super_admin.'); return; }
-  const ok=await emSave(); if(!ok) return;                 // save BAŞARISIZSA publish YOK (guard)
-  if(!_emPublishIdem)_emPublishIdem=newId();
-  const p=await emailApi('publish',{template_id:_emCurId, idem:_emPublishIdem, request_id:_emPublishIdem});
-  if(p.status!==200){ alert('Yayın reddedildi: '+((p.body&&p.body.error)||apiErrText(p.status))); return; }
-  _emPublishIdem=null; alert('Yayınlandı (immutable).'); renderEmail();
+  if(!CAPS.superadmin){ emShow('err', EM_MSG.publish_role); return; }
+  if(_emBusy) return;
+  const btns=emBusyStart('Kaydediliyor…');
+  try{
+    const r=await _emSaveCore(); if(!r) return;            // save BAŞARISIZSA publish YOK (guard); _emSaveCore kendi kilidini almaz
+    const here=(_emGen===r.gen);                           // publish, KAYDEDİLEN şablona (r.tid) gider
+    let pidem; if(here){ if(!_emPublishIdem)_emPublishIdem=newId(); pidem=_emPublishIdem; emShow('info','Yayınlanıyor…'); } else pidem=newId();
+    const p=await emailApi('publish',{template_id:r.tid, idem:pidem, request_id:pidem});
+    if(p.status!==200){ emSay(r.gen, r.name, 'err', emErrText(p.status,p.body,'Yayınlanamadı')); return; }
+    if(_emPublishIdem===pidem) _emPublishIdem=null;
+    if(_emGen===r.gen){ alert('Yayınlandı (immutable).'); renderEmail(); }
+    else { emShow('ok', '«'+r.name+'» yayınlandı.', 'emListStatus'); await emRefreshList(); }
+  }catch(e){ emShow('err', EM_MSG.unexpected); }
+  finally{ emBusyEnd(btns); }
 }
-async function emOpen(id){ const g=await emailApi('get',{template_id:id}); if(g.status!==200){ alert(apiErrText(g.status)); return; } const t=g.body.template||{};
+async function emOpen(id){ if(emBusyRefuse('emListStatus')) return;
+  const g=await emailApi('get',{template_id:id});
+  if(emBusyRefuse('emListStatus')) return;   // kaydetme bu arada başladıysa editör DEĞİŞTİRİLMEZ
+  if(g.status!==200){ emShow('err', emErrText(g.status,g.body,'Şablon açılamadı'), 'emListStatus'); return; } const t=g.body.template||{};
   if(t.status==='published' && !g.body.draft){
     // Yayınlanmış + draft yok -> düzenlemek için AÇIK "Yeni sürüm" (auto YOK)
     const pub=g.body.published||{}; var _stO=(function(){ try{ return new URL(CFG.url).origin; }catch(e){ return CFG.url; } })();
     const doc='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src '+_stO+' https://cdn.asalocal.club; style-src \'unsafe-inline\'"><body style="margin:0">'+esc((pub.sanitized_html||'')).replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</body>';
     emPanel('<div class="frow" style="align-items:center;gap:8px"><b>'+esc(t.internal_name)+'</b> <span class="badge">yayında v'+(pub.version_number||'')+' (immutable)</span>'
-      +(CAPS.crm?' <button class="btn primary sm" onclick="emNewVersion(\''+id+'\')">Yeni sürüm oluştur</button>':' <span class="muted">Düzenleme için crm/super_admin gerekir.</span>')+'</div>'
+      +(CAPS.crm?' <button class="btn primary sm" onclick="emNewVersion(\''+id+'\')">Yeni sürüm oluştur</button>':' <span class="muted">'+esc(EM_MSG.edit_role)+'</span>')+'</div>'
       +'<iframe sandbox="" style="width:600px;height:340px;border:1px solid var(--line);margin-top:8px" srcdoc="'+doc.replace(/"/g,'&quot;')+'"></iframe>');
     return;
   }
   const v=g.body.draft||{};
   _emCurId=id; _emSourceType=t.source_type; emResetIdem(); _emCurId=id;
-  if(t.source_type==='visual_builder'){ await emNewVisual(); _emCurId=id; document.getElementById('em_name').value=t.internal_name; document.getElementById('em_class').value=t.email_class; document.getElementById('em_subject').value=v.subject||''; document.getElementById('em_preview').value=v.preview_text||''; document.getElementById('em_sender').value=v.sender_name||''; document.getElementById('em_reply').value=v.reply_to||''; try{ if(v.builder_json) _emEditor.loadProjectData(v.builder_json); else if(v.sanitized_html) _emEditor.setComponents(v.sanitized_html); }catch(e){} }
-  else { emNewImport(); _emCurId=id; document.getElementById('em_name').value=t.internal_name; document.getElementById('em_class').value=t.email_class; document.getElementById('em_subject').value=v.subject||''; document.getElementById('em_preview').value=v.preview_text||''; document.getElementById('em_sender').value=v.sender_name||''; document.getElementById('em_reply').value=v.reply_to||''; document.getElementById('em_src').value=v.source_html||v.sanitized_html||''; }
+  if(t.source_type==='visual_builder'){ if(await emNewVisual()===false) return; _emCurId=id; document.getElementById('em_name').value=t.internal_name; document.getElementById('em_class').value=t.email_class; document.getElementById('em_subject').value=v.subject||''; document.getElementById('em_preview').value=v.preview_text||''; document.getElementById('em_sender').value=v.sender_name||''; document.getElementById('em_reply').value=v.reply_to||''; try{ if(v.builder_json) _emEditor.loadProjectData(v.builder_json); else if(v.sanitized_html) _emEditor.setComponents(v.sanitized_html); }catch(e){} }
+  else { if(emNewImport()===false) return; _emCurId=id; document.getElementById('em_name').value=t.internal_name; document.getElementById('em_class').value=t.email_class; document.getElementById('em_subject').value=v.subject||''; document.getElementById('em_preview').value=v.preview_text||''; document.getElementById('em_sender').value=v.sender_name||''; document.getElementById('em_reply').value=v.reply_to||''; document.getElementById('em_src').value=v.source_html||v.sanitized_html||''; }
   if(document.getElementById('em_desc')) document.getElementById('em_desc').value=t.description||'';
+  _emCurName=t.internal_name;
+  emLockClass(); emLockMeta();   // F4: sunucu sınıf/ad/açıklama değişikliğini save'de KALICILAŞTIRMAZ -> mevcut şablonda kilitli
   _emAssets=(v.asset_manifest||[]).map(function(m){ return {id:m.asset_id, path:(m.public_path||'')}; });  // draft manifest KORUNUR (reopen)
+  const gen=_emGen;
   await emSwapToPreview();   // reopen: managed public URL'leri kısa-ömürlü signed URL'ye çevir (görsel görünür; project/component/style KORUNUR)
-  await emValidate();
+  if(_emGen===gen) await emValidate();
 }
-async function emNewVersion(id){ if(!CAPS.crm){alert(apiErrText(403));return;}
+async function emNewVersion(id){ if(!CAPS.crm){ emShow('err', apiErrText(403), 'emListStatus'); return; } if(emBusyRefuse('emListStatus')) return;
   const r=await emailApi('new_version',{template_id:id, idem:_rowIdem(id,'newver'), request_id:_rowIdem(id,'newver')});
-  if(r.status!==200){ alert('Yeni sürüm hatası: '+((r.body&&r.body.error)||apiErrText(r.status))); return; }
+  if(r.status!==200){ emShow('err', emErrText(r.status,r.body,'Yeni sürüm oluşturulamadı'), 'emListStatus'); return; }
   _clrRow(id,'newver'); await emOpen(id);  // published pointer korunur; yeni draft düzenlenir
 }
-async function emDuplicate(id){ if(!CAPS.crm){alert(apiErrText(403));return;} const r=await emailApi('duplicate',{template_id:id, idem:_rowIdem(id,'dup'), request_id:_rowIdem(id,'dup')}); if(r.status!==200){alert(apiErrText(r.status)+' '+((r.body&&r.body.error)||''));return;} _clrRow(id,'dup'); renderEmail(); }
-async function emArchive(id){ if(!CAPS.superadmin){alert('Arşiv yalnız super_admin.');return;} const r=await emailApi('archive',{template_id:id, idem:_rowIdem(id,'arch'), request_id:_rowIdem(id,'arch')}); if(r.status!==200){alert(apiErrText(r.status)+' '+((r.body&&r.body.error)||''));return;} _clrRow(id,'arch'); renderEmail(); }
+async function emDuplicate(id){ if(!CAPS.crm){ emShow('err', apiErrText(403), 'emListStatus'); return; } if(emBusyRefuse('emListStatus')) return; const r=await emailApi('duplicate',{template_id:id, idem:_rowIdem(id,'dup'), request_id:_rowIdem(id,'dup')}); if(r.status!==200){ emShow('err', emErrText(r.status,r.body,'Çoğaltılamadı'), 'emListStatus'); return; } _clrRow(id,'dup'); if(_emBusy) await emRefreshList(); else renderEmail(); }
+async function emArchive(id){ if(!CAPS.superadmin){ emShow('err', EM_MSG.archive_role, 'emListStatus'); return; } if(emBusyRefuse('emListStatus')) return; const r=await emailApi('archive',{template_id:id, idem:_rowIdem(id,'arch'), request_id:_rowIdem(id,'arch')}); if(r.status!==200){ emShow('err', emErrText(r.status,r.body,'Arşivlenemedi'), 'emListStatus'); return; } _clrRow(id,'arch'); if(_emBusy) await emRefreshList(); else renderEmail(); }
 </script>
 </body>
 </html>
