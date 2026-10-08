@@ -1,0 +1,40 @@
+{
+  "status": "DRAFT_LEGAL_REVIEW_REQUIRED",
+  "source": "SOURCE_MISSING",
+  "not_a_db_row": true,
+  "not_for_publication": true,
+  "mirrors_table": "public.controller_identity_versions (CDP3C_package/CDP3C_up.sql, section 1 Controller identity)",
+  "columns": {
+    "controller_type": "{{natural_person|legal_entity}}",
+    "version": 1,
+    "display_name": "{{DISPLAY_NAME}}",
+    "natural_person_fields": {
+      "full_name": "{{FULL_NAME}}",
+      "contact_channel": "{{CONTACT_CHANNEL}}"
+    },
+    "legal_entity_fields": {
+      "legal_name": "{{UNVAN}}",
+      "mersis": "{{MERSIS_16_DIGITS}}"
+    },
+    "published_address_form": "{{ADDRESS}}",
+    "is_active": false,
+    "is_published": false,
+    "valid_from": null,
+    "valid_to": null
+  },
+  "server_set_columns": [
+    "id",
+    "created_by",
+    "created_at"
+  ],
+  "notes": [
+    "Not a DB row. Nothing here is inserted, published or activated; every DB step needs a separate owner approval.",
+    "controller_exactly_one_fieldset: keep exactly one of natural_person_fields / legal_entity_fields and set the other to null, matching controller_type.",
+    "_validate_controller_fields allows only these jsonb keys: natural_person {full_name, contact_channel}, legal_entity {legal_name, mersis}; any other key raises controller_extra_key.",
+    "mersis must be a string of exactly 16 digits (controller_mersis_invalid otherwise); display_name, full_name, contact_channel and legal_name are 1-200 characters.",
+    "Marketing and marketing_capture readiness require an active legal_entity controller (MERSIS); service_delivery readiness does not check the controller type.",
+    "KEP, VKN, vergi dairesi and telephone have no structured slot in this table; they appear only in document bodies as {{KEP}}, {{VKN}}, {{VERGI_DAIRESI}}, {{TELEFON}}.",
+    "valid_from: omit it at insert so the DB default now() applies (the column is timestamptz not null default now(); an explicit null fails NOT NULL); valid_to null means open-ended (controller_valid_range).",
+    "version 1 is unique per controller_type (unique (controller_type, version))."
+  ]
+}

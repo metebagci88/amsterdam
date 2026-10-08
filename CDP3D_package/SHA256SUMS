@@ -1,5 +1,5 @@
 6cd8798c1eef8cfc924e3605749428a0983583b3b64c26f66824ea5ed9b7db7c  ./.github/workflows/cdp3d-edge-integration.yml
-52fa1831bc950a8ae57016e302137046344796636982f91f51d30b93c534556e  ./.github/workflows/cdp3d-gates.yml
+2eddbffa57f24dda70e43d8b1e708f9093e01464fd90152de15e41d914b1ee7d  ./.github/workflows/cdp3d-gates.yml
 6476a18974a773bf2f1efa9a5c2a0a51234cce016c82be30d2f3d1e2d79d9000  ./CDP3D_APPLY_ROLLBACK.md
 d1e6721ce90a00227539bca79c061a46141c91befdf60cefd9021eea74cf151b  ./CDP3D_PACKAGE_REPORT.md
 cf323e2fccc833ab21489bd9515a4afebe56765893ef0de45b250dab7314a584  ./CDP3D_TEST_MATRIX.md
@@ -7,6 +7,9 @@ cf323e2fccc833ab21489bd9515a4afebe56765893ef0de45b250dab7314a584  ./CDP3D_TEST_M
 0d2ffa2f81443e8463a606664983a32e4f080bd35afb50dfb50dcc29022e5651  ./CDP3D_up.sql
 8c4f74b9a446d446c2c4800514a4347b192f8cb5897ef13e1fb78c2b267b1a0c  ./edge/resend-webhook/index.ts
 1279d9aa52a8f8cee40d56389baf0e58f1101369ced0188f949d176536a10537  ./edge/service-email-dispatch/index.ts
+77e9aeda87bf93250fa70ccc68d2e52e35653361ee0809702a92395880c741eb  ./email/templates/welcome_service_email.v3.2.html
+c49a676450f4bda00ac116a8f3775e12a2b6ab3431a745943556e9c6c5e0067a  ./email/templates/welcome_service_email.v3.2.json
+818164c11d23badc6636e5a816c366a952f6034f751ff51258464fe18d65fe56  ./email/templates/welcome_service_email.v3.2.txt
 e8652d2da18c4b98da4fe1b6e1e71a47895ded27c5b6e3d6f82ec7ac2f559289  ./gates/cdp3d_baseline_contract.sql
 7d819701faa0f2c7036dfbf03a5bb28929224760019bb958894cbf25d4689451  ./gates/cdp3d_ci_baseline.sql
 7a7accfaba29a029b15bc91f49ddc9bbf927cde836eaeff6bc237410ab1fa95a  ./gates/cdp3d_db_suite.mjs
@@ -16,3 +19,15 @@ e8652d2da18c4b98da4fe1b6e1e71a47895ded27c5b6e3d6f82ec7ac2f559289  ./gates/cdp3d_
 ba3ba5f2ee98815f2de21019b80eacaeac946d146bab45f004e4881dc4b8bc6b  ./gates/cdp3d_secret_scan.sh
 c53e35b37075825fc581328c7a82e189d54c180117fa97e62105b303bffa44a7  ./gates/cdp3d_secret_scan_selftest.sh
 5a222d34ebb0462b4fe9caf60dc0716247ff0edbbbbb7aba7a6035a9592011a6  ./gates/cdp3d_svix_test.mjs
+179035274cd61c67ac7869dfd80ba1e4a0ed85ffa974258581092ad74c36587d  ./gates/cdp3d_template_check.sh
+d5257e16aef1a9c3c003bbab908183cf7e837c29bb5d9923e0882f2c59b2f130  ./gates/cdp3d_template_check_selftest.sh
+11cd609d7646f586b55392543e69307946b7ef825be4d4854b2a6dde32495479  ./legal/drafts/tr/LAWYER_CHECKLIST.md
+6f0054fd52f0fd0b62855c53a7005ebc4789bac225e5add7604972aaee1253d2  ./legal/drafts/tr/README.md
+1b9bc21a6a10de9e366366f8557c9277146778a6c0e0f9a67a0f859b1efdfb26  ./legal/drafts/tr/acik_riza_kisisellestirme.v1.draft.md
+f5a97047547c23f0a225e20065d5961c99986ac2ae29439df53b7a42b463d347  ./legal/drafts/tr/acik_riza_marketing.v1.draft.md
+7f8468a94a435e3f0bbb94725e3e4fa8a366fbab2631b54ef6e2e94ffb3fa745  ./legal/drafts/tr/cerez_politikasi.v1.draft.md
+53aae06242a8805edcfda98d2d29389c87551efba11210b4860f0c6977679c66  ./legal/drafts/tr/controller_identity.draft.json
+d6174e934c66c4bf93b181f9b131174987c63e9b34f872f2edfa4d599f97bf3e  ./legal/drafts/tr/gizlilik_politikasi.v1.draft.md
+196db422512ae1cf6a52169513d37bbd339949e82bbd6134b7e59dc07eaa7463  ./legal/drafts/tr/kvkk_aydinlatma.v1.draft.md
+3f47e1a9dcf9698b3c6ea6bc49fa7d1acd39815dc8ce7375c2d1d0bfe380b4c6  ./legal/drafts/tr/manifest.json
+455b97c981823090039cba5cc2f48461f5928099bd5d9103d43c4fa0ccc9613e  ./legal/drafts/tr/uyelik_sartlari.v1.draft.md

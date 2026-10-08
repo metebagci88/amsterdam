@@ -1,0 +1,125 @@
+{
+  "template_key": "welcome_service_email",
+  "version": "v3.2",
+  "status": "approved_source_not_published",
+  "subject": "Aramıza hoş geldin",
+  "class": "optional_service",
+  "service_pref_key": "welcome_service_email",
+  "locale": "tr-TR",
+  "files": {
+    "html": {
+      "path": "welcome_service_email.v3.2.html",
+      "bytes": 13354,
+      "chars": 13249,
+      "sha256": "77e9aeda87bf93250fa70ccc68d2e52e35653361ee0809702a92395880c741eb",
+      "encoding": "utf-8, no BOM, LF only, trailing LF"
+    },
+    "text": {
+      "path": "welcome_service_email.v3.2.txt",
+      "bytes": 343,
+      "chars": 324,
+      "sha256": "818164c11d23badc6636e5a816c366a952f6034f751ff51258464fe18d65fe56",
+      "encoding": "utf-8, no BOM, LF only, trailing LF"
+    }
+  },
+  "personalization": {
+    "syntax": "{{name}} as matched by email_sanitizer.js findVariables /\\{\\{\\s*([a-zA-Z0-9_]+)\\s*\\}\\}/",
+    "allowlist": [
+      "first_name"
+    ],
+    "occurrences": {
+      "html": 1,
+      "text": 1
+    },
+    "render_rules": "Not defined in this repo yet: CDP3D email_enqueue takes literal bodies. Whoever renders must HTML-escape first_name in the HTML body and define the empty-name fallback (see open_issues)."
+  },
+  "image_policy": {
+    "logo": "text wordmark 'asalocal' (Georgia, #272e1b)",
+    "img_tags": 0,
+    "data_uri": 0,
+    "remote_images": 0,
+    "css_background_images": 0,
+    "inline_or_data_uri_logo": false
+  },
+  "approval": {
+    "visual_approval": {
+      "client": "Gmail",
+      "result": "passed",
+      "recorded_by": "owner",
+      "recorded_on": "2026-10-08",
+      "basis": "owner statement in the task brief; delivered outbox row 4cf96896 is the approved send",
+      "approved_at": "NOT_RECORDED"
+    },
+    "legal_review": "legal review not addressed by the brief; classification is on the lawyer checklist",
+    "legal_review_ref": "CDP3D_package/legal/drafts/tr/LAWYER_CHECKLIST.md item 3 (optional_service vs commercial electronic message)"
+  },
+  "provenance": {
+    "source_kind": "AUTHORITATIVE_OUTBOX_COPY",
+    "source": "public.email_outbox row 4cf96896… (prefix only), read-only SELECT on 2026-10-08",
+    "row": {
+      "status": "delivered",
+      "message_class": "optional_service",
+      "service_pref_key": "welcome_service_email",
+      "template_id": null,
+      "created_at": "2026-09-30",
+      "sent_at": "2026-09-30",
+      "delivered_at": "NOT_CAPTURED",
+      "content_purged_at": null,
+      "timestamp_precision": "date only (time of day withheld)"
+    },
+    "original_digests": "withheld: the pre-redaction outbox bodies contain the recipient's first name, so their sha256 values, hash prefixes, byte and character counts would let anyone recover the name by brute force; they are held only in operator private storage and are never committed or quoted (owner no-PII rule)",
+    "transformations": [
+      {
+        "id": "S1",
+        "kind": "personalization",
+        "where": "html line 82, text line 1 (rendered greeting)",
+        "change": "literal recipient first name -> {{first_name}}",
+        "count": {
+          "html": 1,
+          "text": 1
+        },
+        "status": "applied"
+      },
+      {
+        "id": "S2",
+        "kind": "pii_redaction",
+        "where": "html line 46, inside a non-rendered HTML comment (design note)",
+        "change": "same first-name token -> 'owner'",
+        "count": {
+          "html": 1,
+          "text": 0
+        },
+        "status": "applied",
+        "needs_owner_ok": false,
+        "decided_by": "operator under the owner's no-PII rule",
+        "decided_on": "2026-10-08",
+        "reason": "the repository is public and the owner rule bans personal data in output; the comment is not rendered"
+      }
+    ],
+    "no_other_changes": "all other bytes identical; line counts 238 (html) and 10 (text) unchanged",
+    "inverse_check": "performed privately by the operator on 2026-10-08 (reversing S2 then S1 reproduced the withheld original digests exactly); its inputs, script and results contain or derive from personal data and stay in operator private storage",
+    "not_canonical": [
+      "outbox 8a532f77… (2026-09-30, 23,089 B, image logo + data:image): older v3.x",
+      "outbox ce2107df… (canceled, no body)"
+    ]
+  },
+  "library_compat": {
+    "email_templates_class": "none: library allows marketing|transactional only",
+    "sanitizer_marketing": "blocked: missing_unsubscribe_url_variable (warning marketing_legal_footer_missing)",
+    "sanitizer_transactional": "ok, but removes <style> (incl. mobile @media), <meta> attributes, opacity/overflow/background declarations; sanitized_html != this file (11,894 chars under jsdom, sha256 prefix d3f0edcc; deno-dom bytes not verified)",
+    "production_template_record": null,
+    "sanitizer_file_sha256": "11490786a1d5de4f685c0db25f9555af56cc95611c5e2f6ea09fc8cf15592bf9",
+    "html_comments": "all 20 HTML comments survive the sanitizer (incl. 3 MSO conditional blocks); the raw <!-- token count is 21 because the [if !mso] opener contains two"
+  },
+  "open_issues": [
+    "Link https://asalocal.club/preferences (html + text): origin/main has no /preferences page or _redirects rule; preferences are a modal on / (data-acct=prefs). Not verified live.",
+    "mailto:destek@asalocal.club (html only): domain reported to have no MX; replies and rights requests may be lost. Not verified here.",
+    "Apex links https://asalocal.club/ and /preferences: rely on an apex->www redirect; canonical host is www. Not verified live.",
+    "{{first_name}}: no renderer in CDP3D; HTML-escaping and empty-name fallback undefined.",
+    "Class optional_service has no template-library class; marketing rejects, transactional mislabels and degrades the HTML.",
+    "All 20 HTML comments survive the sanitizer (incl. MSO conditional blocks); S2 removed the only personal data. Sanitizer comment handling (E5) is a separate approval item.",
+    "Serve-block: on origin/main /CDP3D_package/* is publicly served; this change adds the defensive _redirects line '/CDP3D_package/*  /  302' (same as WP7). Effective only after a deploy."
+  ],
+  "not_published": true,
+  "publish_requires": "separate explicit owner approval (production draft record, class decision, renderer)"
+}
