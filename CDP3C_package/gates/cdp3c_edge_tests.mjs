@@ -122,7 +122,8 @@ if(cphStub){
   ok("CPH-stub Amsterdam başlık veya prototip içeriği yok", !/Amsterdam/i.test(cph) && !/Rembrandtpark/.test(cph));
   ok("CPH-stub kişisel seyahat tarihi veya itinerary yok", !/11–31 Temmuz|Antwerp|Brüksel|Brugge|Brussels|Bruges/.test(cph));
   ok("CPH-stub ortak şifre yok", !/ortak şifre/.test(cph));
-  ok("CPH-stub WhatsApp, whisper, veri notu veya file yolu yok", !/WhatsApp/i.test(cph) && !/whisper/i.test(cph) && !/Veri notları/.test(cph) && !/file:\/\//.test(cph));
+  // WP7 (5/n): singular "Veri notu" and any case are caught too (was /Veri notları/, plural and case-sensitive).
+  ok("CPH-stub WhatsApp, whisper, veri notu veya file yolu yok", !/WhatsApp/i.test(cph) && !/whisper/i.test(cph) && !/veri not(u|ları)/i.test(cph) && !/file:\/\//.test(cph));
   ok("CPH-stub preference UI veya yarım save/read yok", !/loadPrefs|prefsShellHtml|service_pref_set|consent_set_pref_center|curSeg==="prefs"|<script\b/i.test(cph));
   ok("CPH-stub marketing UI yok", !/marketing_available|asaMktBlock|marketingBlock/.test(cph));
   ok("CPH-stub uydurma mekân yok", !/\bconst V\b|CITYCONF|Nyhavn|Tivoli|Noma|Torvehallerne|kafe|restoran/i.test(cph));
