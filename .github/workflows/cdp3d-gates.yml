@@ -19,6 +19,14 @@ jobs:
       - name: SHA256SUMS doğrula (paket bütünlüğü)
         run: sha256sum -c SHA256SUMS
 
+      - name: "İçerik gate (welcome v3.2 şablonu + hukuk taslak iskeleti; self-test + kontrol)"
+        run: |
+          set -euo pipefail
+          bash gates/cdp3d_template_check_selftest.sh . | tee /tmp/template_selftest.log
+          grep -qx "TEMPLATE_CHECK_SELFTEST_PASS" /tmp/template_selftest.log || { echo "GATE_FAILED:template_check_selftest"; exit 1; }
+          bash gates/cdp3d_template_check.sh . | tee /tmp/template_check.log
+          grep -qx "TEMPLATE_CHECK_PASS" /tmp/template_check.log || { echo "GATE_FAILED:template_check"; exit 1; }
+
       - name: Bağımlılıklar (PGlite + pgcrypto contrib + esbuild)
         run: |
           set -euo pipefail

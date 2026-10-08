@@ -1,0 +1,10 @@
+Merhaba {{first_name}},
+
+Aramıza hoş geldin.
+
+asalocal, lokal gibi gezmek isteyenlerin club’ı. Hesabın hazır — peşinde olduğun şey basit: bir şehri turist gibi değil, yereldeymiş gibi gezmek.
+
+Hesabına git: https://asalocal.club/
+Tercihler: https://asalocal.club/preferences
+
+Bu bir servis e-postasıdır; pazarlama değildir.

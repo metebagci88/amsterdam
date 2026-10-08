@@ -1,0 +1,114 @@
+{
+  "status": "DRAFT_LEGAL_REVIEW_REQUIRED",
+  "source": "SOURCE_MISSING",
+  "source_expected": "ASALOCAL_METIN_PAKETI_TR_v1.md (not reachable from this environment; the owner attaches it)",
+  "source_sha256": null,
+  "source_bytes": null,
+  "not_published": true,
+  "not_activated": true,
+  "db_rows": "none: no consent_text_versions, controller_identity_versions, consent_text_approvals or readiness_attestations rows; marketing_config pointer unchanged",
+  "locale_note": "DB column consent_text_versions.locale must match ^[a-z]{2}$, so 'tr'; the e-mail template metadata uses tr-TR",
+  "body_sha256_rule": "null while SOURCE_MISSING; after import: sha256 of the UTF-8 body (the document without its front matter), which is what the DB trigger stores as content_hash and what consent_text_approvals.approved_content_hash must equal",
+  "documents": [
+    {
+      "doc_type": "kvkk_aydinlatma",
+      "version": 1,
+      "locale": "tr",
+      "file": "kvkk_aydinlatma.v1.draft.md",
+      "status": "DRAFT_LEGAL_REVIEW_REQUIRED",
+      "source": "SOURCE_MISSING",
+      "body_sha256": null,
+      "db_consumers": [
+        "consent_text_versions (doc_type kvkk_aydinlatma, bound to marketing_config.active_controller_version_id)",
+        "_service_delivery_missing(): kvkk_text_bound_to_controller",
+        "_marketing_missing(): kvkk_text_bound_to_controller"
+      ],
+      "needed_for": [
+        "service_delivery readiness",
+        "marketing readiness"
+      ]
+    },
+    {
+      "doc_type": "acik_riza_marketing",
+      "version": 1,
+      "locale": "tr",
+      "file": "acik_riza_marketing.v1.draft.md",
+      "status": "DRAFT_LEGAL_REVIEW_REQUIRED",
+      "source": "SOURCE_MISSING",
+      "body_sha256": null,
+      "db_consumers": [
+        "consent_purpose_doc: email_marketing, sms_marketing, push_marketing",
+        "_marketing_missing(): marketing_consent_text_bound_to_controller",
+        "_marketing_capture_missing(): marketing_consent_text_bound_to_controller"
+      ],
+      "needed_for": [
+        "marketing readiness",
+        "marketing_capture readiness"
+      ]
+    },
+    {
+      "doc_type": "acik_riza_kisisellestirme",
+      "version": 1,
+      "locale": "tr",
+      "file": "acik_riza_kisisellestirme.v1.draft.md",
+      "status": "DRAFT_LEGAL_REVIEW_REQUIRED",
+      "source": "SOURCE_MISSING",
+      "body_sha256": null,
+      "db_consumers": [
+        "consent_purpose_doc: on_site_personalized_messages, personalization_profiling"
+      ],
+      "needed_for": [
+        "consent for on_site_personalized_messages and personalization_profiling"
+      ]
+    },
+    {
+      "doc_type": "cerez_politikasi",
+      "version": 1,
+      "locale": "tr",
+      "file": "cerez_politikasi.v1.draft.md",
+      "status": "DRAFT_LEGAL_REVIEW_REQUIRED",
+      "source": "SOURCE_MISSING",
+      "body_sha256": null,
+      "db_consumers": [
+        "consent_purpose_doc: analytics_storage, advertising_storage",
+        "cookie banner CDP3C_package/edge_admin/web/cookie_consent.js (policyUrl '/cerez-politikasi'; the route does not exist yet)"
+      ],
+      "needed_for": [
+        "consent for analytics_storage and advertising_storage",
+        "cookie banner policy link"
+      ]
+    },
+    {
+      "doc_type": "gizlilik_politikasi",
+      "version": 1,
+      "locale": "tr",
+      "file": "gizlilik_politikasi.v1.draft.md",
+      "status": "DRAFT_LEGAL_REVIEW_REQUIRED",
+      "source": "SOURCE_MISSING",
+      "body_sha256": null,
+      "db_consumers": [],
+      "needed_for": [
+        "no DB consumer yet"
+      ]
+    },
+    {
+      "doc_type": "uyelik_sartlari",
+      "version": 1,
+      "locale": "tr",
+      "file": "uyelik_sartlari.v1.draft.md",
+      "status": "DRAFT_LEGAL_REVIEW_REQUIRED",
+      "source": "SOURCE_MISSING",
+      "body_sha256": null,
+      "db_consumers": [],
+      "needed_for": [
+        "no DB consumer yet"
+      ]
+    }
+  ],
+  "other_files": [
+    "README.md",
+    "LAWYER_CHECKLIST.md",
+    "controller_identity.draft.json",
+    "manifest.json"
+  ]
+}
