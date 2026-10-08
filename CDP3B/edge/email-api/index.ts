@@ -172,6 +172,23 @@ function optUuidOrNull(v: unknown, name: string): string | null {
 function closedFields(body: Record<string, unknown>, allowed: readonly string[]) {
   for (const k of Object.keys(body)) if (!allowed.includes(k)) throw new HttpErr(400, "unknown_field:"+k);
 }
+// ── E4 · e-posta create/save/validate STRICT üst-seviye allowlist (fail-closed; ayrı onay olmadan DEPLOY EDİLMEZ) ──
+// Her liste = admin.html'in (emailApi: {action,...fields}) bu action için GERÇEKTEN gönderdiği alanlar + "action".
+// Bilinmeyen üst-seviye alan -> 422 unknown_field:<anahtar adları>. Mesaj YALNIZ anahtar adlarını taşır
+// (en fazla 10 ad; her biri [A-Za-z0-9_-] dışı karakterler '?' ile, 40 karaktere; toplam 200 karaktere kırpılır).
+// Diğer action'lar, WRITE listesi, request_id/idem kuralları, CORS, auth, sanitizer ve RPC çağrıları DEĞİŞMEZ.
+const EMAIL_STRICT_KEYS: Record<string, readonly string[]> = {
+  create:   ["action","internal_name","description","email_class","source_type","idem","request_id"],
+  save:     ["action","template_id","email_class","source_type","subject","preview_text","sender_name","reply_to",
+             "html","builder_json","asset_manifest","idem","request_id"],
+  validate: ["action","email_class","html","builder_json","source_type","asset_manifest"],
+};
+function strictKeys(body: Record<string, unknown>, allowed: readonly string[]) {
+  const extra = Object.keys(body).filter((k) => !allowed.includes(k));
+  if (!extra.length) return;
+  const names = extra.slice(0, 10).map((k) => k.replace(/[^A-Za-z0-9_-]/g, "?").slice(0, 40)).join(",");
+  throw new HttpErr(422, ("unknown_field:" + names).slice(0, 200));
+}
 
 // FAIL-CLOSED içerik denetimi (yalnız istemciye güvenilmez): kalıcı girdilerde (source_html + builder_json +
 // sanitized_html) YALNIZ manifest asset'lerinin SUNUCU-TÜRETİLMİŞ kanonik public URL'leri bulunabilir.
@@ -312,6 +329,7 @@ serve(async (req) => {
       }
 
       case "create":
+        strictKeys(body, EMAIL_STRICT_KEYS.create);   // E4
         reqStr(body.internal_name,120,"internal_name");
         if (body.description!=null) reqStr(body.description,500,"description");
         return j(await rpc(svc,"admin_w_email_template_create",{p_actor:actor,p_internal_name:body.internal_name,p_description:body.description??null,p_email_class:enumv(body.email_class,["marketing","transactional"]),p_source_type:enumv(body.source_type,["visual_builder","html_import"]),p_idem:idem,p_request_id:reqId}), 200, origin);
@@ -320,6 +338,7 @@ serve(async (req) => {
       case "archive":     return j(await rpc(svc,"admin_w_email_archive",{p_actor:actor,p_template_id:reqUuid(body.template_id),p_idem:idem,p_request_id:reqId}), 200, origin);
 
       case "validate": { // yazma yok
+        strictKeys(body, EMAIL_STRICT_KEYS.validate);   // E4
         const cls = enumv(body.email_class,["marketing","transactional"]);
         const html = reqStr(body.html ?? "", MAX_HTML, "html");
         await assertCanonicalAssets(svc, SUPABASE_URL, body.asset_manifest ?? [], [html, body.builder_json]); // FAIL-CLOSED: signed/draft/token/unmanaged reddi
@@ -327,6 +346,7 @@ serve(async (req) => {
         return j({ ok:rep.ok, validation_report:rep, content_hash:await sha256Hex(rep.sanitized_html||""), preview_html:EmailSanitizer.previewSafe(rep.sanitized_html||"") }, 200, origin);
       }
       case "save": {
+        strictKeys(body, EMAIL_STRICT_KEYS.save);   // E4
         const cls = enumv(body.email_class,["marketing","transactional"]);
         const html = reqStr(body.html ?? "", MAX_HTML, "html");
         if (body.builder_json && JSON.stringify(body.builder_json).length>MAX_BUILDER) throw new HttpErr(422,"builder_json_too_large");

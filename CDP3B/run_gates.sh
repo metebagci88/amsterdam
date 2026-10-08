@@ -8,6 +8,8 @@
 #   EMAIL_API_URL    : yerel serve edilen email-api
 #   SUPER_JWT/CRM_JWT: test kullanıcılarının access_token'ları
 #   SERVICE_KEY      : yerel service_role anahtarı (Gate6 fault injection / Gate9 reconcile fault için)
+#   ANALYST_JWT/MEMBER_JWT + CRM_UID/ANALYST_UID/MEMBER_UID : save-draft yetki matrisi (gates/e2e_save_draft.ts)
+#   API_URL/ANON_KEY + CRM_EMAIL/CRM_PW : save-draft UI testi (gates/admin_save_draft_ui.mjs; yerel GoTrue girişi)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"; cd "$ROOT"
 GATE=""; LOGF="/tmp/cdp3b_gate_step.log"; : > "$LOGF"
@@ -74,6 +76,10 @@ G9_VAL="${G9_SENT#__CDP3B_GATE9_LEFTOVER__=}"
 # ---- GATE 4-9(e2e): gerçek Edge/Storage/DB assertion testleri ----
 GATE="staging_env"
 if [ -z "${EMAIL_API_URL:-}" ] || [ -z "${SUPER_JWT:-}" ] || [ -z "${CRM_JWT:-}" ]; then fail "staging_env"; fi
+# save-draft kapıları (e2e_save_draft + admin_save_draft_ui) için ek değişkenler — eksikse FAIL-CLOSED
+for k in ANALYST_JWT MEMBER_JWT CRM_UID ANALYST_UID MEMBER_UID API_URL ANON_KEY CRM_EMAIL CRM_PW; do
+  [ -n "$(printenv "$k" || true)" ] || fail "staging_env_${k}"
+done
 
 # ---- GATE edge_runtime: serve edilen GERÇEK email-api'ye authenticated taxonomy (Edge derleme/çalışma kanıtı) ----
 # Başarı: HTTP tam 200 + geçerli JSON + 'error' alanı YOK. 401/400/500/parse edilemeyen -> PASS DEĞİL.
@@ -101,15 +107,28 @@ fi
 GATE="e2e"
 deno test --allow-net --allow-env gates/e2e_gates.ts >>"$LOGF" 2>&1 || fail "gate_e2e"
 
+# ---- GATE 10: save-draft backend e2e (SD1-SD8: create/save/get/list, yetki matrisi, kötü payload, E4 unknown_field, idem) ----
+GATE="e2e_save_draft"
+deno test --allow-net --allow-env --allow-read=. gates/e2e_save_draft.ts >>"$LOGF" 2>&1 || fail "e2e_save_draft"
+
 # ---- GATE 8b: admin.html emOpen/_emAssets/emSave (jsdom, gerçek fonksiyonlar) ----
 GATE="admin_reopen"; command -v node >/dev/null 2>&1 || fail "node_missing"
 node gates/admin_reopen_test.mjs >>"$LOGF" 2>&1 || fail "admin_reopen"
+
+# ---- GATE 8d: admin.html "Taslak kaydet" geri bildirim / düz-dil hatalar / demo ön-doldurma yok (jsdom, offline) ----
+GATE="admin_save_draft"
+node gates/admin_save_draft_test.mjs >>"$LOGF" 2>&1 || fail "admin_save_draft"
 
 # ---- GATE 8c: admin.html emSerializeCanonical/emSwapToPreview GERÇEK GrapesJS component modeli (jsdom) ----
 # Kanıt: kaydet serileştirmesi source_html+builder_json'da signed/draft/token/data-asa-id=0; STATE KAYBI YOK
 # (aynı component kimliği); reopen project/component/style korur; deterministik; TTL refresh; foreign img laundering YOK.
 GATE="gjs_serialize"
 node gates/gjs_serialize_test.mjs >>"$LOGF" 2>&1 || fail "gjs_serialize"
+
+# ---- GATE 10b: GERÇEK admin.html (Chromium) -> yerel GoTrue + GERÇEK email-api + Postgres (Playwright; trace/HAR/video YOK) ----
+GATE="admin_save_draft_ui"
+node gates/admin_save_draft_ui.mjs >>"$LOGF" 2>&1 || fail "admin_save_draft_ui"
+grep -qx 'ADMIN_SAVE_DRAFT_UI_OK' "$LOGF" || fail "admin_save_draft_ui_result_missing"
 
 trap - ERR
 echo "LOCAL_GATES_PASS_STAGING_PENDING"
