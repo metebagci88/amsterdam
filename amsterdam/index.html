@@ -611,6 +611,7 @@ main.wrap{max-width:1120px;padding:0 24px 116px}
     T.lifecycleLabel=function(lc){ return ({draft:'Taslak',upcoming:'Yaklaşan',active:'Aktif seyahat',past:'Geçmiş'})[lc]||''; };
     T.list=async function(o){ o=o||{}; var q=db.from('trips').select('*').order('start_date',{ascending:true}); if(!o.includeArchived)q=q.is('archived_at',null); try{var r=await q;return r.data||[];}catch(e){return [];} };
     T.get=async function(id){ try{var r=await db.from('trips').select('*').eq('id',id).maybeSingle();return r.data||null;}catch(e){return null;} };
+    T.getChecked=async function(id){ try{var r=await db.from('trips').select('*').eq('id',id).maybeSingle(); if(!r||r.error)return {ok:false}; return {ok:true,row:r.data||null};}catch(e){return {ok:false};} };   // WP6: okuma hatası "satır yok" sayılmaz
     T.findOverlapChecked=async function(city,s,e,excludeId){ try{var r=await db.from('trips').select('*').eq('city',city).is('archived_at',null).lte('start_date',e).gte('end_date',s); if(!r||r.error)return {ok:false}; var rows=r.data||[]; if(excludeId)rows=rows.filter(function(x){return x.id!==excludeId;}); return {ok:true,trip:rows[0]||null};}catch(err){return {ok:false};} };   // WP6: sorgu hatası "çakışma yok" sayılmaz
     T.findOverlap=async function(city,s,e,excludeId){ var r=await T.findOverlapChecked(city,s,e,excludeId); return r.ok?r.trip:null; };
     T.activeOrUpcoming=async function(){ var ts=await T.list();var m=ts.map(function(t){return {t:t,lc:T.lifecycle(t)};});var a=m.filter(function(x){return x.lc==='active';})[0];if(a)return a.t;var u=m.filter(function(x){return x.lc==='upcoming';}).sort(function(a,b){return a.t.start_date<b.t.start_date?-1:1;})[0];return u?u.t:null; };
@@ -646,7 +647,7 @@ window.asaDB=function(){ try{ if(!window.__asaSB && window.supabase && window.su
 window.TripSync=(function(){
   var TS={status:'idle',_t:null,_hide:null,blocked:null,gone:false,waiting:false};
   var Q=Promise.resolve(), queued=null, memItems=[], base=null, rebased=false;
-  var acct=null, checked=null, splitDone=false;   // WP6: girişi süren hesap (ASA.session yazılmadan önce; TS.login early) · sahibi sunucuya sorulan hesap · TS.settle
+  var acct=null, owned=null, splitDone=false;   // WP6: girişi süren hesap (ASA.session yazılmadan önce; TS.login early) · "hesap|seyahat": sahibi bilinmeyen kopyanın seyahati bu hesabın (sunucu okuması doğruladı; TS.checkOwner) · TS.settle
   var AUTO_SLOTS=["Sabah","Öğle","Öğleden sonra","Akşam"], detachSaid=false, lockSaid=false;   // autoGeneratePlan'ın PLAN_SLOTS sırası
   function P(k,d){ try{ return (window.ASA_ST?window.ASA_ST.get(k,d):d)||d; }catch(e){return d;} }   // WP3: asa:ams:<domain>
   function T(){ try{ return (window.ASA_ST&&window.ASA_ST.trip())||{}; }catch(e){return {};} }
@@ -684,7 +685,7 @@ window.TripSync=(function(){
     return {legacy:!(r&&r.present&&r.value),   // marker yok / okunamadı → WP6 öncesi cihaz kuralı
       synced:(sy.trip_id!=null&&typeof sy.sig==='string')?{trip_id:String(sy.trip_id),sig:sy.sig,rev:((typeof sy.rev==='number'||typeof sy.rev==='string')?sy.rev:null)}:null,
       dirty:(dt&&typeof dt==='object'&&!Array.isArray(dt))?{trip_id:(dt.trip_id==null?null:String(dt.trip_id))}:null,
-      edit:(v.edit&&typeof v.edit==='object'&&!Array.isArray(v.edit))?{trip_id:(ed.trip_id==null?null:String(ed.trip_id)),uid:str(ed.uid),start_date:str(ed.start_date),end_date:str(ed.end_date)}:null,
+      edit:(v.edit&&typeof v.edit==='object'&&!Array.isArray(v.edit))?{trip_id:(ed.trip_id==null?null:String(ed.trip_id)),uid:str(ed.uid),start_date:str(ed.start_date),end_date:str(ed.end_date),search:(ed.search&&typeof ed.search==='object'&&!Array.isArray(ed.search))?ed.search:undefined}:null,
       owner:str(v.owner), otrip:str(v.otrip),
       items:Array.isArray(v.items)?v.items.filter(function(x){return x&&typeof x==='object'&&typeof x.sig==='string';}):[]}; }
   // WP6 · aynı cihaz, iki hesap: owner = cihazdaki planın (plan alanları, seyahat, takvim fotoğrafları) ait olduğu hesap; girişliyken
@@ -782,6 +783,9 @@ window.TripSync=(function(){
     splitDone=true; return true; }
   // ayrılan kopyanın planı bellekte de boşalır (çağıranın yazımından sonra; saveLS'in iki sekme birleştirmesi eski tabanla çalışır)
   TS.settle=function(){ if(!splitDone)return; splitDone=false; try{ if(window.__asaReloadPlanState)window.__asaReloadPlanState(); }catch(e){} };
+  // WP6: seyahatsiz (DB seyahati olmayan) planın araması — değişiklik anında işarete yazılır; ana sayfa aramayı değiştirse / çıkışta
+  // boşaltsa da saklanan sürüm kendi aramasını taşır (TS.keepLocal → restoreReleased)
+  function searchOf(t){ t=obj(t); return {city:t.city||null,country:t.country||null,duration:t.duration||null,duration_days:t.duration_days||null,approx_period:t.approx_period||null,vacation_types:Array.isArray(t.vacation_types)?t.vacation_types.slice():[],start_date:t.start_date||null,end_date:t.end_date||null}; }
   TS.noteEdit=function(o){ if(o&&o.auto)return true; rebased=false; if(!splitSearch())return false; var st=syncRead(), t=(o&&o.trip)||T(), own;
     if(window.TRIP&&window.TRIP.id!=null)own=String(window.TRIP.id);
     else if(!st.legacy&&st.dirty&&st.dirty.trip_id!=null)own=st.dirty.trip_id;
@@ -789,6 +793,7 @@ window.TripSync=(function(){
     else own=st.synced?st.synced.trip_id:null;
     var pe=(st.edit&&st.edit.trip_id===own)?st.edit:null, mine=(own==null||String(t.id)===own);
     var ed={trip_id:own,uid:me()||(pe&&pe.uid)||null,start_date:mine?(t.start_date||null):(pe?pe.start_date:null),end_date:mine?(t.end_date||null):(pe?pe.end_date:null)};
+    if(own==null)ed.search=searchOf(t);
     if(!st.legacy&&st.dirty&&st.dirty.trip_id===own&&canon(st.edit)===canon(ed))return true;
     var prev={dirty:st.dirty,edit:st.edit}, leg=st.legacy; st.dirty={trip_id:own}; st.edit=ed;
     if(!syncWrite(st))return false;
@@ -819,14 +824,16 @@ window.TripSync=(function(){
     else { if(TS.localState()!=='unsynced')return false; tid=TS.localOwner(); }
     // WP6: sahibi seyahat cihazdaki seyahat değilse (ana sayfa asa:ams:trip'i yeni aramayla değiştirdi) sürüm sahibinin değişiklik
     // anındaki tarihlerini taşır; bilinmiyorsa tarihsiz (geri yüklenince seyahatin tarihleri değişmez).
+    // seyahatsiz sürüm: değişiklik anındaki tarihler (ana sayfanın yeni araması değil)
     var sd=lb.start_date, ed=lb.end_date, e=(st.edit&&st.edit.trip_id===tid)?st.edit:null;
-    if(!force&&tid!=null&&String(T().id)!==tid){ sd=e?e.start_date:null; ed=e?e.end_date:null; }
+    if(!force&&(tid==null?!!e:String(T().id)!==tid)){ sd=e?e.start_date:null; ed=e?e.end_date:null; }
     var b=bundle(lb.dayven,lb.cal,lb.plan,lb.plan_prefs,sd,ed), s=sig(b); if(s===sig(rowBundle(row)))return false;
     var rec={trip_id:tid,reason:reason,at:new Date().toISOString(),sig:s,start_date:sd,end_date:ed,dayven:P('dayven',{}),cal:P('cal',{}),plan:P('plan',{}),plan_prefs:P('plan_prefs',{})};
     var u=author(st,rel); if(u!=null||tid==null)rec.uid=u;   // yalnız yazarına gösterilir (misafir planı: girişteki hesap)
-    // WP6: DB seyahati olmayan (kimliksiz arama, ör. "tarih belli değil") hesap planı kaldırılırken arama da saklanır: o hesap yeniden
-    // girince sade sayfada geri gelir (TS.login) — başka hiçbir seyahatte sunulmaz (gün anahtarları oraya uymaz).
-    if(rel&&tid==null&&u!=null){ var tt=T(); rec.search={city:tt.city||null,country:tt.country||null,duration:tt.duration||null,duration_days:tt.duration_days||null,approx_period:tt.approx_period||null,vacation_types:Array.isArray(tt.vacation_types)?tt.vacation_types.slice():[],start_date:tt.start_date||null,end_date:tt.end_date||null}; }
+    // WP6: DB seyahati olmayan (kimliksiz arama, ör. "tarih belli değil") hesap planı saklanırken (kaldırma ya da bir DB seyahati açılırken)
+    // araması da saklanır (değişiklik anındaki; yoksa cihazdaki): o hesap sade sayfadayken geri gelir (restoreReleased); tarihli bir seyahatte
+    // yalnız günleri o seyahate sığıyorsa sunulur (fits / onDays).
+    if(tid==null&&u!=null)rec.search=(e&&e.search)?e.search:searchOf(T());
     return addItem(rec);
   };
   // WP6 · iki sekme: depodaki sürüm (başka sekmenin yazdığı) bu sekmenin aynı günü / tercihleri / tarihleri değiştiren yazımından
@@ -892,8 +899,15 @@ window.TripSync=(function(){
   // Bu sekmenin seyahati depo dolu nedeniyle kilitli: plan alanları / seyahat depoya yazılmaz (yerel plan korunur), yüklenmez.
   // WP6: TS.foreign (başka hesabın planı cihazdan kaldırılamadı) da kilittir: o plan bu sekmede ne gösterilir ne üzerine yazılır.
   TS.locked=function(){ if(TS.foreign)return true; var tr=window.TRIP; return !!(tr&&tr.id!=null&&TS.blocked!=null&&TS.blocked===String(tr.id)); };
+  var LOCK_MSG="Cihaz depolaması dolu: bu sekmede yaptığın plan değişikliği kaydedilmedi (ne bu cihaza ne seyahatine). Cihazda yer açıp sayfayı yenile.";
   TS.sayLocked=function(){ clearTimeout(TS._t); TS.setStatus('error'); if(lockSaid)return; lockSaid=true;
-    try{ window.ASA_ST.say("Cihaz depolaması dolu: bu sekmede yaptığın plan değişikliği kaydedilmedi (ne bu cihaza ne seyahatine). Cihazda yer açıp sayfayı yenile."); }catch(e){} };
+    try{ window.ASA_ST.say((TS.foreign&&foreignNote)||LOCK_MSG); }catch(e){} };
+  // WP6: gün penceresinde reddedilen yazımın nedeni (pencere sayfanın üstündeki notu örter; saveLS.fail "blocked")
+  TS.whyBlocked=function(){ var r=" Yazdığın kaydedilmedi ve geri alındı.";
+    if(gone())return "Bu sekmede oturumun kapandı (başka bir sekmede çıkış ya da başka hesapla giriş yapıldı)."+r+" Devam etmek için sayfayı yenile.";
+    if(TS.waiting)return "Oturum bilgilerin okunuyor."+r+" Birkaç saniye sonra yeniden dene.";
+    if(TS.detached())return "Bu cihazda başka bir sekmede başka bir seyahat açıldı."+r+" Devam etmek için sayfayı yenile.";
+    return (TS.foreign&&foreignNote)?(foreignNote+r):("Cihaz depolaması dolu."+r+" Cihazda yer açıp sayfayı yenile."); };
   // depoda (şehir anahtarı ya da kütüphanenin geri düşeceği eski anahtar) bir değer var mı; okunamıyorsa "var" sayılır
   function present(k){ try{ return !(window.ASA_ST&&window.ASA_ST.read(k).present===false); }catch(e){ return true; } }
   // o.authoritative: DB her plan alanı için otorite. Satırda olmayan alan yerelde {} olur — yalnız yerelde bir değer görünüyorsa
@@ -939,17 +953,25 @@ window.TripSync=(function(){
     window.planResult=null; window.planEngineMeta=null;   // eski motor çıktısı sunucunun duraklarını etiketlemez
     var okPlan=TS.hydrate(r,{authoritative:true,trip:(okTrip?null:tripOf(r))});
     base={id:id,sig:rs,rev:r.revision}; rebased=false;
-    if(okTrip&&okPlan){ if(TS.blocked===id)TS.blocked=null; markSynced(r.id,rs,true,r.revision); try{ if(window.__asaPhotos)window.__asaPhotos('restoreTrip',id); }catch(e){} }
+    if(okTrip&&okPlan){ if(TS.blocked===id)TS.blocked=null; markSynced(r.id,rs,true,r.revision); try{ if(window.__asaPhotos)window.__asaPhotos('restoreTrip',id); }catch(e){} try{ if(window.__asaFavHeld)window.__asaFavHeld(id,me()); }catch(e){} }   // WP6: o seyahat adına ayrılan fotoğraflar / favori listesi sahibine döner
     else TS.storageFull(r,true);
     try{ prune(r); }catch(e){} try{ TS.renderNotice(); }catch(e){}
     return okTrip&&okPlan;
   };
   // WP6 · aynı cihaz, iki hesap: bir sürüm yalnız yazarına gösterilir (seyahatsiz sürüm yalnız o hesaba; uid'siz eski kayıt yalnız
   // seyahatinin sahibine — o seyahati yalnız o açabilir).
-  // WP6: tarihsiz aramanın ("tarih belli değil") seyahatsiz sürümü ("1. gün" anahtarları) tarihli bir DB seyahatinde sunulmaz — o günler
-  // seyahatin takviminde yoktur, geri yükleme seyahatin planını görünmez notlarla değiştirirdi (aynı hesap girince sade sayfada geri gelir).
-  function fits(x){ if(x.trip_id!=null||(x.start_date&&x.end_date))return true;
-    return Object.keys(obj(x.dayven)).concat(Object.keys(obj(x.cal)),Object.keys(obj(x.plan))).every(function(k){ return /^\d{4}-\d\d-\d\d$/.test(k); }); }
+  // WP6: tarihsiz aramanın ("tarih belli değil") seyahatsiz sürümü ("1. gün".."N. gün" anahtarları) tarihli bir seyahatte sunulur ve geri
+  // yüklenince günleri seyahatin günlerine sırayla yerleşir (1. gün → ilk gün; onDays) — görünmeyen günlere yazılmaz. Dolu bir günü seyahatin
+  // günlerine sığmayan sürüm o seyahatte sunulmaz (silinmez; aynı hesap sade sayfada, uygun aramada geri alır: restoreReleased).
+  function vKeys(x){ var o={}; ['dayven','cal','plan'].forEach(function(f){ Object.keys(obj(x[f])).forEach(function(k){ o[k]=1; }); }); return Object.keys(o); }
+  function calKeys(t){ try{ return buildCalDays(obj(t)).days.map(function(d){ return d.key; }); }catch(e){ return []; } }
+  function undated(x){ return x.trip_id==null&&!(x.start_date&&x.end_date)&&vKeys(x).some(function(k){ return /^g\d+$/.test(k); }); }
+  function onDays(x,t){ if(!undated(x))return x; t=obj(t); if(!(t.start_date&&t.end_date))return null;
+    var days=calKeys({start_date:t.start_date,end_date:t.end_date}), out={}, ok=true;
+    ['dayven','cal','plan'].forEach(function(f){ var v=obj(x[f]), o={}; Object.keys(v).forEach(function(k){ var m=/^g(\d+)$/.exec(k), to=m?days[Number(m[1])-1]:k;
+      if(to==null){ if(Array.isArray(v[k])?v[k].length:(v[k]!=null&&v[k]!==''))ok=false; return; } o[to]=v[k]; }); out[f]=o; });
+    return ok?Object.assign({},x,out):null; }
+  function fits(x){ return x.trip_id!=null||!!onDays(x,curTrip()); }
   function relevant(){ var tr=window.TRIP; if(!tr||tr.id==null)return []; var id=String(tr.id), u=curUid();
     return syncRead().items.concat(memItems).filter(function(x){ var xu=(x.uid==null?null:String(x.uid)); return x.trip_id==null?(xu===u&&fits(x)):(String(x.trip_id)===id&&(xu==null||xu===u)); }).sort(function(a,b){ return String(b.at||'').localeCompare(String(a.at||'')); }); }
   TS.pending=relevant;
@@ -990,6 +1012,7 @@ window.TripSync=(function(){
     line(el,'p',tab?('Bu seyahatin planı bu cihazda iki sekmede aynı anda değiştirildi. Son yapılan değişiklik kullanılıyor ve seyahatine kaydediliyor; diğer değişiklik '+(mo?'bu sekmede tutuluyor.':'üzerine yazılmadan önce saklandı.')):(r.reason==='conflict'?'Bu seyahatin planı başka bir cihazda ya da sekmede değiştirildi. Sunucudaki daha yeni plan yüklendi ve şu an o gösteriliyor.':(r.trip_id==null?'Bu seyahat açılırken sunucudaki kayıtlı plan yüklendi. Bu cihazda hesabına bağlı olmayan bir plan vardı.':'Bu seyahat açılırken sunucudaki kayıtlı plan yüklendi. Bu cihazda henüz kaydedilmemiş değişiklikler vardı.')));
     line(el,'p',r.mem?((TS.locked()&&heldLocally(r))?'Cihaz depolaması dolu olduğu için bu sürüm ayrıca saklanamadı; kaybolmasın diye bu cihazdaki plan değiştirilmedi. Sunucudaki plan yalnız bu sekmede gösteriliyor.':'Cihaz depolaması dolu olduğu için bu sürüm yalnız bu sekmede tutuluyor; sekmeyi kapatmadan karar ver.'):(tab?('Saklanan sürüm bu cihazda duruyor ('+fmtWhen(r.at)+').'):('Bu cihazdaki sürüm silinmedi; bu cihazda saklanıyor ('+fmtWhen(r.at)+').')));
     if(dd)line(el,'p','Bu sürümün tarihleri: '+TS.fmtRange(r.start_date,r.end_date)+'.');
+    if(undated(r))line(el,'p','Bu sürüm tarihleri belli olmayan bir plan için yapılmıştı. Geri yüklersen 1. gün seyahatinin ilk gününe, 2. gün ikinci gününe… yerleşir.');
     line(el,'p','İstersen '+(mo?'bu sekmedeki':(tab?'saklanan':'bu cihazdaki'))+' sürümü geri yükleyebilirsin. Geri yüklersen seyahatinin planı bu sürümle değiştirilir.');
     if(dd)line(el,'p','Geri yüklersen seyahatinin tarihleri de '+TS.fmtRange(r.start_date,r.end_date)+' olarak değişir.');
     if(list.length>1)line(el,'p','Bu seyahat için bu cihazda '+list.length+' plan sürümü bekliyor; en yenisi gösteriliyor. '+(list.some(memOnly)?'Her birine':'Hiçbiri kendiliğinden silinmez; her birine')+' sırayla karar verebilirsin.');
@@ -1017,13 +1040,15 @@ window.TripSync=(function(){
     var lk=TS.locked();
     if(lk&&!(heldLocally(r)||TS.localState()!=='unsynced'||storedSig(sig(localBundle())))){ try{ window.ASA_ST.full(FULL_RESTORE); }catch(e){} return false; }
     if(TS.detached()){ TS.sayDetached(); return false; }   // depo başka seyahatin: geri yükleme oraya yazılmaz
+    var c=onDays(r,curTrip());   // tarihsiz sürüm: günleri bu seyahatin günlerine (sırayla); sığmıyorsa hiçbir şey yazılmaz
+    if(!c){ try{ TS.renderNotice(); }catch(e){} return false; }
     var dd=datesDiffer(r), pre=!(lk||window.__asaTripMem), nt=null;
     if(dd||!pre){ nt=pre?T():tripOf(window.TRIP); if(dd){ nt.start_date=r.start_date; nt.end_date=r.end_date; } }
     // geri yüklenen sürüm kaydedilene kadar bu seyahatin kaydedilmemiş değişikliği (açılışta ezilmez)
     function mark(){ var mk=syncRead(), tt=nt||T(); mk.dirty={trip_id:id}; mk.edit={trip_id:id,uid:curUid(),start_date:tt.start_date||null,end_date:tt.end_date||null}; return syncWrite(mk); }
     // WP6: depo bu seyahatin planını tutuyorsa işaret ÖNCE yazılır; yazılamazsa hiçbir şey yazılmaz (yarım geri yükleme işaretsiz kalmaz)
     if(pre&&!mark()){ try{ window.ASA_ST.full(FULL_RESTORE); }catch(e){} return false; }
-    var ok=S('dayven',obj(r.dayven))&&S('cal',obj(r.cal))&&S('plan',obj(r.plan))&&S('plan_prefs',obj(r.plan_prefs));
+    var ok=S('dayven',obj(c.dayven))&&S('cal',obj(c.cal))&&S('plan',obj(c.plan))&&S('plan_prefs',obj(r.plan_prefs));
     if(ok&&nt)ok=S('trip',nt);
     if(!ok){
       // WP6: "kirli" işareti kalır (sürüm yalnız bellekteyse depodaki yarım geri yükleme sahibine bağlanır); sayfa yenilenince
@@ -1048,7 +1073,7 @@ window.TripSync=(function(){
     var back=function(){ if(gone()){ TS.sayGone(); return; } var c={}; Object.keys(r).forEach(function(k){ if(k!=='mem')c[k]=r[k]; }); try{ addItem(c); }catch(e){} };
     done(r.reason==='tab'?'Şu anki planla devam ediliyor. Saklanan sürüm silindi.':'Sunucudaki planla devam ediliyor. Bu cihazdaki sürüm silindi.',back); return true; };
   // Çıkışta: açık seyahat, zamanlayıcı, kuyruk ve kilit bu hesapla birlikte kapanır (sonraki giriş temiz başlar).
-  TS.reset=function(){ var wasMem=!!window.__asaTripMem||TS.blocked!=null; clearTimeout(TS._t); queued=null; base=null; rebased=false; TS.blocked=null; detachSaid=false; lockSaid=false; acct=null; checked=null; TS.waiting=false; window.__asaTripMem=TS.foreign?{}:null; later={}; try{ delete window.TRIP; }catch(e){ window.TRIP=undefined; } try{ TS.renderNotice(); }catch(e){} TS.setStatus('idle');
+  TS.reset=function(){ var wasMem=!!window.__asaTripMem||TS.blocked!=null; clearTimeout(TS._t); queued=null; base=null; rebased=false; TS.blocked=null; detachSaid=false; lockSaid=false; acct=null; owned=null; TS.waiting=false; window.__asaTripMem=TS.foreign?{}:null; later={}; try{ delete window.TRIP; }catch(e){ window.TRIP=undefined; } try{ TS.renderNotice(); }catch(e){} TS.setStatus('idle');
     // depo dolu kilidindeki bellek (DB planı) çıkıştan sonra depoya yazılmasın: bellek cihazdaki plandan yeniden okunur
     // (TS.foreign: cihazdaki plan başka hesabın — gösterilmez)
     if(wasMem&&!TS.foreign){ try{ if(window.PSET&&window.PSET._reload)window.PSET._reload(); }catch(e){} try{ if(window.__asaReloadPlanState)window.__asaReloadPlanState(); }catch(e){} } };
@@ -1061,7 +1086,10 @@ window.TripSync=(function(){
      açılışta yazım yok). Bir adım yazılamazsa (depo dolu) hiçbir şey silinmez: plan bu sekmede gösterilmez ve üzerine yazılmaz
      (TS.foreign), kullanıcıya söylenir; bir sonraki açılışta / girişte yeniden denenir. o.now: çıkış bu sekmede (seyahat bu hesabın). */
   TS.foreign=null; TS.legacyAcct=false;
-  var foreignSaid=false, FOREIGN_MSG="Cihaz depolaması dolu: bu cihazda önceki oturumdan kalan plan bilgileri (başka bir hesaba ait olabilir) cihazdan kaldırılamadı. Silinmedi; bu sekmede gösterilmiyor.";
+  var foreignSaid=false, foreignNote=null, FOREIGN_MSG="Cihaz depolaması dolu: bu cihazda önceki oturumdan kalan plan bilgileri (başka bir hesaba ait olabilir) cihazdan kaldırılamadı. Silinmedi; bu sekmede gösterilmiyor.";
+  // WP6: sahibi bilinmeyen kopyanın bu hesabın olduğu doğrulanamadı (okuma hatası / bağlantı yok): gösterilmez, kaldırılmaz, devralınmaz
+  var NOREAD_MSG="Bu cihazdaki plan bilgilerinin hesabına ait olduğu şu an doğrulanamadı (bağlantı yok ya da yanıt gelmedi). Silinmedi; doğrulanana dek bu sekmede gösterilmiyor ve değiştirilemiyor. Bağlantın gelince sayfayı yenile.",
+    NOREAD_NOTE="Bu cihazdaki planın hesabına ait olduğu şu an doğrulanamadı: bu sekmede yaptığın plan değişikliği kaydedilmedi. Bağlantın gelince sayfayı yenile.";
   function hidePlan(){ window.__asaTripMem={}; window.planResult=null; window.planEngineMeta=null;
     try{ if(window.PSET&&window.PSET._reload)window.PSET._reload({}); }catch(e){}
     try{ if(window.__asaReloadPlanState)window.__asaReloadPlanState({dayven:{},cal:{},plan:{},plan_prefs:{},trip:{}}); }catch(e){}
@@ -1076,8 +1104,9 @@ window.TripSync=(function(){
   // cihaza hiçbir şey yazılmaz (cihazdaki plan artık sonraki hesabın / kimsenin). Yeniden giriş (TS.login) ya da yenileme düzeltir.
   TS.goneOut=function(){ try{ if(window.__asaDropAccRef&&window.PSET&&window.PSET.acc)window.__asaDropAccRef(window.PSET.acc()); }catch(e){}   // hesabın konaklamasından gelen gezinme referansı
     TS.reset(); TS.gone=true; hidePlan(); TS.sayGone(); };
-  function enterForeign(u){ TS.foreign=(u==null?'?':String(u)); clearTimeout(TS._t); hidePlan();
-    if(!foreignSaid){ foreignSaid=true; try{ window.ASA_ST.say(FOREIGN_MSG+FULL_TAB); }catch(e){} } return false; }
+  // msg / note: depo dolu değilse (sahiplik doğrulanamadı) bir kez söylenen açıklama / reddedilen yazımda söylenen neden
+  function enterForeign(u,msg,note){ TS.foreign=(u==null?'?':String(u)); foreignNote=note||null; clearTimeout(TS._t); hidePlan();
+    if(!foreignSaid){ foreignSaid=true; try{ window.ASA_ST.say(msg||(FOREIGN_MSG+FULL_TAB)); }catch(e){} } return false; }
   // seyahat bu hesabın mı: DB kopyası / sayfanın yazdığı alanlar / son hesap yazımındaki parmak izi (ana sayfanın yeni araması değil)
   // sahibi bilinmeyen kopyanın DB seyahati: cihazdaki seyahatin kimliği ya da (ana sayfa üstüne yeni arama yazdıysa) işaretteki seyahat
   function copyTrip(st,t){ if(t.id!=null)return String(t.id); if(st.dirty&&st.dirty.trip_id!=null)return st.dirty.trip_id; return st.synced?st.synced.trip_id:null; }
@@ -1087,6 +1116,9 @@ window.TripSync=(function(){
     var st=syncRead(), t=T(), own=st.owner, now=!!(o&&o.now), tid=copyTrip(st,t);
     if(!(own!=null||t.id!=null||st.synced||(st.dirty&&st.dirty.trip_id!=null))){ if(TS.foreign){ TS.foreign=null; showPlan(); } return true; }
     try{ if(window.__asaDropAccRef){ window.__asaDropAccRef(obj(P('plan_prefs',{})).accommodation); window.__asaDropAccRef(obj(t.plan_prefs).accommodation); } }catch(e){}   // konaklamadan gelen gezinme referansı
+    // WP6 öncesi cihaz bir hesapla kullanılmıştı (favori listesi de o hesabın kopyası): kaldırma başarısız olsa da (depo dolu) bilinir —
+    // liste gösterilmez, yüklenmez; o seyahat adına ayrılır (favLegacyReset)
+    if(own==null&&tid!=null)TS.legacyAcct=tid;
     releasing=true;
     try{
       if(TS.localState()==='unsynced'){ var kr=false; try{ kr=TS.keepLocal(null,'replaced',false,true); }catch(e){ kr='mem'; } if(kr==='mem')return enterForeign(own); }
@@ -1098,47 +1130,60 @@ window.TripSync=(function(){
       if(window.__asaPhotos&&!((own!=null)?window.__asaPhotos('stash',own):(tid==null||window.__asaPhotos('stashTrip',tid))))return enterForeign(own);
       st=syncRead(); st.owner=null; st.otrip=null; if(!syncWrite(st))return enterForeign(own);
     }finally{ releasing=false; }
-    if(own==null&&tid!=null)TS.legacyAcct=true;   // WP6 öncesi cihaz bir hesapla kullanılmıştı (favori listesi de o hesabın kopyası)
     TS.foreign=null; foreignSaid=false; showPlan(); return true; };
   // Girişte: cihazdaki plan başka hesabın kopyasıysa önce kaldırılır; sonra bu hesabın kopyası sayılır (owner) ve bu hesabın gizlenen
   // takvim fotoğrafları geri gelir. Kaldırılamazsa (depo dolu) plan bu sekmede gösterilmez (TS.foreign) — false.
   // WP6 · o.early: oturum okununca, ilk sunucu isteğinden ÖNCE (ASA.session henüz yok): giriş sürerken başka hesabın planı görünmez ve o
-  // sırada yapılan değişiklik bu hesabındır. Sahibi bilinmeyen DB seyahati kopyası (WP6 öncesi cihaz: işaret / sahip yok) devralınmaz:
-  // 'check' — plan gizlenir, TS.checkOwner sunucuya sorar. o.plain: ?trip= yok (kaldırılan seyahatsiz plan sade sayfada geri gelir).
+  // sırada yapılan değişiklik bu hesabındır. Sahibi bilinmeyen DB seyahati kopyası (WP6 öncesi cihaz: işaret / sahip yok) yalnız sunucu
+  // o seyahatin bu hesabın olduğunu doğrulayınca gösterilir / devralınır (owned): o zamana dek gizli ve kilitli. early → 'check': plan
+  // gizlenir, yazım yok (TS.waiting), TS.checkOwner sunucuya sorar; sonraki çağrılarda doğrulanmamış kopya gizli kalır (TS.foreign) —
+  // gösterilmez, sahibi işlenmez, kaldırılamadıysa (depo dolu) üzerine yazılmaz. o.plain: ?trip= yok (kaldırılan seyahatsiz plan sade sayfada geri gelir).
   TS.login=function(uid,o){ var u=(uid==null)?null:String(uid), early=!!(o&&o.early); if(!u||(!early&&curUid()!==u)||!(window.ASA_ST&&window.ASA_ST.writable()))return true;
     acct=u; if(TS.gone){ TS.gone=false; goneSaid=false; showPlan(); }   // bu sekmede yeniden giriş
-    var st=syncRead(), t=T();
+    var st=syncRead(), t=T(), ct=copyTrip(st,t);
     if(st.owner!=null&&st.owner!==u){ if(!TS.release())return false; }
-    else if(st.owner==null&&copyTrip(st,t)!=null&&checked!==u&&!TS.foreign){ hidePlan(); return 'check'; }
-    else if(TS.foreign){ TS.foreign=null; foreignSaid=false; showPlan(); }   // cihazdaki plan bu hesabın: yeniden gösterilir
+    else if(st.owner==null&&ct!=null&&owned!==u+'|'+ct){ hidePlan(); if(early){ TS.waiting=true; return 'check'; } if(!TS.foreign)enterForeign('?',NOREAD_MSG,NOREAD_NOTE); return false; }
+    else if(TS.foreign){ TS.foreign=null; foreignSaid=false; foreignNote=null; showPlan(); }   // cihazdaki plan bu hesabın (sahip işareti / sunucu doğruladı): yeniden gösterilir
     st=syncRead();
     if(st.legacy&&TS.localState()==='unsynced')st.dirty={trip_id:TS.localOwner()};   // WP6 öncesi cihaz: "kaydedilmemiş" sayılan plan öyle kalır
     if(st.legacy||st.owner!==u||st.otrip!==tripFp())syncWrite(st);
     try{ if(window.__asaPhotos)window.__asaPhotos('restore',u); }catch(e){}
     if(o&&o.plain){ try{ restoreReleased(u); }catch(e){} }
     return true; };
-  // Sahibi bilinmeyen DB seyahati kopyası: seyahat bu hesabınsa (RLS: yalnız sahibi okur) devralınır; değilse / okunamazsa önce kaldırılır
-  // (kaydedilmemiş değişiklik o seyahate bağlı sürüm olarak kalır — yalnız sahibi açabilir; fotoğrafları o seyahat adına gizlenir).
-  TS.checkOwner=async function(uid,o){ var u=String(uid), id=copyTrip(syncRead(),T()), r=null;
-    if(id!=null){ try{ r=(window.TripStore&&window.TripStore.get)?await window.TripStore.get(id):null; }catch(e){ r=null; } }
-    checked=u;
-    var mine=!!(r&&String(r.id)===id&&(r.user_id==null||String(r.user_id)===u));
-    if(id!=null&&!mine&&copyTrip(syncRead(),T())===id){ if(!TS.release())return false; }
-    else showPlan();
-    return TS.login(u,Object.assign({},o||{},{early:true})); };
-  // WP6: kaldırılan seyahatsiz plan (TS.release, aramasıyla) aynı hesap yeniden girince sade sayfada geri gelir — cihazda kaydedilmemiş
-  // başka plan yokken ve cihazdaki arama boşken ya da aynı aramayken. Önce işaret ("kaydedilmemiş"), sonra plan; sürüm en son silinir.
-  function srch(x){ x=obj(x); return canon({c:x.city||null,s:x.start_date||null,e:x.end_date||null,a:x.approx_period||null,d:x.duration||null,n:x.duration_days||null,v:Array.isArray(x.vacation_types)?x.vacation_types:[]}); }
+  // Sahibi bilinmeyen DB seyahati kopyası: seyahat bu hesabınsa (RLS: yalnız sahibi okur) devralınır; okundu ve bu hesabın değilse önce
+  // kaldırılır (kaydedilmemiş değişiklik o seyahate bağlı sürüm olarak kalır — yalnız sahibi açabilir; fotoğrafları ve favori listesi o
+  // seyahat adına ayrılır). WP6: okunamadıysa (bağlantı yok / hata) "bu hesabın değil" sayılmaz: kopya gizli ve kilitli kalır, kaldırılmaz,
+  // devralınmaz (bir sonraki açılışta yeniden sorulur); favori listesi o seyahat adına ayrılır (doğrulanınca geri gelir).
+  TS.checkOwner=async function(uid,o){ var u=String(uid), id=copyTrip(syncRead(),T()), g={ok:false}, again=Object.assign({},o||{},{early:true});
+    if(id==null)return TS.login(u,again);
+    try{ if(window.__asaFavHide)window.__asaFavHide(id); }catch(e){}   // favori listesi de o kopyanın: sorulurken gösterilmez
+    try{ if(window.TripStore&&window.TripStore.getChecked)g=await window.TripStore.getChecked(id); }catch(e){ g={ok:false}; }
+    if(copyTrip(syncRead(),T())!==id)return TS.login(u,again);   // kopya bu arada değişti (başka sekme): yeniden karar
+    if(!g||!g.ok){ TS.legacyAcct=id; return enterForeign('?',NOREAD_MSG,NOREAD_NOTE); }
+    var r=g.row;
+    if(r&&String(r.id)===id&&(r.user_id==null||String(r.user_id)===u)){ owned=u+'|'+id; TS.legacyAcct=false; showPlan(); try{ if(window.__asaFavHeld)window.__asaFavHeld(id,u); }catch(e){} }
+    else if(!TS.release())return false;
+    return TS.login(u,again); };
+  // WP6: saklanan seyahatsiz plan (TS.release / TS.adopt, aramasıyla) aynı hesap sade sayfadayken geri gelir — cihazda kaydedilmemiş başka
+  // plan yokken (DB seyahatinin eşitlenmiş kopyası sunucuda olduğu için sayılmaz) ve günlerinin hepsi cihazdaki aramanın takviminde varken
+  // (arama boşsa kendi aramasıyla). Görünmeyen günlere yazılmaz. Önce işaret ("kaydedilmemiş"), sonra plan; sürüm en son silinir. Hepsi ya
+  // da hiçbiri: bir yazım başarısızsa (depo dolu) önceki alanlar ve işaret geri yazılır, sürüm saklı kalır, kullanıcıya söylenir.
+  var REST_FULL="Bu cihazda saklanan planın geri yüklenemedi: cihaz depolaması dolu. Plan silinmedi; cihazda yer açıp sayfayı yenile.";
   function restoreReleased(u){ var st=syncRead(), t=T(), empty=!Object.keys(t).length;
-    if(TS.foreign||st.legacy||t.id!=null||st.dirty||st.synced||TS.localState()==='unsynced')return false;
-    var it=st.items.filter(function(x){ return x.trip_id==null&&x.uid!=null&&String(x.uid)===u&&x.search&&typeof x.search==='object'&&(empty||srch(t)===srch(x.search)); }).sort(function(a,b){ return String(b.at||'').localeCompare(String(a.at||'')); })[0];
+    if(TS.foreign||st.legacy||t.id!=null||st.dirty||TS.localState()==='unsynced')return false;
+    function target(x){ return (empty&&x.search.city)?x.search:t; }
+    var it=st.items.filter(function(x){ if(!(x.trip_id==null&&x.uid!=null&&String(x.uid)===u&&x.search&&typeof x.search==='object'))return false; var ks=calKeys(target(x)); return vKeys(x).every(function(k){ return ks.indexOf(k)>-1; }); }).sort(function(a,b){ return String(b.at||'').localeCompare(String(a.at||'')); })[0];
     if(!it)return false;
-    var nt=(empty&&it.search.city)?it.search:null, tt=nt||t;
-    st.dirty={trip_id:null}; st.edit={trip_id:null,uid:u,start_date:tt.start_date||null,end_date:tt.end_date||null}; if(!syncWrite(st))return false;
+    var nt=(empty&&it.search.city)?it.search:null, tt=nt||t, was=syncRead(), keep={};
+    ['dayven','cal','plan','plan_prefs','trip'].forEach(function(k){ try{ keep[k]=window.ASA_ST.read(k); }catch(e){ keep[k]={present:false}; } });
+    st.synced=null; st.dirty={trip_id:null}; st.edit={trip_id:null,uid:u,start_date:tt.start_date||null,end_date:tt.end_date||null,search:searchOf(tt)};
+    if(!syncWrite(st)){ try{ window.ASA_ST.say(REST_FULL); }catch(e){} return false; }
     var ok=S('dayven',obj(it.dayven))&&S('cal',obj(it.cal))&&S('plan',obj(it.plan))&&S('plan_prefs',obj(it.plan_prefs));
     if(ok&&nt)ok=S('trip',nt);
-    if(ok){ var s2=syncRead(); s2.items=s2.items.filter(function(x){ return !(x.trip_id==null&&x.sig===it.sig&&String(x.uid)===u); }); syncWrite(s2); }
-    showPlan(); return ok; }
+    if(!ok){ ['dayven','cal','plan','plan_prefs','trip'].forEach(function(k){ var r=keep[k]; S(k,(r&&r.present&&r.value!=null)?r.value:{}); }); syncWrite(was);
+      try{ window.ASA_ST.say(REST_FULL); }catch(e){} showPlan(); return false; }
+    var s2=syncRead(); s2.items=s2.items.filter(function(x){ return !(x.trip_id==null&&x.sig===it.sig&&String(x.uid)===u); }); syncWrite(s2);
+    showPlan(); return true; }
   // importGuestTrip: cihazdaki plan yalnız misafirken ya da bu hesapla yapılmışsa ve başka hesabın DB seyahatinin kopyası değilse taşınır.
   TS.importable=function(){ var st=syncRead(), u=curUid(); if(TS.foreign||TS.localState()!=='unsynced'||TS.localOwner()!==null)return false;
     if(st.edit&&st.edit.uid&&st.edit.uid!==u)return false;
@@ -1470,9 +1515,11 @@ function refPoint(){return userLoc||HOME;}
 function distKm(v){const c=coordsOf(v);const r=refPoint();return haversine(r.lat,r.lng,c.lat,c.lng);}
 function distKmFromHome(v){const c=coordsOf(v);return haversine(HOME.lat,HOME.lng,c.lat,c.lng);}
 function bikeMin(km){return Math.max(1,Math.round(km/0.25));}
-function gmaps(v){const q=encodeURIComponent(v.name+" "+(v.area||"")+" "+(v.city||"Amsterdam"));
+// WP6: URL'ler satır içi onclick="winopen('…')" dizgesine girer; encodeURIComponent kesme işaretini (Flo's, Lotti's, 't IJ) kaçırmaz → %27
+function gmapsQ(s){return encodeURIComponent(s).replace(/'/g,"%27");}
+function gmaps(v){const q=gmapsQ(v.name+" "+(v.area||"")+" "+(v.city||"Amsterdam"));
  return"https://www.google.com/maps/search/?api=1&query="+q;}
-function gmapsRoute(list){const pts=list.map(v=>encodeURIComponent(v.name+" "+(v.city||"Amsterdam"))).join("/");
+function gmapsRoute(list){const pts=list.map(v=>gmapsQ(v.name+" "+(v.city||"Amsterdam"))).join("/");
  return"https://www.google.com/maps/dir/"+pts;}
 const RESV={req:{t:"Rezervasyon gerekli",c:"req"},rec:{t:"Rezervasyon önerilir",c:"rec"},no:{t:"Walk-in / rezervasyon yok",c:"no"},unknown:{t:"Rezervasyon: kontrol et",c:"rec"}};
 const SRCLBL={user:"Benim listem",deck:"Önceki araştırmam",extra:"Ek araştırma",audio:"Ses kaydı",poi:"Gezilecek yer"};
@@ -1547,6 +1594,10 @@ window.ASA_ST=(function(){
 /* ===== FAVORITES ===== */
 let favSet=new Set();
 let favAcct=null, favPend=null;   // WP6: bu sayfanın belleğindeki favoriler bu hesabın kopyası (depoya yazılamasa da çıkışta temizlenir) · favPend: sahipliği yazılamamış giriş
+// WP6 · favForeign: cihazdaki liste sahibi doğrulanmamış bir hesabın kopyası (WP6 öncesi cihaz) ve o seyahat adına ayrılamadı (depo dolu):
+// bu sayfada gösterilmez, hesaba yüklenmez, üzerine yazılmaz / silinmez (değer: o seyahatin kimliği) · favGone: bu sekmenin oturumu başka
+// sekmede bitti — yeniden girişe dek liste gösterilmez, kalp dokunuşu ne cihaza ne hesaba yazılır.
+let favForeign=false, favGone=false;
 // WP6: varsayılan favorilerin sabit anlık görüntüsü (mergeDbVenues V'den kapalı mekân çıkarmadan önce alınır).
 const SEED_FAV_IDS=V.filter(function(v){ return v&&v.fav&&typeof v.id==="string"&&v.id; }).map(function(v){ return v.id; });
 function seedFavIds(){ return SEED_FAV_IDS.slice(); }
@@ -1560,11 +1611,15 @@ function seedFavIds(){ return SEED_FAV_IDS.slice(); }
   seedFavIds().forEach(function(id){ favSet.add(id); });
   ASA_ST.set("fav", Array.from(favSet));
 })();
-/* WP6 · favori senkronu (asa:ams:fav_sync = {v:1, uid, base, ops:[{id, op:"add"|"del", uid, n}]}).
+// WP6: liste bir seyahat adına ayrıldı ama cihazdaki kopyası boşaltılamadı (favLegacyReset yarım kaldı): gösterilmez, üzerine yazılmaz
+try{ const h=favSyncRead().held; if(h&&h.ids.length&&favSet.size===h.ids.length&&h.ids.every(function(id){ return favSet.has(id); })){ favSet=new Set(); favForeign=h.trip_id; } }catch(e){}
+/* WP6 · favori senkronu (asa:ams:fav_sync = {v:1, uid, base, ops:[{id, op:"add"|"del", uid, n}], held?:{trip_id, ids}}).
    Cihaz bir hesapla eşitlendikten sonra (base "synced") sunucu doğruluk kaynağıdır: girişte yalnız bekleyen değişiklikler uygulanır.
    uid null işlem: çıkış yapılmışken kullanıcının kalp ile yaptığı değişiklik (sonraki girişte o hesaba). uid X işlem: X girişliyken
    sunucuya yazılamamış değişiklik (yalnız X için yeniden denenir). Varsayılan (tohum) favoriler hiçbir zaman hesaba yüklenmez.
-   base "legacy": WP6 öncesi favori listesi henüz hesapla birleştirilmedi (bir kerelik birleştirme bekliyor) · "seed": yalnız tohumlar. */
+   base "legacy": WP6 öncesi favori listesi henüz hesapla birleştirilmedi (bir kerelik birleştirme bekliyor) · "seed": yalnız tohumlar.
+   held: WP6 öncesi cihazın listesi, sahibi bilinmeyen DB seyahati kopyasının seyahati adına ayrıldı (favLegacyReset) — kimseye gösterilmez,
+   yüklenmez; o seyahatin sahibi doğrulanınca (TS.checkOwner / seyahat açıldı) o hesaba döner (__asaFavHeld). Her yazımda korunur. */
 function favIsSeedSet(s){ return s.size===SEED_FAV_IDS.length&&SEED_FAV_IDS.every(function(id){ return s.has(id); }); }
 function favSeedCount(s){ return SEED_FAV_IDS.filter(function(id){ return s.has(id); }).length; }
 function favSyncRead(){
@@ -1573,10 +1628,13 @@ function favSyncRead(){
   var ops=Array.isArray(v.ops)?v.ops.filter(function(o){ return o&&typeof o.id==="string"&&o.id&&(o.op==="add"||o.op==="del"); }).map(function(o){ return {id:o.id,op:o.op,uid:(typeof o.uid==="string"&&o.uid)?o.uid:null,n:(typeof o.n==="number"&&o.n>0)?o.n:0}; }):[];
   var uid=(typeof v.uid==="string"&&v.uid)?v.uid:null;
   var base=(v.base==="legacy"||v.base==="seed"||v.base==="synced")?v.base:(uid?"synced":"legacy");
-  return {present:!!r.present,uid:uid,base:base,ops:ops};
+  var h=(v.held&&typeof v.held==="object"&&v.held.trip_id!=null&&Array.isArray(v.held.ids))?{trip_id:String(v.held.trip_id),ids:v.held.ids.filter(function(id){ return typeof id==="string"&&id; })}:null;
+  return {present:!!r.present,uid:uid,base:base,ops:ops,held:h};
 }
 function favSeq(ops){ return ops.reduce(function(m,o){ return Math.max(m,o.n); },0); }
-function favSyncWrite(uid,ops,base){ try{ return !!ASA_ST.aux.set("fav_sync",{v:1,uid:uid||null,base:base||"legacy",ops:ops.slice(-200)}); }catch(e){ return false; } }
+// held: undefined = ayrılmış liste korunur · null = kaldırılır. favForeign: yazılmaz (cihazdaki doğrulanmamış liste ayrılamadı)
+function favSyncWrite(uid,ops,base,held){ if(favForeign)return false; try{ if(held===undefined)held=favSyncRead().held; var o={v:1,uid:uid||null,base:base||"legacy",ops:ops.slice(-200)}; if(held)o.held=held; return !!ASA_ST.aux.set("fav_sync",o); }catch(e){ return false; } }
+function favDev(v){ return !favForeign&&ASA_ST.set("fav",v); }   // cihazdaki liste (favForeign: yazılmaz)
 function favOpRecord(id,op,uid){
   if(!ASA_ST.writable())return false;
   var st=favSyncRead(); uid=uid||null;
@@ -1621,34 +1679,69 @@ function favLoginCommit(uid,cloud,p,failAdd,failDel){
 // WP6: bellekteki hesap kopyası (favAcct) depo yazılamasa da (dolu / kapalı / kilitli görünüm) temizlenir.
 function favLogoutReset(){
   var st=favSyncRead(); if(!st.uid&&!favAcct)return false;
+  var acct=!!(st.uid||favPend);   // WP6: cihazdaki liste bir hesabın kopyası; değilse (hesabın listesi okunamadı: favReadFail) misafirin listesidir — silinmez
   favSet=new Set(); favAcct=null; favPend=null;
-  if(ASA_ST.writable()){ ASA_ST.set("fav",[]); if(st.present)favSyncWrite(null,st.ops,st.base); }
+  if(acct&&ASA_ST.writable()&&!favGone){ favDev([]); if(st.present)favSyncWrite(null,st.ops,st.base); }   // WP6: oturumu başka sekmede biten sekme cihazdaki (sonraki hesabın) listesine dokunmaz
   try{ renderCards(); }catch(e){} try{ if(typeof MAP!=="undefined"&&MAP.map)drawMarkers(); }catch(e){}
   return true;
 }
-// WP6: WP6 öncesi cihaz (fav_sync yok) bir hesapla kullanılmışsa (o hesabın DB seyahati kopyası kaldırıldı — sahibi bilinmeyen kopya;
-// ana sayfadan çıkışta fav_sync zaten yazılır): cihazdaki liste o hesabın kopyasıdır — çıkıştaki gibi temizlenir; sonraki kişiye gösterilmez, sonraki hesaba yüklenmez
-// (bir kerelik göç birleştirmesi yok). Önce işaret, sonra liste; yazılamazsa (depo dolu) yalnız bu sayfada gösterilmez / yüklenmez.
-let favForeign=false;
-function favLegacyReset(){ if(favSyncRead().present)return false; favForeign=true; favSet=new Set(); favAcct=null; favPend=null;
-  if(ASA_ST.writable()&&favSyncWrite(null,[],"synced"))ASA_ST.set("fav",[]);
-  try{ renderCards(); }catch(e){} try{ if(typeof MAP!=="undefined"&&MAP.map)drawMarkers(); }catch(e){} return true; }
-// WP6: bu sekmenin oturumu başka sekmede bitti: hesap kopyası bellekten çıkar, cihazdaki liste gösterilir (cihaza yazılmaz)
-function favStale(){ favSet=new Set(); const v=ASA_ST.get("fav",null); if(Array.isArray(v))v.forEach(function(id){ if(typeof id==="string"&&id)favSet.add(id); }); favAcct=null; favPend=null;
-  try{ renderCards(); }catch(e){} try{ if(typeof MAP!=="undefined"&&MAP.map)drawMarkers(); }catch(e){} }
+function favRender(){ try{ renderCards(); }catch(e){} try{ if(typeof MAP!=="undefined"&&MAP.map)drawMarkers(); }catch(e){} }
+// WP6: WP6 öncesi cihaz (fav_sync yok) bir hesapla kullanılmışsa (sahibi bilinmeyen DB seyahati kopyası, tid): cihazdaki liste o hesabın
+// kopyasıdır — sonraki kişiye gösterilmez, sonraki hesaba yüklenmez (bir kerelik göç birleştirmesi yok) ve SİLİNMEZ: o seyahat adına
+// ayrılır (held; fotoğraflar gibi), o seyahatin sahibi doğrulanınca o hesaba döner. Önce işaret (listeyi taşır), sonra liste boşalır;
+// yazılamazsa (depo dolu) liste yerinde kalır, bu sayfada gösterilmez, yüklenmez, üzerine yazılmaz (favForeign).
+function favLegacyReset(tid){ if(favSyncRead().present||tid==null)return false;
+  favForeign=false;   // sahiplik sorulurken yalnız gizliydi (__asaFavHide): şimdi ayrılır
+  const dv=ASA_ST.get("fav",null), ids=Array.isArray(dv)?dv.filter(function(id){ return typeof id==="string"&&id; }):[];
+  favSet=new Set(); favAcct=null; favPend=null;
+  if(!(ASA_ST.writable()&&favSyncWrite(null,[],"synced",{trip_id:String(tid),ids:ids})&&ASA_ST.set("fav",[])))favForeign=String(tid);
+  favRender(); return true; }
+// WP6: seyahat tid'nin sahibi uid olarak doğrulandı: o seyahat adına ayrılan (ya da yerinde tutulan) liste bu hesaba döner — bu sayfada
+// gösterilir; tohum olmayanlar (liste çoğunlukla tohumsa) bekleyen "ekle" işlemi olarak hesaba yazılır (girişte ya da şimdi). Bu arada aynı
+// mekân için yapılmış değişiklik (daha yeni) korunur. Yazılamazsa (depo dolu) liste ayrıldığı yerde kalır.
+window.__asaFavHeld=function(tid,uid){ tid=String(tid); if(!uid)return false; uid=String(uid);
+  if(favForeign===tid){ favForeign=false; const v=ASA_ST.get("fav",null); favSet=new Set(); if(Array.isArray(v))v.forEach(function(id){ if(typeof id==="string"&&id)favSet.add(id); }); favRender(); }
+  const st=favSyncRead(), h=st.held; if(!h||h.trip_id!==tid)return false;
+  const seedish=favSeedCount(new Set(h.ids))*2>SEED_FAV_IDS.length, add=h.ids.filter(function(id){ return !(seedish&&SEED_FAV_IDS.indexOf(id)>-1)&&!st.ops.some(function(o){ return o.id===id; }); });
+  let n=favSeq(st.ops); const ops=st.ops.slice(); add.forEach(function(id){ ops.push({id:id,op:"add",uid:uid,n:++n}); });
+  if(!favSyncWrite(st.uid,ops,st.base,null))return false;
+  add.forEach(function(id){ favSet.add(id); }); if(favAcct===uid&&favOwned())favDev([...favSet]); favRender();   // WP6: cihaza yalnız bu hesabın sahipli kopyası olarak (değilse girişte ya da bekleyen işlemle hesaba)
+  const A=window.ASA; if(A&&A.session&&String(A.session.uid)===uid&&typeof A.onFav==="function")add.forEach(function(id){ try{ A.onFav(id,true); }catch(e){} });
+  return true; };
+// WP6: sahibi bilinmeyen kopyanın sahibi sunucuya sorulurken (TS.checkOwner) WP6 öncesi liste de o kopyanındır: gösterilmez, yazılmaz
+window.__asaFavHide=function(tid){ if(favSyncRead().present||tid==null)return false; favForeign=String(tid); favSet=new Set(); favAcct=null; favPend=null; favRender(); return true; };
+// WP6: giriş, ilk sunucu isteğinden önce: cihazdaki liste başka hesabın kopyasıysa giriş sürerken (ve hesap okunamazsa oturum boyunca) gösterilmez
+function favLoginHide(uid){ uid=String(uid); favGone=false; const st=favSyncRead(); if((st.uid&&st.uid!==uid)||(favAcct&&favAcct!==uid)){ favSet=new Set(); favAcct=null; favPend=null; favRender(); } }
+// WP6: bu sekmenin oturumu başka sekmede bitti: liste bellekten çıkar ve yeniden girişe dek gösterilmez (o anda cihazda henüz eski hesabın ya
+// da yeni hesabın listesi olabilir); kalp dokunuşu yapılmaz (toggleFav)
+function favStale(){ favGone=true; favSet=new Set(); favAcct=null; favPend=null; favRender(); }
+// WP6: girişte hesabın listesi okunamadı (ağ / sunucu hatası): bu sayfanın listesi bu oturumda bu hesabındır (favAcct) ama cihazdaki liste bu
+// hesabın kopyası olarak doğrulanmadı (sahiplik işareti yok / başka hesap; favOwned false): bu oturumun kalp dokunuşları cihazdaki listeye
+// yazılmaz (sahipsiz kalıp sonraki kişiye görünür / sonraki hesaba yüklenirdi) — yalnız hesaba gider, gönderilemezse yalnız bu hesap için
+// bekler. Cihazdaki liste (misafirin) silinmez, sahibi değiştirilmez; çıkışta bu sekmede de gösterilmez (favLogoutReset).
+function favReadFail(uid){ favAcct=uid; ASA_ST.say("Listen şu an yüklenemedi; bu oturumdaki değişikliklerin hesabına kaydediliyor. Listenin tamamını görmek için sayfayı biraz sonra yenile."); }
 // bu cihazdaki liste bu sayfanın hesap kopyasının sahibi mi (değilse hesabın favorileri cihaza sahipsiz yazılmaz)
 function favOwned(){ return !favAcct||favSyncRead().uid===favAcct; }
 // WP6: girişte sahiplik yazılamadıysa (depo dolu) cihaza yazılan hesap listesinin sahibi şimdi yazılır; yine olmazsa cihazdaki liste
 // girişten önceki haline döner (hesabın favorileri cihazda sahipsiz kalmaz). true = cihazdaki liste sahipli / dokunulmamış.
-function favClaim(){ if(!favAcct||!favPend||!ASA_ST.writable()||favOwned())return true; if(favSyncWrite(favAcct,favPend.keep,"synced")){ favPend=null; return true; } ASA_ST.set("fav",favPend.dev); return false; }
+function favClaim(){ if(!favAcct||!favPend||!ASA_ST.writable()||favOwned())return true; if(favSyncWrite(favAcct,favPend.keep,"synced")){ favPend=null; return true; } favDev(favPend.dev); return false; }
 function isFav(id){return favSet.has(id);}
-// WP6: bu sekmenin oturumu başka sekmede bittiyse (ASA.stale) önce bu sekmede de kapanır (favStale: cihazdaki liste gösterilir) ve bu
-// dokunuş yapılmaz — cihaza hesabın listesi yazılmaz, hesaba (başka sekmenin oturumuyla) ya da sonraki girişe bir işlem gönderilmez
+// WP6: bu sekmenin oturumu başka sekmede bittiyse (ASA.stale) önce bu sekmede de kapanır (favStale) ve yeniden girişe dek hiçbir dokunuş
+// yapılmaz — cihaza liste yazılmaz, hesaba (başka sekmenin oturumuyla) ya da sonraki girişe bir işlem gönderilmez; kullanıcıya söylenir
 function favStaleChk(){ try{ const A=window.ASA; return !!(A&&A.session&&typeof A.stale==="function"&&A.stale()); }catch(e){ return false; } }
-function toggleFav(id){const had=favSet.has(id);if(had)favSet.delete(id);else favSet.add(id);if(favStaleChk())return;
+// favForeign: cihazdaki doğrulanmamış liste (ayrılamadı / sahibi soruluyor) üzerine yazılmaz — dokunuş yapılmaz, söylenir.
+// true: dokunuş burada bitti (reddedildi ya da yalnız hesaba gitti: favAcctOnly)
+function favStop(id){ if(favGone||favStaleChk()){ try{ if(window.TripSync&&window.TripSync.sayGone)window.TripSync.sayGone(); }catch(e){} return true; }
+ if(favForeign&&ASA_ST.writable()){ ASA_ST.full("Listen güncellenemedi: bu cihazda önceki oturumdan kalan bir liste var (başka bir hesaba ait olabilir) ve şu an ayrı saklanamıyor. Silinmedi; değişiklik yapılmadı. Cihazda yer açıp sayfayı yenile."); return true; } return !!id&&favAcctOnly(id); }
+// WP6: girişli ama cihazdaki liste bu hesabın kopyası değil (hesabın listesi okunamadı: favReadFail; ya da başka hesabın kopyası): dokunuş
+// cihazdaki listeye yazılmaz (sahipsiz kalıp sonraki kişiye görünür / sonraki hesaba yüklenirdi) — bu oturumda gösterilir ve hesaba gönderilir
+// (gönderilemezse yalnız bu hesap için bekler: onFav). favPend: sahiplik henüz yazılamadı, toggleFav yazar ve sahipliği ister (favClaim).
+function favAcctOnly(id){ if(!favAcct||favPend||favOwned())return false;
+  if(favSet.has(id))favSet.delete(id); else favSet.add(id); favRender(); if(window.ASA)ASA.onFav(id,favSet.has(id)); return true; }
+function toggleFav(id){const had=favSet.has(id);if(favStop(id))return;if(had)favSet.delete(id);else favSet.add(id);
  if(!ASA_ST.set("fav",[...favSet])&&ASA_ST.writable()){ if(had)favSet.add(id);else favSet.delete(id); ASA_ST.full("Favorin kaydedilemedi: cihaz depolaması dolu. Değişiklik geri alındı."); return; }   // WP3: kaydedilmeyen değişiklik ekranda kalmaz
  try{ favClaim(); }catch(e){}   // WP6: hesabın listesi cihazda sahipsiz kalmaz (girişte sahiplik yazılamadıysa)
- if(!(window.ASA&&window.ASA.session)&&!favOpRecord(id,had?"del":"add",null)&&ASA_ST.writable()){ if(had)favSet.add(id);else favSet.delete(id); ASA_ST.set("fav",[...favSet]); ASA_ST.full("Favorin kaydedilemedi: cihaz depolaması dolu. Değişiklik geri alındı."); return; }   // WP6: çıkışlıyken yapılan değişiklik bekleyen işlem olarak kaydedilir
+ if(!(window.ASA&&window.ASA.session)&&!favOpRecord(id,had?"del":"add",null)&&ASA_ST.writable()){ if(had)favSet.add(id);else favSet.delete(id); favDev([...favSet]); ASA_ST.full("Favorin kaydedilemedi: cihaz depolaması dolu. Değişiklik geri alındı."); return; }   // WP6: çıkışlıyken yapılan değişiklik bekleyen işlem olarak kaydedilir
  renderCards();if(MAP.map)drawMarkers();
  if(window.ASA){ASA.onFav(id,favSet.has(id));}}
 
@@ -2523,13 +2616,18 @@ function wireDayDrag(d){
  list.addEventListener("dragover",e=>{e.preventDefault();const el=window.__dragEl;if(!el)return;const after=dayDragAfter(list,e.clientY);if(after==null)list.appendChild(el);else list.insertBefore(el,after);});
 }
 /* WP6 · gün penceresindeki not alanları: kaydedilemeyen yazım (depo dolu) ekranda kalmaz — alan ve bellek kayıtlı değere döner; uyarı her
-   tuşta açılan bir alert değil: pencerenin içinde, alanların altında, pencere her açılışında bir kez. */
-let dayFailSaid=false;
+   tuşta açılan bir alert değil: pencerenin içinde, alanların altında, pencere her açılışında bir kez. WP6: yazım reddedildiyse (oturum
+   okunuyor / başka sekmede oturum kapandı / başka seyahat / kilit; saveLS.fail "blocked") da öyle: alan ve bellek yazımdan önceki değere
+   döner (pv; cihazdaki değer başka hesabın / seyahatin olabilir, gösterilmez), neden pencerede söylenir (TripSync.whyBlocked). */
+let dayFailSaid=false;   // pencerede gösterilen uyarı metni (false: yok)
 const DAY_FULL="Bu değişiklik kaydedilemedi: cihaz depolaması dolu. Yazdığın geri alındı; cihazda yer açıp yeniden dene.";
-function dayFieldSaved(k,o,d,el){ if(saveLS(k,o,true))return true;
- if(saveLS.fail==="full"){ const cur=ASA_ST.get(k,{}), v=(cur&&typeof cur==="object")?cur[d]:undefined; if(v!=null)o[d]=v; else delete o[d]; lsSeen(k,ASA_ST.get(k,{})); }
+function dayFieldSaved(k,o,d,el,pv){ if(saveLS(k,o,true))return true;
+ const f=saveLS.fail;
+ if(f==="full"){ const cur=ASA_ST.get(k,{}), v=(cur&&typeof cur==="object")?cur[d]:undefined; if(v!=null)o[d]=v; else if(pv!=null)o[d]=pv; else delete o[d]; lsSeen(k,ASA_ST.get(k,{})); }
+ else if(f==="blocked"){ if(pv!=null)o[d]=pv; else delete o[d]; }
  try{ el.value=(o[d]!=null?o[d]:""); }catch(e){}
- if(saveLS.fail==="full"&&!dayFailSaid){ dayFailSaid=true; const n=document.getElementById("daySaveNote"); if(n){ n.textContent=DAY_FULL; n.classList.remove("hide"); } }
+ let msg=null; if(f==="full")msg=DAY_FULL; else if(f==="blocked"){ try{ msg=(window.TripSync&&window.TripSync.whyBlocked)?window.TripSync.whyBlocked():null; }catch(e){ msg=null; } }
+ if(msg&&dayFailSaid!==msg){ dayFailSaid=msg; const n=document.getElementById("daySaveNote"); if(n){ n.textContent=msg; n.classList.remove("hide"); } }
  return false; }
 function renderDay(d){
  dayCur=d;
@@ -2558,13 +2656,13 @@ function renderDay(d){
  x+='<div id="dayFilterRow" class="flex flex-wrap gap-2 mb-3"></div>';
  x+='<div id="daySuggest" class="flex flex-col gap-2"></div></div>';
  x+='<div class="mb-4"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">📝 Plan notu</div><textarea id="dayPlan" class="w-full bg-surface-container rounded-lg p-3 text-body-sm text-on-surface min-h-20 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Bugünün akışı, saatler, fikirler…">'+escT(planVal)+'</textarea></div>';
- x+='<div class="mb-4"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">🗒️ Kişisel not</div><textarea id="dayNote" class="w-full bg-surface-container rounded-lg p-3 text-body-sm text-on-surface min-h-16 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Rezervasyon, hatırlatma…">'+escT(calNotes[d]||"")+'</textarea><p id="daySaveNote" class="'+(dayFailSaid?'':'hide ')+'text-[12px] text-error mt-1" role="status" aria-live="polite">'+(dayFailSaid?DAY_FULL:'')+'</p></div>';
+ x+='<div class="mb-4"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">🗒️ Kişisel not</div><textarea id="dayNote" class="w-full bg-surface-container rounded-lg p-3 text-body-sm text-on-surface min-h-16 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Rezervasyon, hatırlatma…">'+escT(calNotes[d]||"")+'</textarea><p id="daySaveNote" class="'+(dayFailSaid?'':'hide ')+'text-[12px] text-error mt-1" role="status" aria-live="polite">'+(dayFailSaid?escT(dayFailSaid):'')+'</p></div>';
  x+='<div class="mb-2"><div class="font-kicker text-kicker text-on-surface-variant uppercase mb-2">📷 Fotoğraflar</div><div class="flex flex-wrap gap-2">'+phs.map((src,i)=>'<span class="relative w-20 h-20 rounded-lg overflow-hidden"><img class="w-full h-full object-cover" src="'+src+'"><button class="absolute top-1 right-1 w-5 h-5 rounded-full bg-surface/90 text-on-surface text-[12px] flex items-center justify-center" title="Sil" onclick="delPhoto(\''+d+'\','+i+')">✕</button></span>').join("")+'</div><label class="inline-flex items-center gap-1 mt-2 rounded-full border border-outline-variant text-on-surface font-button text-button px-4 py-2 cursor-pointer hover:bg-surface-container"><span class="msym text-[16px]">photo_camera</span> Fotoğraf ekle<input type="file" accept="image/*" class="hidden" id="dayPhotoInput"></label></div>';
  document.getElementById("dayBody").innerHTML=x;
  renderDayFilter(d);
  wireDayDrag(d);
- const pt=document.getElementById("dayPlan");if(pt)pt.addEventListener("input",()=>{calPlans[d]=pt.value;dayFieldSaved("plan",calPlans,d,pt);});
- const nt=document.getElementById("dayNote");if(nt)nt.addEventListener("input",()=>{calNotes[d]=nt.value;dayFieldSaved("cal",calNotes,d,nt);});
+ const pt=document.getElementById("dayPlan");if(pt)pt.addEventListener("input",()=>{const pv=calPlans[d];calPlans[d]=pt.value;dayFieldSaved("plan",calPlans,d,pt,pv);});
+ const nt=document.getElementById("dayNote");if(nt)nt.addEventListener("input",()=>{const pv=calNotes[d];calNotes[d]=nt.value;dayFieldSaved("cal",calNotes,d,nt,pv);});
  const pi=document.getElementById("dayPhotoInput");if(pi)pi.addEventListener("change",ev=>addPhoto(d,ev));
 }
 
@@ -2929,7 +3027,7 @@ const ASA = (function(){
   /* WP6 · iki sekme: başka sekmede çıkış yapılınca (asa_session silinir) ya da başka hesapla girilince (asa_session başka hesap) bu sekmenin
      oturumu biter: sekme içi çıkış (cihaza yazmadan) — oturum, hesap favorileri ve plan bu sekmede kapanır (TripSync.goneOut); bu sekme
      cihaza plan / favori yazmaz, başka hesaba istek göndermez. Kendi asa_session yazımı başarısızsa (depo dolu) karşılaştırılmaz. */
-  let stale=false, sessOk=false;
+  let stale=false, sessOk=false, outGoing=false;   // outGoing: bu sekmenin kendi çıkışı sürüyor (yetki istemcisinin SIGNED_OUT'u bayat sayılmaz)
   function devUid(){ try{ const s=JSON.parse(localStorage.getItem("asa_session")||"null"); return (s&&s.uid)?String(s.uid):null; }catch(e){ return undefined; } }
   function isStale(){ if(stale)return true; if(!session||!sessOk)return false; const d=devUid(); if(d===undefined||d===String(session.uid))return false; goStale(); return true; }
   function goStale(){ if(stale)return; stale=true; session=null; member=null;
@@ -2942,10 +3040,14 @@ const ASA = (function(){
     if(inited) return; inited=true;
     try{ db=window.asaDB(); }catch(e){}
     try{ if(db&&window.createTripStore) window.TripStore=window.createTripStore(db); }catch(e){}
+    // WP6: oturum bu sekmenin dışında bittiyse (süre doldu / iptal edildi / başka sekmede çıkış) ya da başka hesaba geçtiyse (başka sekmede —
+    // ana sayfa dahil — başka hesapla giriş; asa_session değişmeyebilir) yetki istemcisi bildirir: bu sekmenin oturumu biter (goStale) —
+    // başka hesabın yetkisiyle bu sekmeden hiçbir şey gönderilmez, cihaza yazılmaz.
+    try{ if(db&&db.auth&&typeof db.auth.onAuthStateChange==="function")db.auth.onAuthStateChange(function(ev,s){ try{ if(!session||outGoing)return; const u=s&&s.user&&s.user.id; if(ev==="SIGNED_OUT"||(u&&String(u)!==String(session.uid)))goStale(); }catch(e){} }); }catch(e){}
     render();
     if(db){
       try{ if(window.TripSync&&window.TripSync.wait)window.TripSync.wait(true); }catch(e){}   // WP6: oturum okunana dek cihazdaki planın kimin olduğu bilinmiyor
-      try{ const {data,error}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ await afterAuth(data.session.user); } else if(!error){ try{ favLogoutReset(); }catch(e){} try{ if(window.TripSync&&window.TripSync.release)window.TripSync.release(); }catch(e){} try{ if(window.TripSync&&window.TripSync.legacyAcct)favLegacyReset(); }catch(e){} } }catch(e){}   // WP6/D6: oturum yok (ana sayfadan çıkış / süre doldu) → hesabın favori ve plan kopyası cihazda kalmaz (aynı cihazda sonraki kişi görmez); okuma hatasında dokunulmaz
+      try{ const {data,error}=await db.auth.getSession(); if(data&&data.session&&data.session.user){ await afterAuth(data.session.user); } else if(!error){ try{ favLogoutReset(); }catch(e){} try{ if(window.TripSync&&window.TripSync.release)window.TripSync.release(); }catch(e){} try{ if(window.TripSync&&window.TripSync.legacyAcct)favLegacyReset(window.TripSync.legacyAcct); }catch(e){} } }catch(e){}   // WP6/D6: oturum yok (ana sayfadan çıkış / süre doldu) → hesabın favori ve plan kopyası cihazda kalmaz (aynı cihazda sonraki kişi görmez); okuma hatasında dokunulmaz
       try{ if(window.TripSync&&window.TripSync.wait)window.TripSync.wait(false); }catch(e){}
       try{ await loadTripContext(); }catch(e){}
     }
@@ -3022,14 +3124,16 @@ const ASA = (function(){
   async function afterAuth(user){
     const uid=user&&user.id; const email=((user&&user.email)||"").toLowerCase();
     if(!uid) return {ok:false,msg:"Oturum alınamadı."};
-    stale=false;
+    stale=false; try{ favLoginHide(uid); }catch(e){}
     // WP6: ilk sunucu isteğinden ÖNCE cihazdaki planın sahibi belirlenir (başka hesabın planı giriş sürerken görünmez; o sırada yapılan
     // değişiklik bu hesabındır); sahibi bilinmeyen DB seyahati kopyası önce sunucuya sorulur. WP6 öncesi cihazın favori listesi başka
     // hesabın kopyasıysa (o hesabın DB seyahati kopyası kaldırıldı) bu hesaba yüklenmez.
     try{ const TSy=window.TripSync, pl={plain:!asaTripParam()};
       if(TSy&&TSy.login&&TSy.login(uid,Object.assign({early:true},pl))==="check"&&TSy.checkOwner) await TSy.checkOwner(uid,pl);
     }catch(e){} finally{ try{ if(window.TripSync&&window.TripSync.wait)window.TripSync.wait(false); }catch(e){} }
-    try{ if(window.TripSync&&window.TripSync.legacyAcct)favLegacyReset(); }catch(e){}
+    try{ if(window.TripSync&&window.TripSync.legacyAcct)favLegacyReset(window.TripSync.legacyAcct); }catch(e){}
+    // WP6: bir seyahat adına ayrılmış favori listesi (WP6 öncesi cihaz): o seyahat bu hesabınsa (sunucu okuması doğrular) liste bu girişte döner
+    try{ const h=favSyncRead().held; if(h&&window.TripStore&&window.TripStore.getChecked){ const g=await window.TripStore.getChecked(h.trip_id); if(g&&g.ok&&g.row&&String(g.row.id)===h.trip_id&&(g.row.user_id==null||String(g.row.user_id)===String(uid)))window.__asaFavHeld(h.trip_id,uid); } }catch(e){}
     // WP5: görünen ad her girişte / sayfa açılışında ezilmez — kendi satırında display_name varsa (ya da okunamadıysa) null gönderilir,
     // member_upsert_profile COALESCE ile mevcut değeri korur; satır yoksa / ad boşsa e-posta yerel kısmı. Kayıt (signup) çağrısı değişmedi.
     let keepName=false;
@@ -3071,7 +3175,7 @@ const ASA = (function(){
   async function syncOnLoginFavPart(uid,email){
     let cloud=null;
     try{ const r=await db.from("favorites").select("venue_id").eq("user_id",uid); if(r&&!r.error) cloud=(r.data||[]).map(x=>x&&x.venue_id).filter(id=>typeof id==="string"&&id); }catch(e){ cloud=null; }
-    if(!cloud) return [];
+    if(!cloud){ favReadFail(uid); return []; }   // WP6: bu oturumun dokunuşları cihazdaki sahipsiz listeye yazılmaz (favReadFail)
     const p=favLoginPlan(cloud,uid); let failAdd=[], failDel=[];
     // user_id trigger tarafından doldurulur; email uyumluluk için bırakılır; çakışma UID+venue
     if(p.adds.length){ try{ const r=await db.from("favorites").upsert(p.adds.map(id=>({email,venue_id:id,city:CITY})),{onConflict:"user_id,venue_id",ignoreDuplicates:true}); if(r&&r.error) failAdd=p.adds.slice(); }catch(e){ failAdd=p.adds.slice(); } }
@@ -3109,7 +3213,7 @@ const ASA = (function(){
     }catch(e){ ok=false; }
     try{ if(ok) favOpDrop(id,uid); else if(!favOpRecord(id,added?"add":"del",uid)&&ASA_ST.writable()&&favSet.has(id)===!!added){   // WP6/D6: yazılamayan değişiklik bu hesap için bekler
       // ne hesaba ne bekleyen işlem olarak cihaza yazılabildi (depo dolu): ekranda kalmaz, kullanıcıya söylenir (sessiz kayıp yok)
-      if(added)favSet.delete(id); else favSet.add(id); if(favOwned())ASA_ST.set("fav",[...favSet]);
+      if(added)favSet.delete(id); else favSet.add(id); if(favOwned())favDev([...favSet]);
       try{ renderCards(); }catch(e){} try{ if(typeof MAP!=="undefined"&&MAP.map)drawMarkers(); }catch(e){}
       ASA_ST.full("Favorin kaydedilemedi: hesabına gönderilemedi ve cihaz depolaması dolu. Değişiklik geri alındı."); } }catch(e){}
     // favori artık puan üretmez → members.points doğrudan güncellemesi KALDIRILDI
@@ -3138,7 +3242,7 @@ const ASA = (function(){
 
   async function logout(){
     try{ const TSy=window.TripSync; if(window.TRIP&&TSy&&TSy.localState&&TSy.localState()==="unsynced") await Promise.race([TSy.flush(),new Promise(function(r){ setTimeout(r,5000); })]); }catch(e){}   // WP6: bekleyen plan kaydı oturum kapanmadan gönderilir (en çok 5 sn; olmazsa sürüm hesaba bağlı saklanır)
-    try{ if(db)await db.auth.signOut(); }catch(e){} session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} try{ favLogoutReset(); }catch(e){} try{ if(window.TripSync&&window.TripSync.reset)window.TripSync.reset(); }catch(e){} try{ if(window.TripSync&&window.TripSync.release)window.TripSync.release({now:true}); }catch(e){} render(); try{refreshGated();}catch(e){} nameReset(); }   // WP6: hesabın favori ve plan kopyası (seyahat, notlar, tercihler; fotoğraflar gizlenir) çıkışta cihazda/sekmede kalmaz
+    outGoing=true; try{ if(db)await db.auth.signOut(); }catch(e){} outGoing=false; session=null; member=null; try{localStorage.removeItem("asa_session");}catch(e){} try{ favLogoutReset(); }catch(e){} try{ if(window.TripSync&&window.TripSync.reset)window.TripSync.reset(); }catch(e){} try{ if(window.TripSync&&window.TripSync.release)window.TripSync.release({now:true}); }catch(e){} render(); try{refreshGated();}catch(e){} nameReset(); }   // WP6: hesabın favori ve plan kopyası (seyahat, notlar, tercihler; fotoğraflar gizlenir) çıkışta cihazda/sekmede kalmaz
 
   /* ---------- WP5 · Ad ve soyad (özel) + "Profilini tamamla" çağrısı (İŞ PAKETİ 5) ----------
      Kaynak lib/asa-name (window.ASA_NAME). Okuma: yalnız kendi members satırı (first_name,last_name; RLS self-select).

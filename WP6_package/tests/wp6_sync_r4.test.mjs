@@ -129,12 +129,19 @@ test("N1 an undated plan survives logout / session expiry / guest-then-login: th
     assert.deepEqual(back.val("CAL.days.map(d=>d.key)"), ["g1", "g2", "g3", "g4", "g5"], variant);
     assert.ok(!items(back).some((x) => /UNDATED-/.test(JSON.stringify(x))), variant + ": no second copy left behind");
     assert.equal(back.val("TripSync.localState()"), "unsynced", variant + ": still the account's unsaved plan (kept again at the next logout)");
-    // and it is never offered as a replacement on a dated trip (g1 is not one of trip 7's days)
+    // and it never becomes invisible notes on a dated trip (g1 is not one of trip 7's days). Round 5: it is offered there (the "now I know
+    // my dates" path; it used to be filed as a version no UI reached) and a restore places "1. gün" on the trip's first day, "2. gün" on
+    // the second — never on "g" keys; until the user chooses, trip 7's own plan is untouched.
     await logout(back);
     const t7 = await page(back, "u1", "?trip=7&city=Amsterdam");
-    assert.deepEqual(t7.val("TripSync.pending()"), [], variant + ": the undated version offered on trip 7: " + JSON.stringify(t7.val("TripSync.pending()")));
-    assert.equal(t7.notice().hidden, true, variant);
+    const pend = t7.val("TripSync.pending()");
+    assert.equal(pend.length, 1, variant + ": the undated version is not offered on trip 7: " + JSON.stringify(pend));
+    assert.ok(t7.notice().text.includes("1. gün seyahatinin ilk gününe"), variant + ": the notice does not say where the days go: " + t7.notice().text);
     assert.equal(t7.server.trip(7).plan.cal["2099-01-10"], U1_NOTE, variant + ": trip 7's own note untouched");
+    t7.el("tripSyncRestore").click(); await settle(); t7.runTimers(); await settle(60);
+    const p7 = t7.server.trip(7).plan;
+    assert.equal(p7.cal["2099-01-10"], "UNDATED-NOTE-1", variant + ": " + JSON.stringify(p7)); assert.equal(p7.plan["2099-01-11"], "UNDATED-PLAN-2", variant);
+    assert.ok(!Object.keys(p7.cal).concat(Object.keys(p7.plan), Object.keys(p7.dayven || {})).some((k) => /^g\d/.test(k)), variant + ": invisible 'g' keys written into trip 7: " + JSON.stringify(p7));
   }
 });
 

@@ -169,6 +169,8 @@ export function fakeDb(init = {}) {
     release() { const h = S.held.splice(0); h.forEach((f) => f()); return h.length; },
     rpcs(name) { return S.calls.filter((c) => c.kind === "rpc" && (!name || c.name === name)); },
     rest(table, op) { return S.calls.filter((c) => c.kind === "rest" && (!table || c.table === table) && (!op || c.op === op)); },
+    // the auth client's onAuthStateChange subscribers of every page on this server (auth-js broadcasts to all tabs of the browser)
+    authCbs: [], emitAuth(event, uid) { S.authCbs.slice().forEach((f) => f(event, uid ? { user: { id: uid } } : null)); },
     trip(id) { return S.tables.trips.find((t) => String(t.id) === String(id)) || null; },
     favIds(uid = S.uid) { return S.tables.favorites.filter((f) => f.user_id === uid).map((f) => f.venue_id).sort(); },
   };
@@ -249,7 +251,8 @@ export function fakeDb(init = {}) {
   }
   const auth = {
     async getSession() { await tick(); S.calls.push({ kind: "auth", op: "getSession" }); if (S.session !== undefined) { if (S.session instanceof Error) throw S.session; return S.session; } return { data: { session: { user: { id: S.uid } } }, error: null }; },
-    async signOut() { await tick(); S.calls.push({ kind: "auth", op: "signOut" }); return { error: null }; },
+    async signOut() { await tick(); S.calls.push({ kind: "auth", op: "signOut" }); if (S.emitOnSignOut) S.emitAuth("SIGNED_OUT", null); return { error: null }; },
+    onAuthStateChange(cb) { S.authCbs.push(cb); return { data: { subscription: { unsubscribe() { S.authCbs = S.authCbs.filter((f) => f !== cb); } } } }; },
   };
   return { db: { from, rpc, auth }, server: S };
 }
