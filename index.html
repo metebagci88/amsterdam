@@ -521,6 +521,11 @@ async function saveTrip(navigate){
   // Henüz açılmamış şehir (ör. Paris) hiçbir şehrin seyahatinin üstüne yazılmaz. Eski asa_trip'e yazılmaz ve silinmez.
   // Amsterdam: yazmadan önce idempotent migrasyon/işaret (reconcile), böylece eski kayıt sessizce kaybolmaz.
   // Kopenhag açılana kadar cph migrasyonu ÇALIŞTIRILMAZ (eski Amsterdam verisi asa:cph:*'a kopyalanmaz); yalnız seyahat yazılır.
+  // WP6: WP6 öncesi cihazda (şehir sayfasının plan işareti yok) asa:ams:trip bir DB seyahatinin kopyasıysa yeni arama onun üstüne yazılmadan
+  // önce cihazdaki planın o seyahatin olduğu işaretlenir (kaydedilmemiş sayılır): şehir sayfası onu o seyahate bağlı saklar, sonraki kişiye
+  // göstermez / aktarmaz (aksi halde seyahat kimliği gidince plan misafir planı sayılırdı).
+  try{ const S=window.AsaStorage, PK="asa:ams:plan_sync"; if(S&&S.cityCodeFromLabel(sel.city)==="ams"&&localStorage.getItem(PK)===null){ const r=S.get(localStorage,"ams","trip"), t=(r&&r.ok&&r.source==="city"&&r.value&&typeof r.value==="object")?r.value:null;
+    if(t&&t.id!=null) localStorage.setItem(PK,JSON.stringify({v:1,synced:null,dirty:{trip_id:String(t.id)},edit:{trip_id:String(t.id),uid:null,start_date:t.start_date||null,end_date:t.end_date||null},items:[]})); } }catch(e){}
   try{ const S=window.AsaStorage, code=S?S.cityCodeFromLabel(sel.city):null; if(code){ if(code==="ams") S.reconcile(localStorage,code); S.set(localStorage,code,"trip",trip); } }catch(e){}
   if(!navigate) return;
   // A4: giriş yapılmış + kesin tarih varsa gerçek trips kaydı oluştur (mükerrer kontrollü)
@@ -732,9 +737,22 @@ function acctAction(k){
 let loggingOut=false;
 async function doLogout(){
   if(loggingOut)return; loggingOut=true;   // çift tıklama: tek signOut
+  const uid=(session&&session.uid)?String(session.uid):null;   // WP6: çıkan hesap (aşağıdaki WP6 öncesi cihaz işaretleri için)
   try{ if(db)await db.auth.signOut(); }catch(e){}
   session=null; try{localStorage.removeItem("asa_session");}catch(e){}
-  try{ const S=window.AsaStorage, r=S?S.get(localStorage,"ams","trip"):null; if(r&&r.ok&&r.source==="city"&&r.value&&typeof r.value==="object"&&Object.keys(r.value).length) S.set(localStorage,"ams","trip",{}); }catch(e){}   // WP6: hesabın seyahati (arama, tarihler) çıkıştan sonra bu cihazda kalmaz; planını şehir sayfası kaldırır
+  // WP6: hesabın seyahati (arama, tarihler) çıkıştan sonra bu cihazda kalmaz; planını şehir sayfası kaldırır. WP6 öncesi cihazda (şehir
+  // sayfasının sahip işareti yok) seyahat boşaltılınca planın bir hesabın olduğuna dair iz kalmazdı: önce işaret yazılır (bu hesabın,
+  // kaydedilmemiş sayılır → şehir sayfası o hesaba bağlı saklar); yazılamazsa seyahat boşaltılmaz (şehir sayfası kimliğinden tanır).
+  try{ const S=window.AsaStorage, r=S?S.get(localStorage,"ams","trip"):null; if(r&&r.ok&&r.source==="city"&&r.value&&typeof r.value==="object"&&Object.keys(r.value).length){
+    const PK="asa:ams:plan_sync";   // şehir sayfasının yan kaydı (kütüphane alanı değil; şehir sayfası da ham anahtarla okur / yazar)
+    let ps=null, okm=true; try{ ps=JSON.parse(localStorage.getItem(PK)||"null"); }catch(e){ ps=null; }
+    const po=(ps&&typeof ps==="object"&&!Array.isArray(ps))?ps:null, unknown=!!(po&&po.dirty&&po.dirty.trip_id!=null&&!(po.edit&&po.edit.uid));   // unknown: saveTrip'in işaretlediği, sahibi bilinmeyen DB seyahati kopyası (bu hesaba bağlanmaz)
+    if(uid&&!(po&&po.owner)&&!unknown){ const t=r.value, tid=(t.id!=null)?String(t.id):null, o=(ps&&typeof ps==="object"&&!Array.isArray(ps))?ps:{synced:null};
+      o.v=1; o.owner=uid; if(!Array.isArray(o.items))o.items=[]; if(!o.dirty){ o.dirty={trip_id:tid}; o.edit={trip_id:tid,uid:uid,start_date:t.start_date||null,end_date:t.end_date||null}; }
+      try{ localStorage.setItem(PK,JSON.stringify(o)); }catch(e){ okm=false; } }
+    if(okm) S.set(localStorage,"ams","trip",{}); } }catch(e){}
+  // WP6: WP6 öncesi cihazın favori listesi (şehir sayfası fav_sync yazmamış) bu hesabın kopyası sayılır: şehir sayfası oturumsuz açılınca temizler
+  try{ const S=window.AsaStorage, f=S?S.get(localStorage,"ams","fav"):null, FK="asa:ams:fav_sync"; if(uid&&f&&f.ok&&f.source==="city"&&localStorage.getItem(FK)===null) localStorage.setItem(FK,JSON.stringify({v:1,uid:uid,base:"synced",ops:[]})); }catch(e){}
   ["acctMenu","prefsModal","tripsModal","authModal"].forEach(id=>{ const m=$(id); if(m) ASA_DLG.close(m,{restore:false}); });
   const tl=$("tripsList"); if(tl) tl.innerHTML="";
   const pb=$("prefsBody"); if(pb) pb.innerHTML="";
