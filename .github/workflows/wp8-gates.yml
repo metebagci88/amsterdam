@@ -1,0 +1,120 @@
+name: WP8 welcome automation gates (local Postgres + PGlite + Edge harness; never touches production)
+# Everything runs on the runner: a throwaway PostgreSQL cluster (the image's PostgreSQL 16 server
+# binaries, 127.0.0.1 only), PGlite (WASM, PostgreSQL 17) and an esbuild bundle of the real dispatch
+# Edge against fakes. No secrets, no Supabase project, no Resend call, nothing deployed or sent.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "WP8_package/**"
+      - "CDP3D_package/edge/service-email-dispatch/**"
+      - "CDP3D_package/SHA256SUMS"
+      - "CDP3D_package/CDP3D_up.sql"
+      - "CDP3D_package/email/templates/**"
+      - "CDP3D_package/gates/**"
+      - "WSE_DEFAULT_package/WSE_up.sql"
+      - "WSE_DEFAULT_package/gates/wse_prereq_extra.sql"
+      - "CDP3C_package/CDP3C_up.sql"
+      - ".github/workflows/wp8-gates.yml"
+permissions:
+  contents: read
+concurrency:
+  group: wp8-gates-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    # Job-level env may only use the github/inputs/matrix/needs/secrets/strategy/vars contexts
+    # (no runner.*): runner paths are exported to GITHUB_ENV by the first step instead.
+    env:
+      WP8_PG_PORT: "55432"
+    steps:
+      - name: Runner paths
+        run: |
+          echo "WP8_NODE_MODULES=$RUNNER_TEMP/wp8deps/node_modules" >> "$GITHUB_ENV"
+          echo "WP8_PG_DIR=$RUNNER_TEMP/wp8pg" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: false
+
+      - name: actionlint (pinned v1.7.7 via the Go module proxy, checksum-verified; this workflow and the inert fallback)
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          cp WP8_package/scheduler/wp8-dispatch-fallback.yml.disabled "$RUNNER_TEMP/wp8-dispatch-fallback.yml"
+          "$RUNNER_TEMP/bin/actionlint" -no-color -shellcheck= -pyflakes= .github/workflows/wp8-gates.yml "$RUNNER_TEMP/wp8-dispatch-fallback.yml"
+          echo "ACTIONLINT_OK"
+
+      - name: Refuse production hosts
+        run: |
+          [[ "${DATABASE_URL:-}${SUPABASE_DB_URL:-}${PGHOST:-}" != *supabase.co* ]] || { echo "REFUSED_PRODUCTION"; exit 1; }
+          echo "no production host in the environment"
+
+      - name: SHA256SUMS (WP8 + CDP3D)
+        run: |
+          (cd WP8_package && sha256sum -c --quiet SHA256SUMS)
+          (cd CDP3D_package && sha256sum -c --quiet SHA256SUMS)
+          echo "SHA256SUMS_OK"
+
+      - name: Pinned dependencies (outside the checkout)
+        run: |
+          mkdir -p "$RUNNER_TEMP/wp8deps" && cd "$RUNNER_TEMP/wp8deps"
+          npm init -y >/dev/null
+          npm i --no-audit --no-fund --ignore-scripts=false @electric-sql/pglite@0.3.16 pg@8.13.1 esbuild@0.24.0 >"$RUNNER_TEMP/npm.log" 2>&1 || { tail -40 "$RUNNER_TEMP/npm.log"; exit 1; }
+          test -x "$WP8_NODE_MODULES/.bin/esbuild"
+
+      - name: Build determinism + static gate + md5 parity (STOP-1 evidence)
+        run: |
+          node WP8_package/tools/wp8_build.mjs --check
+          node WP8_package/gates/wp8_static_check.mjs | tee /tmp/s.log; grep -qx WP8_STATIC_PASS /tmp/s.log
+          python3 -I WP8_package/gates/wp8_md5_parity.py | tee /tmp/m.log; grep -qx WP8_MD5_PARITY_PASS /tmp/m.log
+
+      - name: Secret scan (WP8 scope; self-test with runtime-built fakes)
+        run: |
+          bash WP8_package/gates/wp8_secret_scan_selftest.sh | tee /tmp/k.log; grep -qx WP8_SECRET_SCAN_SELFTEST_PASS /tmp/k.log
+          bash WP8_package/gates/wp8_secret_scan.sh | tee /tmp/k2.log; grep -qx SECRET_SCAN_CLEAN /tmp/k2.log
+          bash CDP3D_package/gates/cdp3d_secret_scan_selftest.sh | tee /tmp/k3.log; grep -q SECRET_SCAN_SELFTEST_PASS /tmp/k3.log
+
+      - name: Throwaway PostgreSQL (runner image binaries, 127.0.0.1 only)
+        run: |
+          if ! ls /usr/lib/postgresql/*/bin/initdb >/dev/null 2>&1; then
+            sudo apt-get update -q && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q postgresql postgresql-contrib
+          fi
+          bash WP8_package/gates/wp8_pg.sh start | tee /tmp/pg.log; grep -q WP8_PG_READY /tmp/pg.log
+
+      - name: Ephemeral SQL suite (md5 parity on loaded SQL, inert apply, behaviour, ZF probe, owner-setup rehearsal, rollback, re-apply)
+        run: bash WP8_package/gates/wp8_ephemeral.sh | tee /tmp/e.log; grep -qx WP8_EPHEMERAL_PASS /tmp/e.log
+
+      - name: Real concurrency suite (node-postgres)
+        run: bash WP8_package/gates/wp8_db_suite.sh | tee /tmp/d.log; grep -qx WP8_DB_SUITE_PASS /tmp/d.log
+
+      - name: Scheduler stub test (pg_cron / pg_net doubles)
+        run: bash WP8_package/gates/wp8_scheduler_stub_test.sh | tee /tmp/c.log; grep -qx WP8_SCHED_PASS /tmp/c.log
+
+      - name: PGlite (PostgreSQL 17) suite
+        run: node WP8_package/gates/wp8_pglite_gate.mjs | tee /tmp/p.log; grep -qx WP8_PGLITE_PASS /tmp/p.log
+
+      - name: Edge harness (real dispatch source, fakes only)
+        run: node WP8_package/gates/wp8_edge_harness.mjs | tee /tmp/h.log; grep -qx WP8_EDGE_HARNESS_PASS /tmp/h.log
+
+      - name: CDP-3D regression (unchanged gates on pre-WP8 schema + expected delta on WP8 schema)
+        run: bash WP8_package/gates/wp8_cdp3d_regression.sh | tee /tmp/r.log; grep -qx WP8_CDP3D_REGRESSION_PASS /tmp/r.log
+
+      - name: Mutation suite
+        run: bash WP8_package/gates/wp8_mutation.sh | tee /tmp/x.log; grep -qx WP8_MUTATION_PASS /tmp/x.log
+
+      - name: Stop the throwaway PostgreSQL
+        if: always()
+        run: bash WP8_package/gates/wp8_pg.sh stop || true
+
+      - name: Final sentinel
+        if: success()
+        run: echo "WP8_GATES_PASS"

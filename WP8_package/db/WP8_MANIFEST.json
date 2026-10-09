@@ -1,0 +1,96 @@
+{
+  "generated_by": "WP8_package/tools/wp8_build.mjs",
+  "source": "WP8_package/db/WP8_DB_up.src.sql",
+  "output": "WP8_package/db/WP8_DB_up.sql",
+  "output_sha256": "8e32c9247eb9496470cdda8e321549d547d8774cf7cb893c896fb374843c0e3e",
+  "template": {
+    "html_path": "CDP3D_package/email/templates/welcome_service_email.v3.2.html",
+    "html_bytes": 13354,
+    "html_sha256": "77e9aeda87bf93250fa70ccc68d2e52e35653361ee0809702a92395880c741eb",
+    "text_path": "CDP3D_package/email/templates/welcome_service_email.v3.2.txt",
+    "text_bytes": 343,
+    "text_sha256": "818164c11d23badc6636e5a816c366a952f6034f751ff51258464fe18d65fe56",
+    "subject_hex": "4172616dc4b17a6120686fc59f2067656c64696e"
+  },
+  "claim_md5": "c3d17a58925a27fb679d915202108691",
+  "mark_md5": "6d721584eac2c8d3c481d3a32dd512e3",
+  "functions": [
+    {
+      "signature": "public._email_service_policy_guard()",
+      "body_md5": "1f1d258fbd58bab963c27e1b501845c3",
+      "service_role_execute": false
+    },
+    {
+      "signature": "public._email_provider_config_golive_guard()",
+      "body_md5": "237915605dd97c29f1b90c7226722eb7",
+      "service_role_execute": false
+    },
+    {
+      "signature": "public._wp8_html_escape(text)",
+      "body_md5": "64d50cd0b7220525e07370ad38bb7e75",
+      "service_role_execute": false
+    },
+    {
+      "signature": "public._wp8_greeting_name(text)",
+      "body_md5": "f3ad9c5c517c267330890c87a5ba3408",
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.welcome_render(uuid,text)",
+      "body_md5": "4658143d5473665165a10d66081b7c22",
+      "service_role_execute": false
+    },
+    {
+      "signature": "public._wp8_auth_otp_load()",
+      "body_md5": "49b928562043fc3ca5d8dddbc06b7969",
+      "service_role_execute": false
+    },
+    {
+      "signature": "public._email_link_orphans_for(uuid,text)",
+      "body_md5": "1b8a02ffbf5fbc41dbc6065c03dfdfa2",
+      "service_role_execute": false
+    },
+    {
+      "signature": "public.email_reconcile_orphan_events(int)",
+      "body_md5": "4f8a9ab7a3d1f23fbf7f3a5ec60ff032",
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.welcome_enqueue_sweep(int)",
+      "body_md5": "a9d3bc930e0fedbe40b2d18e2c6a4e1f",
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.email_claim_batch(int)",
+      "body_md5": "c3d17a58925a27fb679d915202108691",
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.email_mark_result(uuid,boolean,text,text)",
+      "body_md5": "6d721584eac2c8d3c481d3a32dd512e3",
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.email_release_claim(uuid,int,boolean)",
+      "body_md5": "a90157e703d0d1edcc12b72f568ec7ca",
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.admin_w_welcome_automation_set(uuid,boolean,text,text)",
+      "body_md5": "ece12dd2fc7c3534c79231f1659f165f",
+      "service_role_execute": true
+    },
+    {
+      "signature": "public.admin_w_email_public_go_live_set(uuid,boolean,text,text)",
+      "body_md5": "1ae5c7333bd230b18f685e2cc7402409",
+      "service_role_execute": true
+    }
+  ],
+  "tables": [
+    "public.email_service_templates",
+    "public.email_service_policy",
+    "public.email_send_event_links",
+    "public.email_wp8_run_ledger",
+    "public.email_wp8_manifest"
+  ]
+}
