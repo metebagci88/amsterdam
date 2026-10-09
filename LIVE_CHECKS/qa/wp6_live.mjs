@@ -1178,6 +1178,37 @@ async function isoSameDevice(memberTrip) {
   }
 }
 
+// WP6 (fixer r4) a device last used with the pre-WP6 page (no asa:ams:plan_sync / fav_sync marker: production never wrote them) where the
+// member logs out on the HOME page (which empties the trip copy): the next anonymous visitor and the second member see nothing of the member's
+// plan and the member's plan is not importable into the second member's account. Only this test browser's local storage is touched.
+async function isoLegacyHomeLogout(memberTrip) {
+  const D = await newCtx("d1366", { preseedFav: true });
+  const d = await openPage(D), dp = d.page;
+  let who = null;
+  try {
+    await loginHome(dp, ACC.member); who = "member";
+    await gotoAms(dp, { qs: `&trip=${memberTrip}`, member: true });
+    if (!(await onTrip(dp, memberTrip))) { rec("iso/legacy-device-home-logout", false, "member could not open the QA trip"); return; }
+    const t0 = await traceOf(dp, memberTrip);
+    await dp.evaluate(() => { localStorage.removeItem("asa:ams:plan_sync"); localStorage.removeItem("asa:ams:fav_sync"); });   // the pre-WP6 device state
+    await gotoHome(dp, { member: true });
+    await logoutHome(dp); who = null;
+    await gotoAms(dp, { member: false });
+    const t1 = await traceOf(dp, memberTrip);
+    await loginCity(dp, ACC.second); who = "second";
+    await dp.waitForTimeout(1500);
+    const t2 = await traceOf(dp, memberTrip);
+    const imp = await dp.evaluate(() => !!(window.TripSync && window.TripSync.importable && window.TripSync.importable()));
+    rec("iso/legacy-device-home-logout", t0.memory && traceClean(t1) && traceClean(t2) && !imp,
+      JSON.stringify({ before: t0.memory, anonymous: traceClean(t1) ? "clean" : t1, secondMember: traceClean(t2) ? "clean" : t2, importableForSecond: imp }));
+  } finally {
+    if (who === "second") await step("iso/legacy-device-logout", async () => { await view(dp, "member"); await press(dp, "#asaLogout"); await dp.waitForFunction(() => !(window.ASA && window.ASA.session), null, { timeout: T.app }); });
+    else if (who === "member") await step("iso/legacy-device-logout", async () => { await gotoHome(dp, { member: true }); await logoutHome(dp); });
+    techChecks("iso-legacy-device", [d.mon]);
+    await closeCtx(D);
+  }
+}
+
 // D6 flow F: a device WITHOUT preseeded favourites (the page seeds its 7 defaults) logs in as the member, logs out, then logs
 // in as the second member. Seeds must never reach an account; logout must not carry the member's favourites to the next one.
 async function favFlow(wp, secondCloud0, X) {
@@ -1414,6 +1445,7 @@ async function writeScenario() {
     if (memberTrip && pending.plans.length) {
       sideEffects.add("WP6 same-device check: two QA trips of the second member (2099-04-10..12, 2099-05-10..12) created via the UI and archived via the UI");
       await step("iso/same-device", () => isoSameDevice(memberTrip));
+      await step("iso/legacy-device", () => isoLegacyHomeLogout(memberTrip));
     }
 
     // ---------------- e-mail preference round trip (only on a boolean start state)
