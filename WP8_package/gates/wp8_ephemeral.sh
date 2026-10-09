@@ -5,7 +5,7 @@
 # Sentinel WP8_EPHEMERAL_PASS only when every check passed and the count equals EXPECTED.
 set -uo pipefail
 source "$(dirname "$0")/wp8_lib.sh"
-EXPECTED=76
+EXPECTED=80
 pass=0; fail=0
 ck() { if [[ "$2" == "1" ]]; then echo "PASS $1"; pass=$((pass+1)); else echo "FAIL $1 :: ${3:-}" | cut -c1-600; fail=$((fail+1)); fi; }
 is() { [[ "$1" == "$2" ]] && echo 1; }
@@ -284,6 +284,27 @@ sf="$(ev_rb "$F" "insert into public.email_outbox(idempotency_key, intent_finger
 ck "fallback path: STOP rules still evaluated without pg_net (failed row, sweep error, backfill -> stop=true with exactly those 3 reasons)" "$(python3 -c '
 import json,sys; d=json.loads(next(l for l in sys.argv[1].splitlines() if l.startswith("{")))
 print(1 if d["stop"] is True and sorted(d["stop_reasons"])==["backfill","sweep_errors","wp8_failed_row"] and d["global"]["kick_http_this_run_24h"] is None else 0)' "$sf" 2>/dev/null)" "$sf"
+# Positive case for each remaining STOP rule (each probe rolled back): a welcome for this run's QA-C
+# user (pref OFF: the binding "pref OFF prevents sending" acceptance rule), a skipped wp8 row of
+# this run with a reason other than service_pref_disabled (that skip is the claim re-check doing
+# its job, not a STOP), and two welcome rows for one user (the one-welcome index is removed inside
+# the rolled-back probe, so the rule itself is what is tested).
+EVI="insert into public.email_outbox(idempotency_key, intent_fingerprint, message_class, service_pref_key, subject, user_id, recipient_hmac, status"
+qc="$(ev_rb "$F" "$EVI, sent_at, provider_message_id) values ('wp8:welcome_service_email:v1:' || md5('wp8-qa-C')::uuid, 'x', 'optional_service', 'welcome_service_email', 's', md5('wp8-qa-C')::uuid, repeat('a',64), 'sent', now(), 'prov-qa-fc');")"
+ck "fallback path: a welcome row for this run's QA-C user (pref OFF) -> stop=true with exactly qa_c_pref_off_but_welcomed" "$(python3 -c '
+import json,sys; d=json.loads(next(l for l in sys.argv[1].splitlines() if l.startswith("{")))
+print(1 if d["stop"] is True and d["stop_reasons"]==["qa_c_pref_off_but_welcomed"] and d["qa"]["wp8-qa-C"]["welcome_rows"]==1 else 0)' "$qc" 2>/dev/null)" "$qc"
+sk="$(ev_rb "$F" "$EVI, skip_reason) values ('wp8:welcome_service_email:v1:' || md5('wp8-qa-Z')::uuid, 'x', 'optional_service', 'welcome_service_email', 's', md5('wp8-qa-Z')::uuid, repeat('a',64), 'skipped', 'recipient_missing_email');")"
+sp="$(ev_rb "$F" "$EVI, skip_reason) values ('wp8:welcome_service_email:v1:' || md5('wp8-qa-Z')::uuid, 'x', 'optional_service', 'welcome_service_email', 's', md5('wp8-qa-Z')::uuid, repeat('a',64), 'skipped', 'service_pref_disabled');")"
+ck "fallback path: a skipped wp8 row of this run (recipient_missing_email) -> stop=true with exactly sweep_skipped_row; a service_pref_disabled skip -> no STOP" "$(python3 -c '
+import json,sys; a,b=[json.loads(next(l for l in x.splitlines() if l.startswith("{"))) for x in sys.argv[1:3]]
+print(1 if a["stop"] is True and a["stop_reasons"]==["sweep_skipped_row"] and b["stop"] is False and b["stop_reasons"]==[] else 0)' "$sk" "$sp" 2>/dev/null)" "$sk | $sp"
+du="$(ev_rb "$F" "drop index public.email_outbox_welcome_once_uk;" "$EVI) values ('ci-dup-A', 'x', 'optional_service', 'welcome_service_email', 's', md5('wp8-qa-A')::uuid, repeat('a',64), 'canceled');")"
+ck "fallback path: two welcome rows for one user (one-welcome index removed inside the rolled-back probe) -> stop=true with exactly duplicate_welcome" "$(python3 -c '
+import json,sys; d=json.loads(next(l for l in sys.argv[1].splitlines() if l.startswith("{")))
+print(1 if d["stop"] is True and d["stop_reasons"]==["duplicate_welcome"] else 0)' "$du" 2>/dev/null)" "$du"
+ck "fallback path: every STOP probe rolled back (evidence stop=false, the one-welcome index in place)" "$([[ "$(wp8_psql "$F" -tAc "select to_regclass('public.email_outbox_welcome_once_uk') is not null")" == t ]] && python3 -c '
+import json,sys; d=json.loads(sys.argv[1]); print(1 if d["stop"] is False and d["global"]["wp8_rows_total"]==1 else 0)' "$(wp8_ro "$F" "$EVQ" 2>&1)" 2>/dev/null)"
 
 echo
 echo "EPHEMERAL RESULT pass=$pass fail=$fail expected=$EXPECTED"

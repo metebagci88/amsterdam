@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.WP8_ROOT || resolve(HERE, "..", "..");
 const PKG = join(ROOT, "WP8_package");
-const EXPECTED = 49;
+const EXPECTED = 51;
 let pass = 0, fail = 0;
 const ok = (n, c, info) => { if (c) { pass++; console.log("PASS " + n); } else { fail++; console.log("FAIL " + n + (info !== undefined ? " :: " + String(typeof info === "string" ? info : JSON.stringify(info)).slice(0, 400) : "")); } };
 const rd = (p) => readFileSync(join(ROOT, p), "utf8");
@@ -219,6 +219,48 @@ ok("wp8-gates.yml lints with a pinned actionlint before any gate", /go install g
    && wf.indexOf("ACTIONLINT_OK") < wf.indexOf("wp8_static_check.mjs"));
 const mut = rd("WP8_package/gates/wp8_mutation.mjs");
 ok("mutation suite: hard-coded expected count equals the mutant table", Number((mut.match(/const EXPECTED = ONLY \? list\.length : (\d+);/) || [])[1]) === (mut.match(/^  \{ id: "/gm) || []).length);
+
+// 16) behaviour-suite clock discipline. PGlite's clock_timestamp() has 1 ms resolution, so two
+// consecutive statements can read the same value and a user created "before" a transition ties
+// with the boundary the transition records (the sweep's created_at >= boundary then welcomes it).
+// Rules, per top-level line of wp8_behavior.sql (refused attempts inside pg_temp.err are not
+// transitions): a user created since the last sweep or transition and before an ENABLING
+// transition (welcome automation setter true, go-live update or setter true) is created strictly
+// earlier with clock_timestamp() - interval '5 milliseconds'; an enable that follows a disable of
+// the same switch is preceded by pg_sleep, so the boundary it records moves strictly forward.
+function clockViolations(sql) {
+  const bad = []; let pending = []; const lastOff = {}; const slept = {};
+  const TR = [["automation", /^select public\.admin_w_welcome_automation_set\('[^']*', (true|false),/],
+    ["go_live", /admin_w_email_public_go_live_set\('[^']*', (true|false),/], ["go_live", /^update public\.email_provider_config set public_go_live = (true|false)\b/]];
+  sql.split("\n").forEach((line, i) => {
+    const n = i + 1;
+    if (/^select pg_temp\.err\(/.test(line)) return;
+    if (/^select pg_sleep\(/.test(line)) { for (const k of Object.keys(slept)) slept[k] = true; return; }
+    const mk = /^select pg_temp\.mkuser\('([A-Za-z0-9]+)'/.exec(line);
+    if (mk) { pending.push({ label: mk[1], line: n, bare: /clock_timestamp\(\)(?! - interval '5 milliseconds')/.test(line) }); return; }
+    if (/^select pg_temp\.sweep_is\(/.test(line)) { pending = []; return; }
+    for (const [kind, re] of TR) {
+      const m = re.exec(line); if (!m) continue;
+      if (m[1] === "true") {
+        for (const u of pending) if (u.bare) bad.push(`line ${u.line}: ${u.label} created at the bare clock_timestamp() before the ${kind} enable at line ${n}`);
+        if (lastOff[kind] && !slept[kind]) bad.push(`line ${n}: ${kind} enable after the disable at line ${lastOff[kind]} without pg_sleep`);
+        delete lastOff[kind]; delete slept[kind];
+      } else { lastOff[kind] = n; slept[kind] = false; }
+      pending = [];
+    }
+  });
+  return bad;
+}
+const behSql = rd("WP8_package/gates/wp8_behavior.sql");
+ok("behaviour suite: users that must predate a transition are created strictly before it, and every re-enable/reopen waits first (PGlite 1 ms clock)",
+   clockViolations(behSql).length === 0 && ["OFFWIN", "Q", "S"].every((l) => behSql.includes(`select pg_temp.mkuser('${l}', `)), clockViolations(behSql));
+ok("behaviour clock-discipline check is not blind (bare user before a re-enable and before a go-live, re-enable without pg_sleep -> 3 findings; the disciplined form -> 0)",
+   clockViolations("select public.admin_w_welcome_automation_set('a', false, 'x', 'y');\nselect pg_temp.mkuser('P', null, true, null, clock_timestamp(), now());\n"
+     + "select public.admin_w_welcome_automation_set('a', true, 'x', 'y');\nselect pg_temp.mkuser('Q', null, false, null, clock_timestamp(), now());\n"
+     + "update public.email_provider_config set public_go_live = true where id = 1;\n").length === 3
+   && clockViolations("select public.admin_w_welcome_automation_set('a', false, 'x', 'y');\nselect pg_temp.mkuser('P', null, true, null, clock_timestamp() - interval '5 milliseconds', now());\n"
+     + "select pg_sleep(0.005);\nselect public.admin_w_welcome_automation_set('a', true, 'x', 'y');\nselect pg_temp.mkuser('R', null, true, null, clock_timestamp(), now());\n"
+     + "select pg_temp.err('refused', $q$update public.email_provider_config set public_go_live = true where id = 1$q$, 'x');\nselect pg_temp.sweep_is('s', null);\n").length === 0);
 
 console.log(`\nSTATIC RESULT pass=${pass} fail=${fail} expected=${EXPECTED}`);
 if (fail === 0 && pass === EXPECTED) console.log("WP8_STATIC_PASS"); else console.log("WP8_STATIC_FAIL");

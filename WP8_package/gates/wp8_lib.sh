@@ -41,7 +41,7 @@ wp8_apply() {
 }
 
 # Behaviour suite in one transaction that is rolled back. Prints PASS/FAIL lines and BEHAVIOR_COUNT.
-WP8_BEHAVIOR_EXPECTED=179
+WP8_BEHAVIOR_EXPECTED=188
 wp8_behavior() {
   { echo "begin;"; echo "\\o /dev/null"; cat "$WP8_GATES/wp8_behavior.sql"; echo "\\o";
     echo "select (case when pass then 'PASS ' else 'FAIL ' end) || name || coalesce(' :: ' || info, '') from wp8_t order by seq;";

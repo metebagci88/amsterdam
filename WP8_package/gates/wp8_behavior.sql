@@ -245,7 +245,12 @@ select pg_temp.ck('S4 setter enable: audit row without e-mail', (select count(*)
 select public.admin_w_welcome_automation_set('0000000a-0000-4000-8000-00000000a001', true, 'ci enable again', 'ci-enable-2');
 select pg_temp.ck('S4 setter re-enable keeps the boundary', (select welcome_enqueue_from = current_setting('wp8t.b')::timestamptz from public.email_service_policy where id = 1));
 select public.admin_w_welcome_automation_set('0000000a-0000-4000-8000-00000000a001', false, 'ci disable', 'ci-disable-1');
-select pg_temp.mkuser('OFFWIN', 'Ofelya', true, null, clock_timestamp(), now());
+-- Clock discipline (PGlite's clock_timestamp() has 1 ms resolution, so consecutive statements can
+-- read the same value): a user that must sign up BEFORE a transition is created 5 ms in the past,
+-- and a re-enable/reopen that must move a boundary forward waits 5 ms first. wp8_static_check.mjs
+-- enforces both rules on this file.
+select pg_temp.mkuser('OFFWIN', 'Ofelya', true, null, clock_timestamp() - interval '5 milliseconds', now());
+select pg_sleep(0.005);
 select public.admin_w_welcome_automation_set('0000000a-0000-4000-8000-00000000a001', true, 'ci re-enable', 'ci-enable-3');
 select pg_temp.ck('S4 setter disable -> re-enable moves the boundary forward past the off window (no backfill)', (select welcome_auto_enqueue_enabled
   and welcome_enqueue_from > current_setting('wp8t.b')::timestamptz and welcome_enqueue_from > (select u.created_at from auth.users u where u.id = pg_temp.uid('OFFWIN'))
@@ -554,6 +559,46 @@ begin
     (r->>'ec')::int = 0 and r->>'ec_row' = 'skipped/0/class_disabled', r::text);
 end
 $t$;
+-- S7r optional (welcome) re-check at claim: the Edge checks no flag itself, so the decision taken
+-- inside email_claim_batch is the last guard before Resend. One queued welcome per denial, each
+-- denial flipped AFTER the enqueue: service class off (alone, since it denies every optional row),
+-- then de-allowlist, unsubscribe, hard bounce (through the production suppression function), pref
+-- row missing and pref OFF, next to one untouched control welcome.
+do $t$
+declare v_m uuid := (pg_temp.wrow('M')).id; v_n uuid := (pg_temp.wrow('N')).id; v_o uuid := (pg_temp.wrow('O')).id;
+        v_d uuid := (pg_temp.wrow('D')).id; v_i uuid := (pg_temp.wrow('I')).id; v_k4 uuid := (pg_temp.wrow('K4')).id;
+        v_k5 uuid := (pg_temp.wrow('K5')).id; r jsonb := '{}'::jsonb; v_msg text;
+begin
+  begin
+    perform pg_temp.q_reset();
+    perform pg_temp.q_requeue(v_m);
+    update public.email_provider_config set service_enabled = false where id = 1;
+    r := r || jsonb_build_object('cd', pg_temp.claim(10), 'cd_row', pg_temp.q_row(v_m));
+    update public.email_provider_config set service_enabled = true where id = 1;
+    perform pg_temp.q_requeue(v_n); perform pg_temp.q_requeue(v_o); perform pg_temp.q_requeue(v_d);
+    perform pg_temp.q_requeue(v_i); perform pg_temp.q_requeue(v_k4); perform pg_temp.q_requeue(v_k5);
+    update public.email_send_allowlist set active = false where user_id = pg_temp.uid('N');
+    perform pg_temp.suppress('O');
+    perform public._email_system_apply_suppression('ci-d@example.test', 'hard_bounce', 'ci');
+    delete from public.member_service_pref_current where user_id = pg_temp.uid('I') and pref_key = 'welcome_service_email';
+    perform pg_temp.pref_off('K4');
+    r := r || jsonb_build_object('n', pg_temp.claim(10), 'na', pg_temp.q_row(v_n), 'su', pg_temp.q_row(v_o), 'hb', pg_temp.q_row(v_d),
+                                 'pm', pg_temp.q_row(v_i), 'pd', pg_temp.q_row(v_k4), 'ctl', pg_temp.q_row(v_k5));
+    raise exception using errcode = 'WP8RB', message = r::text;
+  exception when sqlstate 'WP8RB' then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  r := v_msg::jsonb;
+  perform pg_temp.ck('S7r optional re-check at claim: service class disabled after enqueue -> 0 claims, skipped/class_disabled',
+    (r->>'cd')::int = 0 and r->>'cd_row' = 'skipped/0/class_disabled', r::text);
+  perform pg_temp.ck('S7r optional re-check at claim: de-allowlisted after enqueue -> skipped/not_in_allowlist', r->>'na' = 'skipped/0/not_in_allowlist', r::text);
+  perform pg_temp.ck('S7r optional re-check at claim: unsubscribed after enqueue -> skipped/suppressed_unsubscribe', r->>'su' = 'skipped/0/suppressed_unsubscribe', r::text);
+  perform pg_temp.ck('S7r optional re-check at claim: hard bounce after enqueue -> skipped/suppressed_hard_bounce', r->>'hb' = 'skipped/0/suppressed_hard_bounce', r::text);
+  perform pg_temp.ck('S7r optional re-check at claim: pref row missing -> skipped/service_pref_missing', r->>'pm' = 'skipped/0/service_pref_missing', r::text);
+  perform pg_temp.ck('S7r optional re-check at claim: pref OFF after enqueue -> skipped/service_pref_disabled', r->>'pd' = 'skipped/0/service_pref_disabled', r::text);
+  perform pg_temp.ck('S7r control: of the 6 queued welcomes only the untouched one is claimed (sending/1/-)', (r->>'n')::int = 1 and r->>'ctl' = 'sending/1/-', r::text);
+end
+$t$;
 -- S7q delivered/bounced: the quota counts every send by sent_at, whatever the row became after it.
 -- In production nearly every welcome is 'delivered' within seconds (a bounce makes it 'failed'), so
 -- the history here holds only delivered and bounced rows: a count filtered on status = 'sent' sees
@@ -761,11 +806,13 @@ select pg_temp.err('S10 direct go-live refused without readiness', $q$update pub
 select pg_temp.err('S10 go-live setter refused without readiness', $q$select public.admin_w_email_public_go_live_set('0000000a-0000-4000-8000-00000000a001', true, 'ci', 'ci-gl-1')$q$, 'wp8_public_go_live_requires_service_delivery_readiness');
 select pg_temp.err('S10 insert with go-live true refused (trigger before conflict)', $q$insert into public.email_provider_config(id, public_go_live) values (1, true)$q$, 'wp8_public_go_live_requires_service_delivery_readiness');
 select pg_temp.err('S10 provider config delete refused', $q$delete from public.email_provider_config where id = 1$q$, 'wp8_provider_config_delete_refused');
-select pg_temp.mkuser('Q', null, false, null, clock_timestamp(), now());
+select pg_temp.mkuser('Q', null, false, null, clock_timestamp() - interval '5 milliseconds', now());
 update public.wp8_ci_readiness set ready = true where id = 1;
 update public.email_provider_config set public_go_live = true where id = 1;
 select pg_temp.ck('S10 direct go-live records public_go_live_since (>= transaction start)', (select public_go_live_since >= transaction_timestamp() and public_go_live_since <= clock_timestamp()
   from public.email_service_policy where id = 1));
+select pg_temp.ck('S10 precondition: Q signed up strictly before public_go_live_since', (select u.created_at < p.public_go_live_since
+  from auth.users u, public.email_service_policy p where u.id = pg_temp.uid('Q') and p.id = 1));
 select pg_temp.mkuser('R', null, false, null, clock_timestamp(), now());
 select pg_temp.sweep_is('S10 after direct go-live: R (signed up after) enqueued, Q (before) not', pg_temp.open_res(5, 1, 0, 4, 0, 0, '{"suppressed_unsubscribe": 4}'));
 select pg_temp.ck('S10 Q has no welcome (no backfill of pre-go-live signups)', pg_temp.nrows('Q') = 0 and pg_temp.nrows('R') = 1);
@@ -773,10 +820,13 @@ select set_config('wp8t.since1', (select public_go_live_since::text from public.
 select pg_temp.err('S10 go-live since cannot move backwards', $q$update public.email_service_policy set public_go_live_since = public_go_live_since - interval '1 second' where id = 1$q$, 'wp8_go_live_since_cannot_move_backwards');
 update public.wp8_ci_readiness set ready = false where id = 1;
 select pg_temp.ck('S10 go-live setter disable always allowed', (public.admin_w_email_public_go_live_set('0000000a-0000-4000-8000-00000000a001', false, 'ci close', 'ci-gl-2')->>'public_go_live')::boolean = false);
-select pg_temp.mkuser('S', null, false, null, clock_timestamp(), now());
+select pg_temp.mkuser('S', null, false, null, clock_timestamp() - interval '5 milliseconds', now());
 update public.wp8_ci_readiness set ready = true where id = 1;
+select pg_sleep(0.005);
 select pg_temp.ck('S10 go-live setter enable with readiness', (public.admin_w_email_public_go_live_set('0000000a-0000-4000-8000-00000000a001', true, 'ci reopen', 'ci-gl-3')->>'public_go_live')::boolean);
 select pg_temp.ck('S10 reopen moved public_go_live_since forward', (select public_go_live_since > current_setting('wp8t.since1')::timestamptz from public.email_service_policy where id = 1));
+select pg_temp.ck('S10 precondition: S signed up strictly before the reopened public_go_live_since', (select u.created_at < p.public_go_live_since
+  from auth.users u, public.email_service_policy p where u.id = pg_temp.uid('S') and p.id = 1));
 select pg_temp.sweep_is('S10 after reopen: S (signed up while closed) not welcomed', pg_temp.open_res(4, 0, 0, 4, 0, 0, '{"suppressed_unsubscribe": 4}'));
 select pg_temp.ck('S10 go-live audit rows (counts only, no e-mail)', (select count(*) = 2 and bool_and(position('@' in coalesce(after::text, '') || coalesce(before::text, '')) = 0)
   from public.admin_write_log where action = 'wp8_email_public_go_live_set'));

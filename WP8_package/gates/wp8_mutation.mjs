@@ -22,6 +22,13 @@ const TMP = mkdtempSync(join(process.env.TMPDIR || tmpdir(), "wp8mut-"));
 const SRC = "WP8_package/db/WP8_DB_up.src.sql";
 const UP = "WP8_package/db/WP8_DB_up.sql";
 const EDGE = "CDP3D_package/edge/service-email-dispatch/index.ts";
+const EVIDENCE = "WP8_package/db/WP8_DB_evidence.sql";
+const BEH = "WP8_package/gates/wp8_behavior.sql";
+// The optional (welcome) claim loop's decision re-check, anchored with the loop head so the
+// essential loop's identical line is never hit.
+const OPT_IF = "if not (v_dec->>'allow')::boolean then";
+const OPT_RECHECK = "       and o.message_class = 'optional_service'\n     order by o.created_at for update skip locked limit v_budget\n  loop\n"
+  + "    v_dec := public._email_send_decision(r.user_id, r.message_class, r.service_pref_key);\n    " + OPT_IF;
 
 // ---------------------------------------------------------------- mutant table
 const R = (find, repl, count = 1) => ({ find, repl, count });
@@ -249,6 +256,56 @@ const MUTANTS = [
   { id: "E2", desc: "evidence kick rule blind to non-200 responses", file: "WP8_package/db/WP8_DB_evidence.sql",
     edits: [R("jsonb_object_keys((select codes from kick)) k where k <> '200')", "jsonb_object_keys((select codes from kick)) k where false)")],
     run: "ephemeral", kill: ["FAIL with pg_net: kick HTTP 500 or a failed request"] },
+  // Fixer round 3: the optional (welcome) claim loop re-checks every denial, not only pref OFF
+  // (R3P6a-c, R4P4, R4P2); evidence STOP rules each have a positive case (R3V1-R3V5); the behaviour
+  // suite keeps its clock discipline for PGlite's 1 ms clock (R3F1-R3F5)
+  { id: "R3P6a", desc: "optional claim re-check ignores class_disabled (service class switched off after enqueue)", file: SRC,
+    edits: [R(OPT_RECHECK, OPT_RECHECK.replace(OPT_IF, "if not (v_dec->>'allow')::boolean and v_dec->>'skip_reason' <> 'class_disabled' then"))],
+    run: "behavior", kill: ["FAIL S7r optional re-check at claim: service class disabled after enqueue"] },
+  { id: "R3P6b", desc: "optional claim re-check ignores not_in_allowlist (de-allowlisted after enqueue)", file: SRC,
+    edits: [R(OPT_RECHECK, OPT_RECHECK.replace(OPT_IF, "if not (v_dec->>'allow')::boolean and v_dec->>'skip_reason' <> 'not_in_allowlist' then"))],
+    run: "behavior", kill: ["FAIL S7r optional re-check at claim: de-allowlisted after enqueue"] },
+  { id: "R3P6c", desc: "optional claim re-check ignores every suppression (unsubscribe, hard bounce)", file: SRC,
+    edits: [R(OPT_RECHECK, OPT_RECHECK.replace(OPT_IF, "if not (v_dec->>'allow')::boolean and v_dec->>'skip_reason' not like 'suppressed_%' then"))],
+    run: "behavior", kill: ["FAIL S7r optional re-check at claim: unsubscribed after enqueue", "FAIL S7r optional re-check at claim: hard bounce after enqueue"], all: true },
+  { id: "R4P4", desc: "optional claim re-check ignores service_pref_missing", file: SRC,
+    edits: [R(OPT_RECHECK, OPT_RECHECK.replace(OPT_IF, "if not (v_dec->>'allow')::boolean and v_dec->>'skip_reason' <> 'service_pref_missing' then"))],
+    run: "behavior", kill: ["FAIL S7r optional re-check at claim: pref row missing"] },
+  { id: "R4P2", desc: "optional claim re-check honours only service_pref_disabled", file: SRC,
+    edits: [R(OPT_RECHECK, OPT_RECHECK.replace(OPT_IF, "if not (v_dec->>'allow')::boolean and v_dec->>'skip_reason' = 'service_pref_disabled' then"))],
+    run: "behavior", kill: ["FAIL S7r optional re-check at claim: service class disabled", "FAIL S7r optional re-check at claim: de-allowlisted", "FAIL S7r optional re-check at claim: unsubscribed",
+      "FAIL S7r optional re-check at claim: hard bounce", "FAIL S7r optional re-check at claim: pref row missing"], all: true },
+  { id: "R3V1", desc: "evidence QA-C rule (pref OFF but welcomed) switched off", file: EVIDENCE,
+    edits: [R("case when exists (select 1 from qa_rows r where r.label = 'wp8-qa-C') then 'qa_c_pref_off_but_welcomed' end", "case when false then 'qa_c_pref_off_but_welcomed' end")],
+    run: "ephemeral", kill: ["FAIL fallback path: a welcome row for this run's QA-C user (pref OFF)"] },
+  { id: "R3V2", desc: "evidence sweep_skipped_row rule switched off", file: EVIDENCE,
+    edits: [R("case when exists (select 1 from wp8_rows where this_run and status = 'skipped' and skip_reason <> 'service_pref_disabled') then 'sweep_skipped_row' end", "case when false then 'sweep_skipped_row' end")],
+    run: "ephemeral", kill: ["FAIL fallback path: a skipped wp8 row of this run"] },
+  { id: "R3V3", desc: "evidence duplicate_welcome rule switched off", file: EVIDENCE,
+    edits: [R("case when exists (select 1 from public.email_outbox where service_pref_key = 'welcome_service_email' and created_at >= timestamptz '2026-10-01 00:00:00+00'\n                      group by user_id having count(*) > 1) then 'duplicate_welcome' end",
+              "case when false then 'duplicate_welcome' end")],
+    run: "ephemeral", kill: ["FAIL fallback path: two welcome rows for one user"] },
+  { id: "R3V4", desc: "evidence QA-C rule label typo ('wp8-qa-c' never matches)", file: EVIDENCE,
+    edits: [R("where r.label = 'wp8-qa-C') then 'qa_c_pref_off_but_welcomed'", "where r.label = 'wp8-qa-c') then 'qa_c_pref_off_but_welcomed'")],
+    run: "ephemeral", kill: ["FAIL fallback path: a welcome row for this run's QA-C user (pref OFF)"] },
+  { id: "R3V5", desc: "evidence sweep_skipped_row also fires on a service_pref_disabled skip (pref OFF honoured at claim reported as STOP)", file: EVIDENCE,
+    edits: [R("where this_run and status = 'skipped' and skip_reason <> 'service_pref_disabled') then 'sweep_skipped_row'", "where this_run and status = 'skipped') then 'sweep_skipped_row'")],
+    run: "ephemeral", kill: ["FAIL fallback path: a skipped wp8 row of this run"] },
+  { id: "R3F1", desc: "behaviour suite: Q created at the bare clock before the go-live (PGlite 1 ms tie)", file: BEH,
+    edits: [R("select pg_temp.mkuser('Q', null, false, null, clock_timestamp() - interval '5 milliseconds', now());", "select pg_temp.mkuser('Q', null, false, null, clock_timestamp(), now());")],
+    run: "static", kill: ["FAIL behaviour suite: users that must predate a transition are created strictly before it"] },
+  { id: "R3F2", desc: "behaviour suite: S created at the bare clock before the reopen", file: BEH,
+    edits: [R("select pg_temp.mkuser('S', null, false, null, clock_timestamp() - interval '5 milliseconds', now());", "select pg_temp.mkuser('S', null, false, null, clock_timestamp(), now());")],
+    run: "static", kill: ["FAIL behaviour suite: users that must predate a transition are created strictly before it"] },
+  { id: "R3F3", desc: "behaviour suite: OFFWIN created at the bare clock before the re-enable", file: BEH,
+    edits: [R("select pg_temp.mkuser('OFFWIN', 'Ofelya', true, null, clock_timestamp() - interval '5 milliseconds', now());", "select pg_temp.mkuser('OFFWIN', 'Ofelya', true, null, clock_timestamp(), now());")],
+    run: "static", kill: ["FAIL behaviour suite: users that must predate a transition are created strictly before it"] },
+  { id: "R3F4", desc: "behaviour suite: go-live reopen without the pg_sleep (since may not move forward on a 1 ms clock)", file: BEH,
+    edits: [R("update public.wp8_ci_readiness set ready = true where id = 1;\nselect pg_sleep(0.005);\n", "update public.wp8_ci_readiness set ready = true where id = 1;\n")],
+    run: "static", kill: ["FAIL behaviour suite: users that must predate a transition are created strictly before it"] },
+  { id: "R3F5", desc: "behaviour suite: automation re-enable without the pg_sleep", file: BEH,
+    edits: [R("now());\nselect pg_sleep(0.005);\nselect public.admin_w_welcome_automation_set(", "now());\nselect public.admin_w_welcome_automation_set(")],
+    run: "static", kill: ["FAIL behaviour suite: users that must predate a transition are created strictly before it"] },
 ];
 
 function fakeJwt() {
@@ -345,7 +402,7 @@ try {
   psql("postgres", ["-c", `drop database if exists ${TPL} with (force)`]);
   rmSync(TMP, { recursive: true, force: true });
 }
-const EXPECTED = ONLY ? list.length : 83;
+const EXPECTED = ONLY ? list.length : 98;
 console.log(`\nMUTATION RESULT killed=${killed} survived=${survived} invalid=${invalid} baseline_fail=${basefail} expected=${EXPECTED}`);
 const passOk = killed === EXPECTED && survived === 0 && invalid === 0 && basefail === 0 && list.length === EXPECTED;
 console.log(passOk ? "WP8_MUTATION_PASS" : "WP8_MUTATION_FAIL");
