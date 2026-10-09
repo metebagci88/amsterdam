@@ -1,7 +1,8 @@
 // WP8 PGlite gate (@electric-sql/pglite 0.3.16, PostgreSQL 17, WASM, single connection).
 // PG17 compatibility of the whole WP8 package: CI chain (normalized and raw CDP-3D), PRE/POST
-// asserts, double apply, inert proof, the shared behaviour suite, ZF probe, functional rollback,
-// cleanup and re-apply. No network, nothing is sent. Sentinel WP8_PGLITE_PASS.
+// asserts, double apply, inert proof, the acceptance evidence without pg_net/pg_cron, the shared
+// behaviour suite, ZF probe, functional rollback, cleanup and re-apply. No network, nothing is
+// sent. Sentinel WP8_PGLITE_PASS.
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -13,8 +14,8 @@ const ROOT = process.env.WP8_ROOT || resolve(HERE, "..", "..");
 const req = createRequire(join(process.env.WP8_NODE_MODULES || join(HERE, "node_modules"), "_wp8_resolve.js"));
 const { PGlite } = req("@electric-sql/pglite");
 const { pgcrypto } = req("@electric-sql/pglite/contrib/pgcrypto");
-const EXPECTED = 22;
-const BEHAVIOR_EXPECTED = 154;
+const EXPECTED = 23;
+const BEHAVIOR_EXPECTED = 179;
 
 let pass = 0, fail = 0;
 const ok = (n, c, info) => { if (c) { pass++; console.log("PASS " + n); } else { fail++; console.log("FAIL " + n + (info !== undefined ? " :: " + String(typeof info === "string" ? info : JSON.stringify(info)).slice(0, 600) : "")); } };
@@ -54,6 +55,9 @@ try {
   ok("apply #2 is a no-op", await apply(db));
   const post = await json(db, "WP8_package/db/WP8_DB_post_assert.sql");
   ok("POST assert -> wp8_post true, n=43", post.wp8_post === true && post.n === 43, post.failed);
+  let ev; try { ev = await json(db, "WP8_package/db/WP8_DB_evidence.sql"); } catch (e) { ev = { error: e.message }; }
+  ok("evidence without pg_net and pg_cron (PG17, D2 fallback) returns stop=false with the kick fields null", ev.stop === false && Array.isArray(ev.stop_reasons) && ev.stop_reasons.length === 0
+     && ev.global.pg_net_present === false && ev.global.pg_cron_present === false && ev.global.kick_http_this_run_24h === null && ev.global.cron_jobs === null, ev);
   const s = await one(db, "select public.welcome_enqueue_sweep() s");
   ok("inert: sweep -> auto_disabled", JSON.stringify(s.s) === JSON.stringify({ ok: true, gate: "auto_disabled", expired: 0, reconciled: 0 }), s.s);
   ok("inert: claim -> 0 rows", (await one(db, "select count(*)::int n from public.email_claim_batch(10)")).n === 0);

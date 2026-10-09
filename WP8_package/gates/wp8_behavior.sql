@@ -5,8 +5,13 @@
 
 create temp table wp8_t(seq serial primary key, name text not null, pass boolean not null, info text);
 create function pg_temp.ck(p_name text, p_pass boolean, p_info text default null) returns void
-language sql as $t$
-  insert into wp8_t(name, pass, info) values (p_name, coalesce(p_pass, false), case when coalesce(p_pass, false) then null else coalesce(p_info, 'null') end)
+language plpgsql as $t$
+begin
+  insert into wp8_t(name, pass, info) values (p_name, coalesce(p_pass, false), case when coalesce(p_pass, false) then null else coalesce(p_info, 'null') end);
+  if not coalesce(p_pass, false) then
+    raise warning 'FAIL %', p_name;
+  end if;
+end
 $t$;
 create function pg_temp.err(p_name text, p_sql text, p_frag text) returns void
 language plpgsql as $t$
@@ -105,11 +110,13 @@ select pg_temp.err('S1 go-live setter: support role refused', $q$select public.a
 
 -- ===== S2 policy guard (amendment 1) and ACL
 select pg_temp.err('S2 boundary NULL -> past refused', $q$update public.email_service_policy set welcome_enqueue_from = timestamptz '2026-10-01 00:00:00+00' where id = 1$q$, 'wp8_boundary_cannot_precede_change');
+select pg_temp.err('S2 boundary NULL -> 1 second before the changing transaction refused (no tolerance)', $q$update public.email_service_policy set welcome_enqueue_from = transaction_timestamp() - interval '1 second' where id = 1$q$, 'wp8_boundary_cannot_precede_change');
 select pg_temp.err('S2 boundary before cutover refused (guard fires before the CHECK)', $q$update public.email_service_policy set welcome_enqueue_from = timestamptz '2026-09-30 00:00:00+00' where id = 1$q$, 'wp8_boundary_cannot_precede_change');
 select pg_temp.err('S2 policy delete refused', $q$delete from public.email_service_policy where id = 1$q$, 'wp8_policy_delete_refused');
 select pg_temp.err('S2 policy non-inert insert refused', $q$insert into public.email_service_policy(id, service_daily_cap, service_monthly_cap) values (1, 5, 5)$q$, 'wp8_policy_insert_must_be_inert');
 select pg_temp.err('S2 policy second row refused', $q$insert into public.email_service_policy(id) values (2)$q$, 'wp8_policy_insert_must_be_inert');
 select pg_temp.err('S2 go-live since NULL -> past refused', $q$update public.email_service_policy set public_go_live_since = timestamptz '2026-10-02 00:00:00+00' where id = 1$q$, 'wp8_go_live_since_cannot_precede_change');
+select pg_temp.err('S2 go-live since NULL -> 1 second before the changing transaction refused (no tolerance)', $q$update public.email_service_policy set public_go_live_since = transaction_timestamp() - interval '1 second' where id = 1$q$, 'wp8_go_live_since_cannot_precede_change');
 select pg_temp.err('S2 daily cap ceiling 50', $q$update public.email_service_policy set service_daily_cap = 51, service_monthly_cap = 1500 where id = 1$q$, 'email_service_policy_ranges_ck');
 select pg_temp.err('S2 monthly cap ceiling 1500', $q$update public.email_service_policy set service_daily_cap = 10, service_monthly_cap = 1501 where id = 1$q$, 'email_service_policy_ranges_ck');
 select pg_temp.err('S2 OTP daily reserve floor 20', $q$update public.email_service_policy set otp_reserve_daily = 19 where id = 1$q$, 'email_service_policy_ranges_ck');
@@ -237,6 +244,13 @@ select pg_temp.ck('S4 setter enable: audit row without e-mail', (select count(*)
   from public.admin_write_log where action = 'wp8_welcome_automation_set'));
 select public.admin_w_welcome_automation_set('0000000a-0000-4000-8000-00000000a001', true, 'ci enable again', 'ci-enable-2');
 select pg_temp.ck('S4 setter re-enable keeps the boundary', (select welcome_enqueue_from = current_setting('wp8t.b')::timestamptz from public.email_service_policy where id = 1));
+select public.admin_w_welcome_automation_set('0000000a-0000-4000-8000-00000000a001', false, 'ci disable', 'ci-disable-1');
+select pg_temp.mkuser('OFFWIN', 'Ofelya', true, null, clock_timestamp(), now());
+select public.admin_w_welcome_automation_set('0000000a-0000-4000-8000-00000000a001', true, 'ci re-enable', 'ci-enable-3');
+select pg_temp.ck('S4 setter disable -> re-enable moves the boundary forward past the off window (no backfill)', (select welcome_auto_enqueue_enabled
+  and welcome_enqueue_from > current_setting('wp8t.b')::timestamptz and welcome_enqueue_from > (select u.created_at from auth.users u where u.id = pg_temp.uid('OFFWIN'))
+  from public.email_service_policy where id = 1));
+select set_config('wp8t.b', (select welcome_enqueue_from::text from public.email_service_policy where id = 1), false);
 select pg_temp.err('S4 boundary cannot move backwards', $q$update public.email_service_policy set welcome_enqueue_from = welcome_enqueue_from - interval '1 second' where id = 1$q$, 'wp8_boundary_cannot_move_backwards');
 select pg_temp.err('S4 boundary cannot be cleared', $q$update public.email_service_policy set welcome_enqueue_from = null where id = 1$q$, 'wp8_boundary_cannot_move_backwards');
 select pg_temp.sweep_is('S4 gate service_disabled (no writes)', pg_temp.closed_res('service_disabled'));
@@ -266,6 +280,23 @@ select 'welcome_service_email', 'v3.2-ci-copy', 'optional_service', 'welcome_ser
 update public.email_service_policy set welcome_template_id = (select id from public.email_service_templates where version = 'v3.2-ci-copy') where id = 1;
 select pg_temp.sweep_is('S4 gate template_unverified (identical bytes, other version)', pg_temp.closed_res('template_unverified'));
 update public.email_service_policy set welcome_template_id = current_setting('wp8t.tpl')::uuid where id = 1;
+create temp table wp8_tpl_save as select body_html, body_text from public.email_service_templates where id = current_setting('wp8t.tpl')::uuid;
+alter table public.email_service_templates disable trigger email_service_templates_immutable;
+update public.email_service_templates set body_text = body_text || ' ', text_sha256 = encode(sha256(convert_to(body_text || ' ', 'UTF8')), 'hex')
+ where id = current_setting('wp8t.tpl')::uuid;
+select pg_temp.sweep_is('S4 gate template_unverified (pinned v3.2 row, text part tampered, stored sha re-matched)', pg_temp.closed_res('template_unverified'));
+update public.email_service_templates t set body_text = s.body_text, text_sha256 = '818164c11d23badc6636e5a816c366a952f6034f751ff51258464fe18d65fe56'
+  from wp8_tpl_save s where t.id = current_setting('wp8t.tpl')::uuid;
+update public.email_service_templates set body_html = body_html || ' ', html_sha256 = encode(sha256(convert_to(body_html || ' ', 'UTF8')), 'hex')
+ where id = current_setting('wp8t.tpl')::uuid;
+select pg_temp.sweep_is('S4 gate template_unverified (pinned v3.2 row, html part tampered, stored sha re-matched)', pg_temp.closed_res('template_unverified'));
+update public.email_service_templates t set body_html = s.body_html, html_sha256 = '77e9aeda87bf93250fa70ccc68d2e52e35653361ee0809702a92395880c741eb'
+  from wp8_tpl_save s where t.id = current_setting('wp8t.tpl')::uuid;
+alter table public.email_service_templates enable trigger email_service_templates_immutable;
+select pg_temp.ck('S4 template restored byte-exact after the tamper probes', (select html_sha256 = '77e9aeda87bf93250fa70ccc68d2e52e35653361ee0809702a92395880c741eb'
+  and text_sha256 = '818164c11d23badc6636e5a816c366a952f6034f751ff51258464fe18d65fe56'
+  and encode(sha256(convert_to(body_html, 'UTF8')), 'hex') = html_sha256 and encode(sha256(convert_to(body_text, 'UTF8')), 'hex') = text_sha256
+  from public.email_service_templates where id = current_setting('wp8t.tpl')::uuid));
 select pg_temp.ck('S4 closed gates wrote no ledger row and no outbox row', (select count(*) from public.email_wp8_run_ledger) = 0
   and (select count(*) from public.email_outbox) = 3);
 select pg_temp.sweep_is('S4 gate open, empty allowlist -> 0 candidates', pg_temp.open_res(0, 0, 0, 0, 0, 0, '{}'));
@@ -294,6 +325,7 @@ select pg_temp.ck('S5 pref OFF (C): no row, no skipped row', pg_temp.nrows('C') 
 select pg_temp.ck('S5 not allowlisted (D): no row, no skipped row', pg_temp.nrows('D') = 0);
 select pg_temp.ck('S5 blocked (F): no row', pg_temp.nrows('F') = 0);
 select pg_temp.ck('S5 auth before boundary (G): no row (no backfill)', pg_temp.nrows('G') = 0);
+select pg_temp.ck('S5 signed up while automation was off (OFFWIN, allowlisted): no row', pg_temp.nrows('OFFWIN') = 0);
 select pg_temp.ck('S5 member older than max-age (H): no row', pg_temp.nrows('H') = 0);
 select pg_temp.ck('S5 suppressed (J): no row, no skipped row', pg_temp.nrows('J') = 0);
 select pg_temp.ck('S5 legacy owner and post-WSE/pre-WP8 user: no new row', (select count(*) from public.email_outbox where user_id = '0000000f-0000-4000-8000-0000000000f1') = 2
@@ -388,12 +420,222 @@ select set_config('wp8t.n', pg_temp.claim(10)::text, false);
 select pg_temp.ck('S7 essential claimed once headroom returns (plus O)', current_setting('wp8t.n')::int = 2 and (select status from public.email_outbox where idempotency_key = 'ci-essential-1') = 'sending', current_setting('wp8t.n'));
 update public.email_provider_config set essential_enabled = false where id = 1;
 
+-- ===== S7q/S7a probes in sub-transactions that are always rolled back (state for S8 unchanged).
+-- Reset: nothing queued or sending, every send moved out of both windows, no OTP load, default
+-- reserves; then exactly the rows a probe needs. Results travel out in the rollback message.
+create function pg_temp.q_reset() returns void language plpgsql as $t$
+begin
+  update public.email_outbox set status = 'canceled' where status in ('queued', 'sending');
+  update public.email_outbox set sent_at = now() - interval '40 days' where sent_at is not null;
+  update auth.users set confirmation_sent_at = null, recovery_sent_at = null, email_change_sent_at = null, reauthentication_sent_at = null;
+  update public.email_service_policy set service_daily_cap = 50, service_monthly_cap = 1500, otp_reserve_daily = 30, otp_reserve_monthly = 600,
+         service_dispatch_paused = false where id = 1;
+  update public.email_provider_config set service_enabled = true, essential_enabled = false where id = 1;
+end
+$t$;
+create function pg_temp.q_requeue(p_id uuid, p_attempts int default 0) returns void language sql as $t$
+  update public.email_outbox set status = 'queued', attempts = p_attempts, next_attempt_at = now(), claimed_at = null, lease_expires_at = null,
+         first_attempt_at = case when p_attempts > 0 then now() end, rate_limit_releases = 0, skip_reason = null, last_error = null
+   where id = p_id
+$t$;
+-- q_sent: p_n rows of p_class sent p_ago ago. p_after 'delivered' or 'bounced' then runs the Resend
+-- webhook for each row through the real CDP-3D ingest (recipient omitted, so no suppression row), as
+-- in production, where a sent row becomes delivered (or failed on a bounce) seconds later and keeps
+-- its sent_at.
+create function pg_temp.q_sent(p_tag text, p_n int, p_ago interval, p_after text default null, p_class text default 'essential_transactional')
+returns void language plpgsql as $t$
+declare i int;
+begin
+  insert into public.email_outbox(idempotency_key, intent_fingerprint, message_class, service_pref_key, subject, user_id, recipient_hmac, status, attempts, sent_at, provider_message_id)
+  select 'ci-q-' || p_tag || '-' || g, 'ci', p_class::public.email_message_class,
+         case when p_class = 'optional_service' then 'welcome_service_email'::public.service_pref_key end,
+         's', gen_random_uuid(), repeat('9', 64), 'sent', 1, now() - p_ago, 'prov-ci-q-' || p_tag || '-' || g
+    from generate_series(1, p_n) g;
+  if p_after is not null then
+    for i in 1 .. p_n loop
+      perform public.email_ingest_provider_event('svix-ci-q-' || p_tag || '-' || i, 'email.' || p_after, 'prov-ci-q-' || p_tag || '-' || i, null, now(),
+                                                 case when p_after = 'bounced' then 'permanent' end);
+    end loop;
+  end if;
+end
+$t$;
+create function pg_temp.q_row(p_id uuid) returns text language sql as $t$
+  select status::text || '/' || attempts || '/' || coalesce(skip_reason::text, '-') from public.email_outbox where id = p_id
+$t$;
+do $t$
+declare v_m uuid := (pg_temp.wrow('M')).id; v_e uuid := (select id from public.email_outbox where idempotency_key = 'ci-essential-1');
+        r jsonb := '{}'::jsonb; v_msg text;
+begin
+  begin
+    perform pg_temp.q_reset();
+    perform pg_temp.q_requeue(v_m);
+    r := r || jsonb_build_object('ctl', pg_temp.claim(10));
+    perform pg_temp.q_requeue(v_m);
+    perform pg_temp.q_sent('m', 60, interval '10 days');
+    update public.email_service_policy set service_monthly_cap = 60 where id = 1;
+    r := r || jsonb_build_object('m0', pg_temp.claim(10));
+    update public.email_service_policy set service_monthly_cap = 61 where id = 1;
+    r := r || jsonb_build_object('m1', pg_temp.claim(10));
+    perform pg_temp.q_requeue(v_m);
+    update public.email_service_policy set service_monthly_cap = 1500 where id = 1;
+    insert into auth.users(id, email, created_at, confirmation_sent_at)
+    select md5('wp8-ci-otpm-' || g)::uuid, 'otpm-' || g || '@example.test', now() - interval '6 days', now() - interval '5 days' from generate_series(1, 100) g;
+    r := r || jsonb_build_object('otp', to_jsonb(public._wp8_auth_otp_load()));
+    update public.email_service_policy set otp_reserve_monthly = 3000 - 100 - 60 where id = 1;
+    r := r || jsonb_build_object('t0', pg_temp.claim(10));
+    update public.email_service_policy set otp_reserve_monthly = 3000 - 100 - 60 - 1 where id = 1;
+    r := r || jsonb_build_object('t1', pg_temp.claim(10));
+    perform pg_temp.q_reset();
+    perform pg_temp.q_requeue(v_m);
+    perform pg_temp.q_sent('d', 3, interval '2 hours');
+    update public.email_service_policy set service_daily_cap = 3 where id = 1;
+    r := r || jsonb_build_object('d0', pg_temp.claim(10));
+    update public.email_service_policy set service_daily_cap = 4 where id = 1;
+    r := r || jsonb_build_object('d1', pg_temp.claim(10));
+    perform pg_temp.q_reset();
+    update public.email_provider_config set essential_enabled = true where id = 1;
+    perform pg_temp.q_requeue(v_m); perform pg_temp.q_requeue(v_e);
+    update public.email_service_policy set otp_reserve_daily = 99 where id = 1;
+    r := r || jsonb_build_object('h1', pg_temp.claim(10), 'h1_e', pg_temp.q_row(v_e), 'h1_o', pg_temp.q_row(v_m));
+    raise exception using errcode = 'WP8RB', message = r::text;
+  exception when sqlstate 'WP8RB' then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  r := v_msg::jsonb;
+  perform pg_temp.ck('S7q control: after the reset one optional row is claimable', (r->>'ctl')::int = 1, r::text);
+  perform pg_temp.ck('S7q monthly service cap counts sends of the last 31 days (60 sent 10 days ago: cap 60 -> 0, cap 61 -> 1)',
+    (r->>'m0')::int = 0 and (r->>'m1')::int = 1, r::text);
+  perform pg_temp.ck('S7q monthly total keeps the OTP reserve (OTP 100 in 31 days + 60 sent: reserve 2840 -> 0, 2839 -> 1)',
+    r->'otp' = '[0, 100]'::jsonb and (r->>'t0')::int = 0 and (r->>'t1')::int = 1, r::text);
+  perform pg_temp.ck('S7q daily service cap counts every class sent in 24 h (3 essential sent 2 h ago: cap 3 -> 0, cap 4 -> 1)',
+    (r->>'d0')::int = 0 and (r->>'d1')::int = 1, r::text);
+  perform pg_temp.ck('S7q one total ceiling for both classes (headroom 1, essential + optional queued -> only the essential)',
+    (r->>'h1')::int = 1 and r->>'h1_e' = 'sending/1/-' and r->>'h1_o' = 'queued/0/-', r::text);
+end
+$t$;
+do $t$
+declare v_m uuid := (pg_temp.wrow('M')).id; v_e uuid := (select id from public.email_outbox where idempotency_key = 'ci-essential-1');
+        r jsonb := '{}'::jsonb; v_msg text;
+begin
+  begin
+    perform pg_temp.q_reset();
+    update public.email_provider_config set essential_enabled = true where id = 1;
+    perform pg_temp.q_requeue(v_m, 5); perform pg_temp.q_requeue(v_e, 5);
+    r := r || jsonb_build_object('max', pg_temp.claim(10), 'max_o', pg_temp.q_row(v_m), 'max_e', pg_temp.q_row(v_e));
+    perform pg_temp.q_requeue(v_m, 4); perform pg_temp.q_requeue(v_e, 4);
+    r := r || jsonb_build_object('below', pg_temp.claim(10), 'below_o', pg_temp.q_row(v_m), 'below_e', pg_temp.q_row(v_e));
+    perform pg_temp.q_reset();
+    perform pg_temp.q_requeue(v_m, 2);
+    r := r || jsonb_build_object('rc', pg_temp.claim(10), 'rc_row', pg_temp.q_row(v_m));
+    perform public.email_release_claim(v_m, 60, false);
+    r := r || jsonb_build_object('rel_row', pg_temp.q_row(v_m), 'rel_first', (select first_attempt_at is not null from public.email_outbox where id = v_m));
+    perform pg_temp.q_reset();
+    update public.email_provider_config set essential_enabled = true where id = 1;
+    perform pg_temp.q_requeue(v_e);
+    update public.email_send_allowlist set active = false where user_id = pg_temp.uid('B');
+    r := r || jsonb_build_object('ea', pg_temp.claim(10), 'ea_row', pg_temp.q_row(v_e));
+    update public.email_send_allowlist set active = true where user_id = pg_temp.uid('B');
+    perform pg_temp.q_requeue(v_e);
+    update public.email_provider_config set essential_enabled = false where id = 1;
+    r := r || jsonb_build_object('ec', pg_temp.claim(10), 'ec_row', pg_temp.q_row(v_e));
+    raise exception using errcode = 'WP8RB', message = r::text;
+  exception when sqlstate 'WP8RB' then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  r := v_msg::jsonb;
+  perform pg_temp.ck('S7a optional row queued at max_attempts is never claimed', r->>'max_o' = 'queued/5/-', r::text);
+  perform pg_temp.ck('S7a essential row queued at max_attempts is never claimed', r->>'max_e' = 'queued/5/-' and (r->>'max')::int = 0, r::text);
+  perform pg_temp.ck('S7a control: rows one below max_attempts are claimed (both classes)', (r->>'below')::int = 2 and r->>'below_o' = 'sending/5/-' and r->>'below_e' = 'sending/5/-', r::text);
+  perform pg_temp.ck('S7a 429 release refunds exactly the consumed attempt (claimed at 2 -> 3, released -> 2, first attempt kept)',
+    (r->>'rc')::int = 1 and r->>'rc_row' = 'sending/3/-' and r->>'rel_row' = 'queued/2/-' and (r->>'rel_first')::boolean, r::text);
+  perform pg_temp.ck('S7a essential re-check at claim: de-allowlisted after enqueue -> 0 claims, skipped/not_in_allowlist',
+    (r->>'ea')::int = 0 and r->>'ea_row' = 'skipped/0/not_in_allowlist', r::text);
+  perform pg_temp.ck('S7a essential re-check at claim: class disabled after enqueue -> 0 claims, skipped/class_disabled',
+    (r->>'ec')::int = 0 and r->>'ec_row' = 'skipped/0/class_disabled', r::text);
+end
+$t$;
+-- S7q delivered/bounced: the quota counts every send by sent_at, whatever the row became after it.
+-- In production nearly every welcome is 'delivered' within seconds (a bounce makes it 'failed'), so
+-- the history here holds only delivered and bounced rows: a count filtered on status = 'sent' sees
+-- none of them and would eat into the Auth OTP headroom of the shared 100/day and 3,000/month quota.
+do $t$
+declare v_m uuid := (pg_temp.wrow('M')).id; r jsonb := '{}'::jsonb; v_msg text;
+begin
+  begin
+    perform pg_temp.q_reset();
+    perform pg_temp.q_requeue(v_m);
+    perform pg_temp.q_sent('dd', 2, interval '1 hour', 'delivered', 'optional_service');
+    perform pg_temp.q_sent('db', 1, interval '2 hours', 'bounced');
+    r := r || jsonb_build_object('hd', (select jsonb_object_agg(s, n) from (select status::text s, count(*) n from public.email_outbox
+                                          where sent_at > now() - interval '24 hours' group by 1) x));
+    update public.email_service_policy set service_daily_cap = 3 where id = 1;
+    r := r || jsonb_build_object('dc0', pg_temp.claim(10));
+    update public.email_service_policy set service_daily_cap = 4 where id = 1;
+    r := r || jsonb_build_object('dc1', pg_temp.claim(10));
+    perform pg_temp.q_requeue(v_m);
+    update public.email_service_policy set service_daily_cap = 50, otp_reserve_daily = 100 - 3 where id = 1;
+    r := r || jsonb_build_object('dt0', pg_temp.claim(10));
+    update public.email_service_policy set otp_reserve_daily = 100 - 3 - 1 where id = 1;
+    r := r || jsonb_build_object('dt1', pg_temp.claim(10));
+    perform pg_temp.q_reset();
+    perform pg_temp.q_requeue(v_m);
+    perform pg_temp.q_sent('md', 40, interval '10 days', 'delivered', 'optional_service');
+    perform pg_temp.q_sent('mb', 20, interval '12 days', 'bounced');
+    r := r || jsonb_build_object('hm', (select jsonb_object_agg(s, n) from (select status::text s, count(*) n from public.email_outbox
+                                          where sent_at > now() - interval '31 days' group by 1) x));
+    update public.email_service_policy set service_monthly_cap = 60 where id = 1;
+    r := r || jsonb_build_object('mc0', pg_temp.claim(10));
+    update public.email_service_policy set service_monthly_cap = 61 where id = 1;
+    r := r || jsonb_build_object('mc1', pg_temp.claim(10));
+    perform pg_temp.q_requeue(v_m);
+    update public.email_service_policy set service_monthly_cap = 1500, otp_reserve_monthly = 3000 - 60 where id = 1;
+    r := r || jsonb_build_object('mt0', pg_temp.claim(10));
+    update public.email_service_policy set otp_reserve_monthly = 3000 - 60 - 1 where id = 1;
+    r := r || jsonb_build_object('mt1', pg_temp.claim(10));
+    raise exception using errcode = 'WP8RB', message = r::text;
+  exception when sqlstate 'WP8RB' then
+    get stacked diagnostics v_msg = message_text;
+  end;
+  r := v_msg::jsonb;
+  perform pg_temp.ck('S7q history through the real webhook: delivered and bounced rows keep sent_at (24 h: 2 delivered + 1 failed; 31 days: 40 delivered + 20 failed)',
+    r->'hd' = '{"delivered": 2, "failed": 1}'::jsonb and r->'hm' = '{"delivered": 40, "failed": 20}'::jsonb, r::text);
+  perform pg_temp.ck('S7q daily service cap counts delivered and bounced sends by sent_at (2 welcomes delivered 1 h ago + 1 bounced 2 h ago: cap 3 -> 0, cap 4 -> 1)',
+    (r->>'dc0')::int = 0 and (r->>'dc1')::int = 1, r::text);
+  perform pg_temp.ck('S7q daily OTP reserve counts delivered and bounced sends (the same 3: reserve 97 -> 0, 96 -> 1)',
+    (r->>'dt0')::int = 0 and (r->>'dt1')::int = 1, r::text);
+  perform pg_temp.ck('S7q monthly service cap counts delivered and bounced sends by sent_at (40 welcomes delivered 10 days ago + 20 bounced 12 days ago: cap 60 -> 0, 61 -> 1)',
+    (r->>'mc0')::int = 0 and (r->>'mc1')::int = 1, r::text);
+  perform pg_temp.ck('S7q monthly OTP reserve counts delivered and bounced sends (the same 60: reserve 2940 -> 0, 2939 -> 1)',
+    (r->>'mt0')::int = 0 and (r->>'mt1')::int = 1, r::text);
+end
+$t$;
+
 -- ===== S8 mark_result classification, release, lease loop, retry horizon, stale expiry
 select set_config('wp8t.rA', (pg_temp.wrow('A')).id::text, false);
 select pg_temp.ck('S8 mark ok -> sent', (public.email_mark_result(current_setting('wp8t.rA')::uuid, true, 'prov-ci-A', null)->>'status') = 'sent'
   and (pg_temp.wrow('A')).status = 'sent' and (pg_temp.wrow('A')).sent_at is not null);
 select pg_temp.ck('S8 mark again -> ignored (monotonic)', (public.email_mark_result(current_setting('wp8t.rA')::uuid, false, null, 'resend_500')->>'ignored')::boolean
   and (pg_temp.wrow('A')).status = 'sent');
+select pg_temp.err('S8 second welcome for A after its welcome was sent -> unique_violation',
+  format($q$select public.email_enqueue(%L, 'optional_service', 'welcome_service_email', 's', 'h', 't', null, 'other-key-A-after-sent', 'r')$q$, pg_temp.uid('A')), '23505');
+do $t$
+declare v_st text; n_uv int := 0; v_bad text := ''; v_id uuid := (pg_temp.wrow('A')).id;
+begin
+  foreach v_st in array array['delivered', 'canceled', 'failed', 'skipped'] loop
+    begin
+      update public.email_outbox set status = v_st::public.email_send_status where id = v_id;
+      insert into public.email_outbox(idempotency_key, intent_fingerprint, message_class, service_pref_key, subject, user_id, recipient_hmac)
+      values ('ci-second-welcome-' || v_st, 'ci', 'optional_service', 'welcome_service_email', 's', pg_temp.uid('A'), repeat('a', 64));
+      v_bad := v_bad || v_st || ' ';
+      raise exception using errcode = 'WP8RB';
+    exception
+      when unique_violation then n_uv := n_uv + 1;
+      when sqlstate 'WP8RB' then null;
+    end;
+  end loop;
+  perform pg_temp.ck('S8 second welcome row for A refused whatever the first row''s status (delivered/canceled/failed/skipped)', n_uv = 4 and (pg_temp.wrow('A')).status = 'sent', 'accepted: ' || v_bad);
+end
+$t$;
 do $t$
 declare v_l text; v_e text; v_id uuid; n_ok int := 0; v_res jsonb; v_bad text := '';
 begin

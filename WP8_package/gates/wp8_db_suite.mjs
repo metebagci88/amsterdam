@@ -10,7 +10,7 @@ const pg = req("pg");
 const { Client, Pool } = pg;
 const DBURL = process.env.DBURL;
 if (!DBURL || /supabase\.co/.test(DBURL)) { console.log("REFUSED"); process.exit(2); }
-const EXPECTED = 26;
+const EXPECTED = 28;
 let pass = 0, fail = 0;
 const ok = (n, c, info) => { if (c) { pass++; console.log("PASS " + n); } else { fail++; console.log("FAIL " + n + (info !== undefined ? " :: " + JSON.stringify(info) : "")); } };
 const pool = new Pool({ connectionString: DBURL, max: 12 });
@@ -102,6 +102,51 @@ try {
   ok("parallel claims under daily cap N=3: total claimed exactly 3", sc.enqueued === 10 && a.rows[0].n + b.rows[0].n === 3, { enq: sc.enqueued, a: a.rows[0].n, b: b.rows[0].n });
   ok("rows over the cap stay queued with attempts 0", (await one(`select count(*)::int n from public.email_outbox where idempotency_key like 'wp8:%' and status = 'queued' and attempts = 0`)).n === 7);
   await Q(`update public.email_service_policy set service_daily_cap = 50 where id = 1`);
+  await Q(`update public.email_outbox set status = 'canceled' where status in ('queued', 'sending')`);
+
+  // 6b) claim serialization, deterministic: session 1 claims inside an OPEN transaction; a second
+  // claim must wait for it (lock_timeout -> 55P03) and, after the commit, claim only what is left.
+  // (Promise.all on a pool above usually runs the two claims one after the other.)
+  const usedNow = async () => (await one(`select count(*)::int n from public.email_outbox where sent_at > now() - interval '24 hours' or status = 'sending'`)).n;
+  for (let i = 1; i <= 6; i++) await mkuser("HO" + i);
+  const sho = await sweep();
+  await Q(`update public.email_service_policy set service_daily_cap = $1 where id = 1`, [(await usedNow()) + 3]);
+  const s1 = await client(), s2 = await client();
+  await s1.query("begin");
+  const n1 = (await s1.query("select count(*)::int n from public.email_claim_batch(10)")).rows[0].n;
+  await s2.query("set lock_timeout = '700ms'");
+  const e2 = await s2.query("select count(*)::int n from public.email_claim_batch(10)").then((r) => r.rows[0].n, (e) => e.code);
+  await s1.query("commit");
+  await s2.query("reset lock_timeout");
+  const n2 = (await s2.query("select count(*)::int n from public.email_claim_batch(10)")).rows[0].n;
+  await s1.end(); await s2.end();
+  const sending1 = (await one(`select count(*)::int n from public.email_outbox where status = 'sending'`)).n;
+  ok("claim serialization: a claim while another claim's transaction is open waits (55P03), then claims only the remaining headroom (cap N=3)",
+     sho.enqueued === 6 && n1 === 3 && e2 === "55P03" && n2 === 0 && sending1 === 3, { enq: sho.enqueued, n1, e2, n2, sending1 });
+  await Q(`update public.email_service_policy set service_daily_cap = 50 where id = 1`);
+  await Q(`update public.email_outbox set status = 'canceled' where status in ('queued', 'sending')`);
+
+  // 6c) the same with the Resend-shared OTP headroom as the binding limit (service cap 50): no
+  // lock_timeout; the second claim blocks until the first commits, then claims 0 (reserve kept).
+  for (let i = 1; i <= 6; i++) await mkuser("HF" + i);
+  const shf = await sweep();
+  const otp = (await one(`select public._wp8_auth_otp_load() v`)).v;
+  const reserve = 100 - otp[0] - (await usedNow()) - 3;
+  await Q(`update public.email_service_policy set otp_reserve_daily = $1 where id = 1`, [reserve]);
+  const f1 = await client(), f2 = await client();
+  await f1.query("begin");
+  const m1 = (await f1.query("select count(*)::int n from public.email_claim_batch(10)")).rows[0].n;
+  let done2 = false;
+  const p2c = f2.query("select count(*)::int n from public.email_claim_batch(10)").then((r) => { done2 = true; return r.rows[0].n; }, (e) => { done2 = true; return e.code; });
+  await new Promise((r) => setTimeout(r, 600));
+  const blocked = !done2;
+  await f1.query("commit");
+  const m2 = await p2c;
+  await f1.end(); await f2.end();
+  const sending2 = (await one(`select count(*)::int n from public.email_outbox where status = 'sending'`)).n;
+  ok("claim serialization with the OTP headroom binding: the second claim blocks until the first commits, then claims 0 (OTP reserve kept)",
+     shf.enqueued === 6 && reserve >= 20 && m1 === 3 && blocked && m2 === 0 && sending2 === 3, { enq: shf.enqueued, reserve, m1, blocked, m2, sending2 });
+  await Q(`update public.email_service_policy set otp_reserve_daily = 30 where id = 1`);
   await Q(`update public.email_outbox set status = 'canceled' where status in ('queued', 'sending')`);
 
   // 7) lease loop: repeated dispatcher deaths end failed at max attempts (Gap A)

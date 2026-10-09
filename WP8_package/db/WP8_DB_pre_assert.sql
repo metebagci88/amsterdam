@@ -3,8 +3,9 @@
 -- Pins the 2026-10-08 PRE facts: flags false, allowlist 0, outbox 3 (1 canceled, 2 delivered,
 -- all before 2026-10-01), events 6 (2 orphans), the 14 live function md5s, WSE active since
 -- 2026-09-30T16:26:59.948763Z, readiness not ready, no WP8 objects, no HTTP or enqueue callers.
--- Facts (not pass/fail): trigger inventory on members/auth.users/auth.identities with function
--- md5, auth.users column inventory, function owners, server version, extensions.
+-- Facts (not pass/fail): trigger inventory on members/auth.users/auth.identities (trigger
+-- definition, function md5, SECURITY DEFINER flag and the tables its body writes to), the
+-- auth.users column inventory, function owners, server version, extensions. Code only, no rows.
 with md5s(name, sig, live_md5) as (values
   ('_email_can_set_delivery', 'public._email_can_set_delivery(public.email_send_status,public.email_send_status)', '164c0e3f3dea09585542573229d8179d'),
   ('_email_send_decision', 'public._email_send_decision(uuid,public.email_message_class,public.service_pref_key)', '4da18d72fb4822ba4307da5f7ff06ba2'),
@@ -23,7 +24,10 @@ with md5s(name, sig, live_md5) as (values
 ), trg as (
   select c.relnamespace::regnamespace::text || '.' || c.relname as tbl, t.tgname, p.oid as fn_oid,
          p.pronamespace::regnamespace::text || '.' || p.proname as fn, md5(p.prosrc) as fn_md5,
-         (p.prosrc ~* '(net\.|http|email_enqueue|email_outbox|dblink|pg_net|email_claim_batch)') as risky
+         pg_get_triggerdef(t.oid) as tgdef, p.prosecdef as fn_secdef,
+         (select coalesce(jsonb_agg(distinct lower(m[2])), '[]'::jsonb)
+            from regexp_matches(p.prosrc, '(insert\s+into|update|delete\s+from)\s+([A-Za-z0-9_."]+)', 'gi') m) as fn_writes,
+         (p.prosrc ~* '(\mnet\.|\mhttp_(get|post|put|patch|delete|head|request)\M|\mhttp\s*\(|extensions\.http|dblink|pg_net|email_enqueue|email_outbox|email_claim_batch|email_dispatch_kick|welcome_enqueue_sweep|functions/v1)') as risky
     from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_proc p on p.oid = t.tgfoid
    where not t.tgisinternal
      and c.oid in (select x from (values (to_regclass('public.members')), (to_regclass('auth.users')), (to_regclass('auth.identities'))) v(x) where x is not null)
@@ -79,7 +83,7 @@ select jsonb_build_object(
     'server_version_num', current_setting('server_version_num'),
     'current_user', current_user,
     'extensions', (select coalesce(jsonb_object_agg(extname, extversion), '{}'::jsonb) from pg_extension where extname in ('pg_cron', 'pg_net', 'supabase_vault', 'pgcrypto')),
-    'triggers', (select coalesce(jsonb_agg(jsonb_build_object('table', tbl, 'trigger', tgname, 'function', fn, 'fn_md5', fn_md5, 'risky', risky) order by tbl, tgname), '[]'::jsonb) from trg),
+    'triggers', (select coalesce(jsonb_agg(jsonb_build_object('table', tbl, 'trigger', tgname, 'function', fn, 'fn_md5', fn_md5, 'risky', risky, 'definition', tgdef, 'security_definer', fn_secdef, 'writes', fn_writes) order by tbl, tgname), '[]'::jsonb) from trg),
     'auth_users_columns', (select coalesce(jsonb_agg(column_name::text order by ordinal_position), '[]'::jsonb) from information_schema.columns where table_schema = 'auth' and table_name = 'users'),
     'function_owners', (select coalesce(jsonb_object_agg(m.name, pg_get_userbyid(p.proowner)), '{}'::jsonb) from md5s m join pg_proc p on p.oid = to_regprocedure(m.sig)),
     'members_total', (select count(*) from public.members),

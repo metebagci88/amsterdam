@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.WP8_ROOT || resolve(HERE, "..", "..");
 const PKG = join(ROOT, "WP8_package");
-const EXPECTED = 40;
+const EXPECTED = 49;
 let pass = 0, fail = 0;
 const ok = (n, c, info) => { if (c) { pass++; console.log("PASS " + n); } else { fail++; console.log("FAIL " + n + (info !== undefined ? " :: " + String(typeof info === "string" ? info : JSON.stringify(info)).slice(0, 400) : "")); } };
 const rd = (p) => readFileSync(join(ROOT, p), "utf8");
@@ -64,10 +64,15 @@ for (const f of sqlProd) {
 ok("every SECURITY DEFINER function sets search_path", secBad.length === 0, secBad);
 // 4) forbidden constructs in the inert migration
 const up = rd("WP8_package/db/WP8_DB_up.sql"); const upCode = lex(up).code.toLowerCase();
-const forbidden = ["net.http_post", "cron.", "insert into auth.", "update auth.", "delete from auth.", "update public.marketing_config", "insert into public.marketing_config",
-  "vault.", "create extension", "alter role", "to anon", "to authenticated", "to public", "security invoker", "update public.email_provider_config", "insert into public.email_send_allowlist",
-  "insert into public.email_outbox", "insert into public.members", "update public.members", "member_service_pref_current set"];
-ok("inert migration: no net/cron/vault/auth/marketing/allowlist/outbox/member writes, no grants to anon/authenticated/public", forbidden.every((t) => !upCode.includes(t)), forbidden.filter((t) => upCode.includes(t)));
+// Word-bounded patterns ("insert into public." must not read as a grant "to public").
+const forbidden = [/\bnet\.http_post\b/, /\bcron\./, /\binsert\s+into\s+auth\./, /\bupdate\s+auth\./, /\bdelete\s+from\s+auth\./,
+  /\b(update|insert\s+into|delete\s+from)\s+public\.marketing_config\b/, /\bvault\./, /\bcreate\s+extension\b/, /\balter\s+role\b/,
+  /\bto\s+(anon|authenticated|public)\b/, /\bsecurity\s+invoker\b/, /\bupdate\s+public\.email_provider_config\b/,
+  /\binsert\s+into\s+public\.email_send_allowlist\b/, /\binsert\s+into\s+public\.email_outbox\b/, /\b(insert\s+into|update|delete\s+from)\s+public\.members\b/,
+  /\bmember_service_pref_current\s+set\b/, /\binsert\s+into\s+public\.member_service_pref_(current|events)\b/];
+const forbiddenHits = forbidden.filter((re) => re.test(upCode)).map(String);
+ok("inert migration: no net/cron/vault/auth/marketing/allowlist/outbox/member writes, no grants to anon/authenticated/public", forbiddenHits.length === 0, forbiddenHits);
+ok("forbidden-construct scan is not blind (a grant to anon in a probe is detected)", forbidden.some((re) => re.test("grant execute on function public.x() to anon;")) && !forbidden.some((re) => re.test("insert into public.email_service_policy(id) values (1);")));
 ok("inert migration is ASCII only", !/[^\x09\x0a\x0d\x20-\x7e]/.test(up));
 ok("migration carries the PRE, single-transaction and POST guards", ["do $wp8_pre$", "do $wp8_txn$", "do $wp8_post$", "WP8_UP_OK", "WP8_NOT_SINGLE_TRANSACTION"].every((t) => up.includes(t)));
 ok("the POST guard is the last statement", up.trimEnd().endsWith("$wp8_post$;"));
@@ -153,9 +158,67 @@ ok("CDP3D package: only the dispatch Edge changed (template gate scope intact)",
 ok("rollback file: no DROP, restores claim/mark, disables the go-live guard, sets service off", (() => { const r = rd("WP8_package/db/WP8_DB_rollback.sql"); return !/drop/i.test(r)
    && r.includes("create or replace function public.email_claim_batch") && r.includes("create or replace function public.email_mark_result")
    && r.includes("disable trigger email_provider_config_golive_guard") && r.includes("set service_enabled = false, public_go_live = false"); })());
-ok("kill switch hard cancels queued wp8 welcomes before unscheduling", (() => { const k = rd("WP8_package/ops/WP8_OPS_kill_switch_hard.sql"); return k.indexOf("wp8_kill_switch") > 0 && k.indexOf("wp8_kill_switch") < k.indexOf("cron.unschedule"); })());
+ok("kill switch hard: config, then policy, then cancels queued wp8 welcomes, before unscheduling", (() => { const k = rd("WP8_package/ops/WP8_OPS_kill_switch_hard.sql");
+   const a = k.indexOf("update public.email_provider_config set service_enabled = false, public_go_live = false"), b = k.indexOf("update public.email_service_policy set welcome_auto_enqueue_enabled = false, service_dispatch_paused = true"),
+         c = k.indexOf("set status = 'canceled', last_error = 'wp8_kill_switch'"), d = k.indexOf("cron.unschedule");
+   return a > 0 && a < b && b < c && c < d; })());
 ok("migration: claim cancels stale wp8 welcomes before any return", (() => { const c = up.slice(up.indexOf("create or replace function public.email_claim_batch"), up.indexOf("create or replace function public.email_mark_result"));
    return c.indexOf("wp8_queue_expired") > 0 && c.indexOf("wp8_queue_expired") < c.indexOf("return;"); })());
+
+// 15) runbook, gates and CI completeness
+const readme = existsSync(join(PKG, "WP8_README.md")) ? rd("WP8_package/WP8_README.md") : "";
+ok("WP8_README.md covers STOP-1, apply, acceptance, kill switch, rollback, go-live and owner decisions D1-D14",
+   ["STOP-1", "Apply runbook", "Allowlist phase", "Kill switch", "Rollback", "Public go-live", "Owner decisions"].every((t) => readme.includes(t))
+   && Array.from({ length: 14 }, (_, i) => `| D${i + 1} |`).every((t) => readme.includes(t)));
+ok("gate files present (mutation suite, scoped secret scan + runtime-fake self-test)", ["wp8_mutation.mjs", "wp8_mutation.sh", "wp8_secret_scan.sh", "wp8_secret_scan_selftest.sh"].every((f) => existsSync(join(PKG, "gates", f))));
+ok("wp8-gates.yml runs every suite and checks each sentinel", ["WP8_STATIC_PASS", "WP8_MD5_PARITY_PASS", "WP8_SECRET_SCAN_SELFTEST_PASS", "SECRET_SCAN_CLEAN", "WP8_EPHEMERAL_PASS", "WP8_DB_SUITE_PASS",
+   "WP8_SCHED_PASS", "WP8_PGLITE_PASS", "WP8_EDGE_HARNESS_PASS", "WP8_CDP3D_REGRESSION_PASS", "WP8_MUTATION_PASS", "WP8_GATES_PASS", "wp8_build.mjs --check", "sha256sum -c"].every((t) => wf.includes(t))
+   && /permissions:\s*\n\s*contents: read/.test(wf));
+// GitHub expression contexts per workflow key (subset of GitHub's context-availability table, the
+// same table actionlint encodes). A context outside its key's list makes the whole workflow file
+// invalid (for example runner.* in job-level env), so no gate would run at all.
+const CTX_ALLOWED = {
+  "env": ["github", "inputs", "vars", "secrets"], "concurrency": ["github", "inputs", "vars"], "run-name": ["github", "inputs", "vars"],
+  "jobs.*.env": ["github", "inputs", "matrix", "needs", "secrets", "strategy", "vars"],
+  "jobs.*.runs-on": ["github", "inputs", "matrix", "needs", "strategy", "vars"], "jobs.*.concurrency": ["github", "inputs", "matrix", "needs", "strategy", "vars"],
+  "jobs.*.timeout-minutes": ["github", "inputs", "matrix", "needs", "strategy", "vars"], "jobs.*.name": ["github", "inputs", "matrix", "needs", "strategy", "vars"],
+  "jobs.*.defaults": ["github", "inputs", "matrix", "needs", "strategy", "vars"], "jobs.*.if": ["github", "inputs", "needs", "vars"],
+  "jobs.*.permissions": [], "permissions": [], "on": ["github", "inputs", "vars"],
+};
+function wfContextViolations(yml) {
+  const bad = []; const stack = [];
+  yml.split("\n").forEach((line, i) => {
+    if (/^\s*(#.*)?$/.test(line)) return;
+    const m = /^(\s*)(-\s+)?([A-Za-z0-9_.-]+)\s*:(\s|$)/.exec(line);
+    if (m) {
+      const ind = m[1].length + (m[2] ? m[2].length : 0);
+      while (stack.length && stack[stack.length - 1].ind >= ind) stack.pop();
+      stack.push({ ind, key: m[3] });
+    }
+    const path = stack.map((x) => x.key);
+    const key = path[0] === "jobs" ? (path.length >= 3 ? "jobs.*." + path[2] : "jobs") : path[0];
+    for (const e of line.matchAll(/\$\{\{(.*?)\}\}/g)) {
+      const expr = e[1].replace(/'(?:[^']|'')*'/g, "''");
+      const ctx = [...expr.matchAll(/(?<![\w.])([A-Za-z_][A-Za-z0-9_-]*)\s*(?=[.[])/g)].map((x) => x[1]);
+      if (key === "jobs.*.steps" || key === "jobs.*.services" || key === "jobs.*.container" || key === "jobs.*.outputs" || key === "jobs.*.strategy") continue;
+      const allow = CTX_ALLOWED[key];
+      if (!allow) { bad.push(`line ${i + 1}: expression under unchecked key ${key}`); continue; }
+      for (const c of ctx) if (!allow.includes(c)) bad.push(`line ${i + 1}: context ${c} not allowed in ${key}`);
+    }
+  });
+  return bad;
+}
+const fallback = rd("WP8_package/scheduler/wp8-dispatch-fallback.yml.disabled");
+ok("workflows: every ${{ }} context allowed where it is used (job-level env has no runner.*); wp8-gates.yml and the inert fallback",
+   wf.length > 0 && wfContextViolations(wf).length === 0 && wfContextViolations(fallback).length === 0, wfContextViolations(wf).concat(wfContextViolations(fallback)));
+ok("workflow context check is not blind (runner.temp in job-level env flagged; in a step run and step env not flagged)",
+   wfContextViolations("jobs:\n  gates:\n    runs-on: ubuntu-24.04\n    env:\n      WP8_PG_DIR: ${{ runner.temp }}/wp8pg\n    steps:\n      - run: echo hi\n").length === 1
+   && wfContextViolations("env:\n  X: ${{ runner.os }}\njobs:\n  a:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo ${{ runner.temp }}\n        env:\n          Y: ${{ runner.temp }}\n").length === 1
+   && wfContextViolations("jobs:\n  a:\n    runs-on: ubuntu-24.04\n    env:\n      Z: ${{ github.ref }}\n").length === 0);
+ok("wp8-gates.yml lints with a pinned actionlint before any gate", /go install github\.com\/rhysd\/actionlint\/cmd\/actionlint@v1\.7\.7\b/.test(wf) && wf.includes("ACTIONLINT_OK")
+   && wf.indexOf("ACTIONLINT_OK") < wf.indexOf("wp8_static_check.mjs"));
+const mut = rd("WP8_package/gates/wp8_mutation.mjs");
+ok("mutation suite: hard-coded expected count equals the mutant table", Number((mut.match(/const EXPECTED = ONLY \? list\.length : (\d+);/) || [])[1]) === (mut.match(/^  \{ id: "/gm) || []).length);
 
 console.log(`\nSTATIC RESULT pass=${pass} fail=${fail} expected=${EXPECTED}`);
 if (fail === 0 && pass === EXPECTED) console.log("WP8_STATIC_PASS"); else console.log("WP8_STATIC_FAIL");

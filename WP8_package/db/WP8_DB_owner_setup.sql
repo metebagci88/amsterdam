@@ -1,7 +1,7 @@
 -- WP8 OWNER SETUP (TEMPLATE). Never applied by the builder or by CI against production.
 -- One step per owner-approved call, in this order: enable -> allowlist (A, C) -> evidence ->
 -- allowlist (B, within 24 h of enable) -> evidence -> close.
--- Before a run, replace EVERY placeholder in the approved copy:
+-- Before each call, replace EVERY placeholder in the approved copy:
 --   @@ARM_YES@@           -> YES
 --   @@STEP@@              -> enable | allowlist | close
 --   @@SUPER_ADMIN_UUID@@  -> the owner's super_admin user id (a uuid, not an e-mail)
@@ -11,8 +11,13 @@
 -- QA users are ordinary test accounts the owner creates through the normal site sign-up AFTER
 -- the enable step (Auth OTP, no direct auth.users writes; PRD 2.4 needs owner approval, decision D5):
 --   QA-A: first name O'Neil entered in the profile banner (proves HTML escaping), pref ON.
---   QA-B: no first name (proves the neutral greeting), pref ON. Allowlisted only after A passed.
+--   QA-B: no first name (proves the neutral greeting), pref ON. Allowlisted only after A's welcome
+--         reached sent or delivered (the step refuses otherwise).
 --   QA-C: welcome preference switched OFF in the e-mail preferences dialog BEFORE allowlisting.
+-- A run is everything since the current boundary (welcome_enqueue_from, set by the enable step).
+-- The labels wp8-qa-A/B/C belong to the run in which they were allowlisted (added_at >= boundary):
+-- after a hard kill, a new enable moves the boundary forward and the labels are free again for new
+-- QA accounts; the earlier run's rows stay inactive as evidence. A user id is never allowlisted twice.
 -- Refuses unless: WP8 functions match the stored manifest, provider flags as expected for the step,
 -- template pinned with both sha256, no risky trigger on members/auth.users/auth.identities,
 -- GoTrue OTP columns present (quota headroom), and the acceptance window is still open.
@@ -55,7 +60,7 @@ begin
   if exists (select 1 from pg_trigger t join pg_proc p on p.oid = t.tgfoid
               where not t.tgisinternal
                 and t.tgrelid in (select x from (values (to_regclass('public.members')), (to_regclass('auth.users')), (to_regclass('auth.identities'))) v(x) where x is not null)
-                and p.prosrc ~* '(net\.|http|email_enqueue|email_outbox|dblink|pg_net|email_claim_batch)') then
+                and p.prosrc ~* '(\mnet\.|\mhttp_(get|post|put|patch|delete|head|request)\M|\mhttp\s*\(|extensions\.http|dblink|pg_net|email_enqueue|email_outbox|email_claim_batch|email_dispatch_kick|welcome_enqueue_sweep|functions/v1)') then
     raise exception 'wp8_setup_unreviewed_trigger_on_members_or_auth';
   end if;
   if (select count(*) from information_schema.columns where table_schema = 'auth' and table_name = 'users'
@@ -113,8 +118,17 @@ begin
     if v_label in ('A', 'B') and v_pref is distinct from true then raise exception 'wp8_setup_qa_pref_must_be_on'; end if;
     if v_label = 'C' and v_pref is distinct from false then raise exception 'wp8_setup_qa_c_pref_must_be_off'; end if;
     if exists (select 1 from public.email_outbox where user_id = v_user) then raise exception 'wp8_setup_qa_user_has_outbox_rows'; end if;
-    if exists (select 1 from public.email_send_allowlist where note = v_note or user_id = v_user) then raise exception 'wp8_setup_qa_already_allowlisted'; end if;
-    if v_label = 'B' and not exists (select 1 from public.email_send_allowlist where note = 'wp8-qa-A') then raise exception 'wp8_setup_b_requires_a_first'; end if;
+    if exists (select 1 from public.email_send_allowlist where user_id = v_user) then raise exception 'wp8_setup_qa_already_allowlisted'; end if;
+    if exists (select 1 from public.email_send_allowlist where note = v_note and (active or added_at >= pol.welcome_enqueue_from)) then
+      raise exception 'wp8_setup_qa_label_already_used_in_this_run';
+    end if;
+    if v_label = 'B' and not exists (
+         select 1 from public.email_send_allowlist a join public.email_outbox o on o.user_id = a.user_id
+          where a.note = 'wp8-qa-A' and a.active and a.added_at >= pol.welcome_enqueue_from
+            and o.idempotency_key = 'wp8:welcome_service_email:v1:' || a.user_id::text
+            and o.created_at >= pol.welcome_enqueue_from and o.status in ('sent', 'delivered')) then
+      raise exception 'wp8_setup_b_requires_a_first';
+    end if;
     if (select count(*) from public.email_send_allowlist where active) >= 3 then raise exception 'wp8_setup_allowlist_limit'; end if;
     insert into public.email_send_allowlist(user_id, note, active, added_by) values (v_user, v_note, true, v_actor);
     insert into public.admin_write_log(actor_uid, action, target_type, target_id, before, after, reason, request_id, idempotency_key, at)

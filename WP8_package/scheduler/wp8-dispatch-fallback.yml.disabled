@@ -1,0 +1,43 @@
+# WP8 FALLBACK scheduler (GitHub Actions). INERT: GitHub only runs workflows under .github/workflows/,
+# and this file is neither there nor named *.yml. It is used ONLY if the owner picks the fallback
+# instead of pg_cron + pg_net (owner decision D2), by copying it to
+# .github/workflows/wp8-dispatch-fallback.yml in a separate, owner-approved PR.
+# Secrets (names only; values are set by the owner in GitHub -> Settings -> Secrets, never in files):
+#   WP8_DISPATCH_URL    https://<project-ref>.supabase.co/functions/v1/service-email-dispatch
+#   WP8_GATEWAY_JWT     the project's legacy anon JWT (public, but a JWT, so never in a file)
+#   WP8_DISPATCH_TOKEN  the same value as the Edge secret DISPATCH_TRIGGER_TOKEN (>= 32 characters)
+# Each run calls the Edge on the token path: sweep, then claim/send (limit 10, token path caps 10),
+# and the 30-day content purge once a day. Everything stays gated by the database flags.
+# GitHub cron is best-effort (often 10-60 min late) and is disabled after 60 days of repo inactivity.
+# The response holds counts only; the curl output is never printed raw.
+name: WP8 dispatch fallback (owner-activated)
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: wp8-dispatch
+  cancel-in-progress: false
+jobs:
+  kick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Kick dispatch (sweep + claim; purge once a day)
+        env:
+          URL: ${{ secrets.WP8_DISPATCH_URL }}
+          JWT: ${{ secrets.WP8_GATEWAY_JWT }}
+          TOK: ${{ secrets.WP8_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$URL" =~ ^https://[a-z0-9]+\.supabase\.co/functions/v1/service-email-dispatch$ ]] || { echo "WP8_FALLBACK_URL_INVALID"; exit 1; }
+          [ "${#TOK}" -ge 32 ] || { echo "WP8_FALLBACK_TOKEN_TOO_SHORT"; exit 1; }
+          P=false; [ "$(date -u +%H%M)" \< "0010" ] && P=true
+          code=$(curl -sS -o /tmp/r.json -w '%{http_code}' --max-time 150 -X POST "$URL" \
+            -H "authorization: Bearer $JWT" -H "x-asalocal-dispatch-token: $TOK" \
+            -H 'content-type: application/json' -d "{\"limit\":10,\"sweep\":true,\"purge\":$P}")
+          jq -c '{claimed,sent,failed,released,rate_limited,stopped,gate:.sweep.gate,errors:.sweep.errors}' /tmp/r.json || true
+          rm -f /tmp/r.json
+          [ "$code" = "200" ] || { echo "WP8_FALLBACK_HTTP_$code"; exit 1; }
