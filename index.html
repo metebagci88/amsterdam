@@ -734,6 +734,7 @@ async function doLogout(){
   if(loggingOut)return; loggingOut=true;   // çift tıklama: tek signOut
   try{ if(db)await db.auth.signOut(); }catch(e){}
   session=null; try{localStorage.removeItem("asa_session");}catch(e){}
+  try{ const S=window.AsaStorage, r=S?S.get(localStorage,"ams","trip"):null; if(r&&r.ok&&r.source==="city"&&r.value&&typeof r.value==="object"&&Object.keys(r.value).length) S.set(localStorage,"ams","trip",{}); }catch(e){}   // WP6: hesabın seyahati (arama, tarihler) çıkıştan sonra bu cihazda kalmaz; planını şehir sayfası kaldırır
   ["acctMenu","prefsModal","tripsModal","authModal"].forEach(id=>{ const m=$(id); if(m) ASA_DLG.close(m,{restore:false}); });
   const tl=$("tripsList"); if(tl) tl.innerHTML="";
   const pb=$("prefsBody"); if(pb) pb.innerHTML="";

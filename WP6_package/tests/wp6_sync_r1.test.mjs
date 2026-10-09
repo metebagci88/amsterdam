@@ -246,6 +246,7 @@ test("R3.3 legacy classification: exact generator output is 'auto'; any edit is 
     "edited text": [AUTO_DV, Object.assign({}, AUTO_PL, { "2099-03-04": "Sabah: Mekan chun (Merkez) erken git" })],
     "text without venues": [AUTO_DV, Object.assign({}, AUTO_PL, { "2099-03-05": "Sabah: serbest" })],
     "unknown venue": [Object.assign({}, AUTO_DV, { "2099-03-04": ["gone1"] }), Object.assign({}, AUTO_PL, { "2099-03-04": "Sabah: Kapanan yer" })],
+    "hand-added day (venues, no text)": [Object.assign({}, AUTO_DV, { "2099-03-06": ["x1", "p1"] }), AUTO_PL],   // r3: key check in autoLike
   };
   for (const [name, [dv, pl]] of Object.entries(variants)) assert.equal(legacyGuest(dv, pl).val("TripSync.localState()"), "unsynced", name);
   const n = legacyGuest(AUTO_DV, AUTO_PL, { "asa:ams:cal": JSON.stringify({ "2099-03-03": "not" }) });
