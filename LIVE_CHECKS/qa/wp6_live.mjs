@@ -153,6 +153,7 @@ function critical(u, rt) {
   return false;
 }
 // supabase-js: select = GET; insert/upsert = POST, update = PATCH, delete = DELETE on /rest/v1/<table>; rpc = POST /rest/v1/rpc/<fn>
+const excusedLogout = [];   // 403 session_not_found on logout after another context's global sign-out (see monitor)
 const RO_RPC = new Set(["consent_get_my_state", "member_upsert_profile", "log_city_view", "similar_brains"]); // reads + accepted login/page-view side effects
 function monitor(page) {
   const b = { console: [], bad: [], writes: [] };
@@ -178,6 +179,16 @@ function monitor(page) {
       if (st < 400) return;
       const line = `${st} ${r.request().method()} ${u.host}${u.pathname}`.slice(0, 110);
       if (critical(u, rt)) b.bad.push(line); else minorBad.push(line);
+      // A 403 on POST /auth/v1/logout whose body says session_not_found is the expected answer when ANOTHER context of the same QA
+      // account already logged out: supabase-js signOut() defaults to scope "global", which revokes every session of the account.
+      // Excused only when the body proves it (fail-closed: until the body is read, or for any other body, it stays a failure);
+      // the logout itself is asserted separately (asa_session and sb-*-auth-token gone).
+      if (st === 403 && u.host === SUPA_HOST && u.pathname === "/auth/v1/logout" && r.request().method() === "POST") {
+        r.text().then((t) => {
+          if (!/"(error_)?code"\s*:\s*"session_not_found"/.test(t || "")) { const c = /"error_code"\s*:\s*"([a-z_]{1,40})"/.exec(t || ""); excusedLogout.push(`NOT excused: ${line} error_code=${c ? c[1] : "?"}`); return; }
+          const i = b.bad.indexOf(line); if (i >= 0) { b.bad.splice(i, 1); excusedLogout.push(line + " (session_not_found: already revoked by another context's global logout)"); }
+        }).catch(() => {});
+      }
     } catch {}
   });
   page.on("requestfailed", (q) => {
@@ -1664,6 +1675,7 @@ let finished = false;
 function finish(code) {
   if (finished) return; finished = true;
   if (thirdHosts.size) rec("info/third-party-hosts", "INFO", [...thirdHosts.entries()].sort((a, b) => b[1] - a[1]).map(([h, n]) => `${h}(${n})`).join(" "));
+  rec("info/excused-logout-403", "INFO", excusedLogout.length ? `${excusedLogout.length}: ${[...new Set(excusedLogout)].slice(0, 3).join(" | ")}` : "none");
   rec("info/non-critical-4xx-5xx", "INFO", minorBad.length ? `${minorBad.length}: ${[...new Set(minorBad)].slice(0, 5).join(" | ")}` : "none");
   if (jsClicks.length) rec("info/ui-clicks-needing-js-fallback", "INFO", [...new Set(jsClicks)].join(" "));
   const fail = checks.filter((c) => c.result === "FAIL").length;
