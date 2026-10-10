@@ -100,7 +100,7 @@ async function cmdGen() {
 
 async function cmdWaitLogin() {
   const k = await anonKey(); const s = readSecrets();
-  const deadline = Date.now() + 40 * 60 * 1000;
+  const deadline = Date.now() + 90 * 60 * 1000;
   for (const [who, email, pw] of [["admin", process.env.ASALOCAL_ADMIN_EMAIL, s.ASALOCAL_ADMIN_PASSWORD], ["member", process.env.ASALOCAL_MEMBER_EMAIL, s.ASALOCAL_MEMBER_PASSWORD]]) {
     for (;;) {
       const r = await signIn(k, email, pw);
