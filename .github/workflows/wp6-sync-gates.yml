@@ -1,0 +1,53 @@
+name: WP6 sync gates
+# İŞ PAKETİ 6 — uçtan uca V1 kabul: seyahat/plan/favori senkron bütünlüğü (D1–D7).
+# WP6 birim testleri (node:vm içinde sayfanın gerçek kodu; sahte storage/zamanlayıcı/Supabase) + kapsamlı secret kapısı
+# (WP6_package + bu dalın sayfalara eklediği satırlar; sayfalardaki mevcut public anon key WP6'dan önce de vardır).
+# WP3/WP4/WP5 regresyonu kendi iş akışlarında (wp3-storage-gates, wp4-member-nav-gates, wp5-web-gates) koşar.
+# Deploy etmez; Supabase'e ve canlı siteye bağlanmaz; secret kullanmaz.
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - "index.html"
+      - "amsterdam/index.html"
+      - "lib/**"
+      - "SHA256SUMS"
+      - "WP6_package/**"
+      - ".github/workflows/wp6-sync-gates.yml"
+permissions:
+  contents: read
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # WP6_PARENT_REF (e1bfd04) secret kapısı için gerekli
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: WP6 unit tests (sync integrity D1–D7 + round fixes)
+        run: |
+          set -euo pipefail
+          node --test WP6_package/tests/ 2>&1 | tee "$RUNNER_TEMP/wp6_unit.log"
+          grep -Eq '^# fail 0$' "$RUNNER_TEMP/wp6_unit.log" || { echo "GATE_FAILED:wp6_unit"; exit 1; }
+          grep -Eq '^# pass [1-9][0-9]*$' "$RUNNER_TEMP/wp6_unit.log" || { echo "GATE_FAILED:wp6_unit_empty"; exit 1; }
+
+      - name: SHA256SUMS + scoped secret gate
+        run: |
+          set -euo pipefail
+          bash WP6_package/gates/wp6_secret_scan.sh 2>&1 | tee "$RUNNER_TEMP/wp6_secret.log"
+          grep -qx 'WP6_SECRET_GATE_PASS' "$RUNNER_TEMP/wp6_secret.log" || { echo "GATE_FAILED:wp6_secret"; exit 1; }
+
+      - name: Secret scan (gate logs + this workflow)
+        if: always()
+        run: |
+          set -uo pipefail
+          bash CDP3C_package/gates/secret_scan.sh .github/workflows/wp6-sync-gates.yml || exit 1
+          for f in "$RUNNER_TEMP/wp6_unit.log" "$RUNNER_TEMP/wp6_secret.log"; do
+            [ -f "$f" ] && { bash CDP3C_package/gates/secret_scan.sh "$f" || exit 1; }
+          done
+          echo "WP6_CI_PASS"
